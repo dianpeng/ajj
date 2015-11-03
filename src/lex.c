@@ -149,6 +149,10 @@ int tk_lex_keyword_or_id( struct tokenizer* tk ) {
         RETURN(TK_CALL,4);
       else
         return tk_lex_keyword(tk,len+1);
+    case 'd':
+      if( (len = tk_keyword_check(tk,"d",i+1)) == 1 &&
+          tk_not_id_rchar(tk->src[i+1]))
+        RETURN(TK_DO,4);
     case 'e':
       if( (len = tk_keyword_check(tk,"nd",i+1)) == 2 ) {
         /* end starts */
@@ -171,6 +175,9 @@ int tk_lex_keyword_or_id( struct tokenizer* tk ) {
         else if( (len=tk_keyword_check(tk,"macro")) == 5 &&
             tk_not_id_rchar(tk->src[k+5]))
           RETURN(TK_ENDMACRO,8);
+        else if( (len=tk_keyword_check(tk,"lse")) == 3 &&
+            tk_not_id_rchar(tk->src[k+3]))
+          RETURN(TK_ELSE,4);
         else
           return tk_lex_keyword(tk,len+3);
       } else if ((len = tk_keyword_check(tk,"lif")) == 3 &&
@@ -322,6 +329,8 @@ int tk_lex_script( struct tokenizer* tk ) {
         RETURN(TK_DOT,1);
       case ',':
         RETURN(TK_COMMA,1);
+      case ':':
+        RETURN(TK_COLON,1);
       case '\'':
         return tk_lex_str(tk);
       case '0':case '1':case '2':case '3':case '4':

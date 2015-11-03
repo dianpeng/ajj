@@ -1,7 +1,9 @@
 #ifndef _AJJ_PRIV_H_
 #define _AJJ_PRIV_H_
 #include "ajj.h"
+#include "util.h"
 #include <ctype.h>
+#include <assert.h>
 
 /* tokenizer */
 struct tokenizer {
@@ -23,19 +25,21 @@ enum {
 enum {
   TK_TEXT,TK_COMMENT,
   TK_LSTMT,TK_RSTMT,TK_LEXP,TK_REXP,
-  TK_IF,TK_ELIF,TK_ENDIF,TK_FOR,TK_ENDFOR,TK_MACRO,TK_ENDMACRO,
-  TK_CALL,TK_ENDCALL,TK_FILTER,TK_ENDFILTER,
+  TK_IF,TK_ELIF,TK_ELSE,TK_ENDIF,TK_FOR,TK_ENDFOR,TK_MACRO,TK_ENDMACRO,
+  TK_CALL,TK_ENDCALL,TK_FILTER,TK_ENDFILTER, TK_DO ,
   TK_SET,TK_ENDSET,TK_MOVE,TK_BLOCK,TK_ENDBLOCK,TK_RAW,TK_ENDRAW,
   TK_EXTENDS,TK_IMPORT,TK_INCLUDE,
   TK_FROM,TK_IN,TK_AS,TK_LPAR,TK_RPAR,TK_LSQR,TK_RSQR,TK_LBRA,TK_RBRA,
   TK_ADD,TK_SUB,TK_MUL,TK_DIV,TK_DIVTRUCT,TK_MOD,TK_POW,
   TK_ASSIGN,TK_EQ,TK_NE,TK_LT,TK_LE,TK_GT,TK_GE,
-  TK_AND,TK_OR,TK_NOT,TK_PIPE,TK_DOT,TK_COMMA,
+  TK_AND,TK_OR,TK_NOT,TK_PIPE,TK_DOT,TK_COMMA,TK_COLON,
   TK_STRING,TK_NUMBER,TK_VARIABLE,TK_TRUE,TK_FALSE,TK_NONE,
   TK_EOF,TK_UNKNOWN,
 
   SIZE_OF_TOKENS
 };
+
+const char* tk_get_name( int );
 
 int tk_lex( struct tokenizer* tk );
 void tk_consume( struct tokenizer* tk );
@@ -96,8 +100,8 @@ int tk_body_escape( char c ) {
 enum {
   /* arithmatic */
   VM_ADD , VM_SUB , VM_DIV , VM_MUL , VM_MOD , VM_POW ,
-  VM_EQ  , VM_NEQ , VM_LT  , VM_LE  , VM_GT  , VM_GE  ,
-  VM_AND , VM_OR  , VM_NOT , VM_NEG ,
+  VM_EQ  , VM_NE  , VM_LT  , VM_LE  , VM_GT  , VM_GE  ,
+  VM_AND , VM_OR  , VM_NOT , VM_NEG , VM_DIVTRUCT , VM_TENARY ,
 
   /* function invoking */
   VM_CALL,VM_RET,
@@ -110,7 +114,8 @@ enum {
 
   /* misc */
   VM_POP,
-  VM_LVAR  , /* load var into the stack by lookup */
+  VM_PUSH  , /* push another piece of data to top of stack */
+  VM_MOVE  , /* move a data from the stack to another position */
   VM_LSTR  , /* load str into the stack by lookup */
   VM_LTRUE , /* load true into stack */
   VM_LFALSE, /* load false into stack */
@@ -118,13 +123,17 @@ enum {
   VM_LZERO , /* load zero into stack */
   VM_LNONE , /* load none into stack */
   VM_LIMM  , /* load an immdiet number into stack */
-  VM_SVAR  , /* setup a variable in scope */
-  VM_NVAR  , /* new an empty var in scope */
+
+  VM_VAR_LOAD, /* load a var from scope into stack */
+  VM_VAR_SET  , /* setup a variable in scope */
+  VM_VAR_NEW  , /* new an empty var in scope */
+
+  VM_ATTR_LOAD ,/* load the attributes from current object on stack */
 
   /* dict/object */
   VM_LDICT, /* load a dict into stack */
   VM_DICT_ADD, /* add the key value into the dict on the stack */
-  
+
   /* list */
   VM_LLIST, /* load a list into the stack */
   VM_LIST_ADD, /* load a value into the list */
@@ -138,27 +147,28 @@ enum {
   VM_ITR_TEST,/* test iterator is correct or not */
   VM_ITR_DEREF,/* deref the iterator */
   VM_ITR_MOV, /* move the iterator */
+  VM_ITR_DELETE, /* delete the iterator */
 
   /* jmp */
-  VM_JNE,
-  VM_JE,
-  VM_JLT,
-  VM_JLE,
-  VM_JGE,
-  VM_JGT,
+  VM_JMP,
+  VM_JT, /* jmp when true */
 
   /* scope */
+  VM_SCOPE , /* load a scope */
   VM_ENTER , /* enter into a scope */
   VM_EXIT  , /* exit a scope */
-  VM_RESET , /* reset a scope */
+
+  /* special instructions for PIPE */
+  VM_PIPE  , /* Basically it will make stake(0) = stake(-1) and
+              * stake(-1) = current-scope */
 
   SIZE_OF_INSTRUCTIONS
 };
 
 struct program {
-  int* codes;
+  void* codes;
   size_t len;
-  const char* str_tbl[AJJ_LOCAL_CONSTANT_SIZE];
+  struct string *str_tbl[ AJJ_LOCAL_CONSTANT_SIZE ];
   size_t str_len;
   double num_tbl[AJJ_LOCAL_CONSTANT_SIZE];
   size_t num_len;
@@ -176,31 +186,6 @@ int parse( struct ajj* ,
            ajj_value* output );
 
 
-/* string */
-struct string {
-  const char* str;
-  size_t len;
-};
-
-/* dictionary */
-struct dict_entry {
-  char key[AJJ_SYMBOL_NAME_MAX_SIZE];
-  size_t len;
-  struct ajj_object* object;
-};
-
-struct dict {
-  struct dict_entry* entry;
-  size_t len;
-  size_t cap;
-};
-
-/* list/tuple */
-struct list {
-  struct ajj_object** val;
-  size_t cap;
-  size_t len;
-};
 
 /* object */
 struct c_func {
@@ -209,28 +194,38 @@ struct c_func {
   char name[ AJJ_SYMBOL_NAME_MAX_SIZE ]; /* name */
 };
 
+struct c_method {
+  ajj_method func;
+  char name [ AJJ_SYMBOL_NAME_MAX_SIZE ];
+};
+
 struct jj_func {
   struct program code;
   char name [ AJJ_SYMBOL_NAME_MAX_SIZE ]; /* name */
 };
 
 enum {
-  JINJA_BLOCK,
-  JINJA_MACRO
+  C_FUNCTION,
+  C_METHOD,
+  JJ_BLOCK,
+  JJ_MACRO
 };
 
 struct function {
   union {
     struct c_func c_fn; /* C function */
-    struct jj_func jj_fn; /* Jinja function */
+    struct c_method c_mt; /* C method */
+    struct jj_func jj_fn; /* JJ_BLOCK/JJ_MACRO */
   } f;
-  int tp : 1; /* type of function */
-  int jj_tp: 31; /* if function is jinja function, then the type */
+  int tp;
 };
 
 struct object_vtable {
   struct function* func_tb; /* function table */
-  size_t tb_len;
+  size_t len;
+
+  struct c_func dtor; /* delete function */
+
 
   /* object name could be larger than AJJ_SYMBOL_MAX_SIZE , since they
    * can be path of object while the execution */
@@ -240,24 +235,68 @@ struct object_vtable {
 struct object {
   struct dict prop; /* properties of this objects */
   const struct object_vtable* vtbl; /* function table, not owned by it */
+  void* data; /* object's data */
 };
 
 struct ajj_object {
-  struct ajj_object* prev; /* private */
-  struct ajj_object* next; /* private */
+  struct ajj_object* prev;
+  struct ajj_object* next;
 
   struct ajj_object* parent[AJJ_EXTENDS_MAX_SIZE]; /* for extends */
-  size_t parent_len;
+  unsigned short parent_len;
+
+  unsigned short tp;
 
   union {
     struct string str;
-    struct dict d;
-    struct list li;
-    struct list tpl;
     struct object obj;
   } val;
-  unsigned short type;
-  unsigned short scp_id;
+
+  unsigned int scp_id;
+};
+
+void ajj_object_destroy( struct ajj* , struct ajj_object* p );
+
+static inline
+struct ajj_object*
+ajj_object_create ( struct ajj* , struct ajj_object* scope );
+
+static inline
+struct ajj_object*
+ajj_object_enter  ( struct ajj* , struct ajj_object* parent );
+
+/* move an object from its own scope to another scope scp */
+static inline
+struct ajj_object*
+ajj_object_move( struct ajj_object* obj , struct ajj_object* scp ) {
+  assert( obj->scp_id < scp->scp_id );
+  assert( obj->next != obj->prev ); /* cannot be a singleton scope object */
+
+  /* remove object from its existed chain */
+  obj->prev->next = obj->next;
+  obj->next->prev = obj->prev;
+
+  /* insert this object into the scope chain , insert _BEFORE_ this scope */
+  scp->prev->next = obj;
+  obj->prev = scp->prev;
+  scp->prev = obj;
+  obj->next = scp->prev;
+
+  /* change scope id */
+  obj->scp_id = scp->scp_id;
+
+  return obj;
+}
+
+/* lookup */
+static
+struct ajj_object* ajj_object_find( struct ajj_object* scope ,
+    const char* key );
+
+/* ajj */
+struct ajj {
+  struct all_object global; /* global scope */
+  struct slab obj_slab; /* object slab */
 };
 
 

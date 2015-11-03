@@ -8,7 +8,6 @@
 #define AJJ_LOCAL_CONSTANT_SIZE 128
 #define AJJ_EXTENDS_MAX_SIZE 8
 
-struct ajj_object;
 struct ajj_value;
 struct ajj_context;
 
@@ -34,9 +33,11 @@ struct ajj_object_proto {
 
 struct ajj_value {
   union {
-    struct ajj_object* object;
+    void* object;
     double number;
     int boolean;
+    int itr_idx;
+    void* itr_ptr;
   } value;
   int type;
 };
