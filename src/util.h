@@ -13,6 +13,8 @@ struct string {
   size_t len;
 };
 
+extern struct string NULL_STRING;
+
 struct strbuf {
   char* str;
   size_t len;
@@ -103,20 +105,78 @@ struct string strbuf_move( struct strbuf* buf ) {
   }
 }
 
+/* dictionary */
 struct dict {
   void* entry;
   size_t cap;
   size_t len;
 };
 
+void dict_create( struct dict* );
+void dict_destroy(struct dict* );
+int dict_insert( struct dict* , const char* , void* );
+int dict_remove( struct dict* , const char* );
+void* dict_find  ( struct dict* , const char* );
+void dict_clear( struct dict* );
+#define dict_size(d) ((d)->len)
+
+/* iterator for dictionary */
+int dict_iter_start( const struct dict* );
+static inline
+int dict_iter_has  ( const struct dict* d, int itr ) {
+  return itr < d->len;
+}
+int dict_iter_move ( const struct dict* , int itr );
+void* dict_iter_deref( const struct dict* , int itr );
+
+/* list */
 struct list {
   void** entry;
   size_t cap;
   size_t len;
 };
 
-struct slab {
+void list_create( struct list* );
+void list_destroy(struct list* );
+void list_push( struct list* , void* );
+#define list_size(l) ((l)->len)
+static inline
+void* list_index( struct list* l , size_t i ) {
+  assert(i < l->len);
+  return l->entry[i];
+}
+void list_clear();
 
+/* iterator for list */
+static inline
+int list_iter_begin( const struct list* ) {
+  return 0;
+}
+static inline
+int list_iter_has( const struct list* l , int itr ) {
+  return itr < l->len;
+}
+static inline
+int list_iter_move( const struct list* l , int itr ) {
+  return itr+1;
+}
+static inline
+void* list_iter_deref( const struct list* l , int itr ) {
+  return list_index(l,itr);
+}
+
+/* slab memory pool */
+struct slab {
+  void* chunk;
+  void* free_list;
+  size_t cur_cap;
+  size_t max_cap;
+  size_t obj_sz;
 };
+
+void slab_create( struct slab* , size_t cap , size_t obj_sz );
+void slab_destroy(struct slab* );
+void* slab_malloc( struct slab* );
+void slab_free( struct slab* , void* );
 
 #endif /* _UTIL_H_ */

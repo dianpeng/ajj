@@ -7,6 +7,8 @@
 #define AJJ_GLOBAL_SYMBOL_MAX_SIZE 256
 #define AJJ_LOCAL_CONSTANT_SIZE 128
 #define AJJ_EXTENDS_MAX_SIZE 8
+#define AJJ_FUNC_LOCAL_BUF_SIZE 16
+#define AJJ_FUNC_PAR_MAX_SIZE 16
 
 struct ajj_value;
 struct ajj_context;
@@ -42,15 +44,20 @@ struct ajj_value {
   int type;
 };
 
+extern ajj_value AJJ_TRUE;
+extern ajj_value AJJ_FALSE;
+extern ajj_value AJJ_NONE;
+
 enum {
   AJJ_VALUE_NUMBER,
   AJJ_VALUE_BOOLEAN,
   AJJ_VALUE_NONE,
   AJJ_VALUE_STRING,
+  AJJ_VALUE_LIST,
   AJJ_VALUE_DICT,
-  AJJ_VALUE_ARRAY,
-  AJJ_VALUE_TUPLE,
-  AJJ_VALUE_OBJECT
+  AJJ_VALUE_OBJECT,
+
+  AJJ_VALUE_SIZE
 };
 
 struct ajj* ajj_create();

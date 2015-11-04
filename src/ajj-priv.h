@@ -5,7 +5,9 @@
 #include <ctype.h>
 #include <assert.h>
 
-/* tokenizer */
+/* ==================================
+ * Tokenizer
+ * ================================*/
 struct tokenizer {
   const char* src;
   size_t pos;
@@ -22,22 +24,82 @@ enum {
   TOKENIZE_RAW
 };
 
-enum {
-  TK_TEXT,TK_COMMENT,
-  TK_LSTMT,TK_RSTMT,TK_LEXP,TK_REXP,
-  TK_IF,TK_ELIF,TK_ELSE,TK_ENDIF,TK_FOR,TK_ENDFOR,TK_MACRO,TK_ENDMACRO,
-  TK_CALL,TK_ENDCALL,TK_FILTER,TK_ENDFILTER, TK_DO ,
-  TK_SET,TK_ENDSET,TK_MOVE,TK_BLOCK,TK_ENDBLOCK,TK_RAW,TK_ENDRAW,
-  TK_EXTENDS,TK_IMPORT,TK_INCLUDE,
-  TK_FROM,TK_IN,TK_AS,TK_LPAR,TK_RPAR,TK_LSQR,TK_RSQR,TK_LBRA,TK_RBRA,
-  TK_ADD,TK_SUB,TK_MUL,TK_DIV,TK_DIVTRUCT,TK_MOD,TK_POW,
-  TK_ASSIGN,TK_EQ,TK_NE,TK_LT,TK_LE,TK_GT,TK_GE,
-  TK_AND,TK_OR,TK_NOT,TK_PIPE,TK_DOT,TK_COMMA,TK_COLON,
-  TK_STRING,TK_NUMBER,TK_VARIABLE,TK_TRUE,TK_FALSE,TK_NONE,
-  TK_EOF,TK_UNKNOWN,
+#define TOKEN_LIST(X) \
+  X(TK_TEXT,"<text>") \
+  X(TK_COMMENT,"<comment>") \
+  X(TK_LSTMT,"{%") \
+  X(TK_RSTMT,"%}") \
+  X(TK_LEXP,"{{") \
+  X(TK_REXP,"}}") \
+  X(TK_IF,"if") \
+  X(TK_ELIF,"elif") \
+  X(TK_ELSE,"else") \
+  X(TK_ENDIF,"endif") \
+  X(TK_FOR,"for") \
+  X(TK_ENDFOR,"endfor") \
+  X(TK_MACRO,"macro") \
+  X(TK_ENDMACRO,"endmacro") \
+  X(TK_CALL,"call") \
+  X(TK_ENDCALL,"endcall") \
+  X(TK_FILTER,"filter") \
+  X(TK_ENDFILTER,"endfilter") \
+  X(TK_DO ,"do") \
+  X(TK_SET,"set") \
+  X(TK_ENDSET,"endset") \
+  X(TK_MOVE,"move") \
+  X(TK_BLOCK,"block") \
+  X(TK_ENDBLOCK,"endblock") \
+  X(TK_RAW,"raw") \
+  X(TK_ENDRAW,"endraw") \
+  X(TK_EXTENDS,"extends") \
+  X(TK_IMPORT,"import") \
+  X(TK_INCLUDE,"include") \
+  X(TK_FROM,"from") \
+  X(TK_IN,"in") \
+  X(TK_AS,"as") \
+  X(TK_RECURSIVE,"recursive") \
+  X(TK_LPAR,"(") \
+  X(TK_RPAR,")") \
+  X(TK_LSQR,"[") \
+  X(TK_RSQR,"]") \
+  X(TK_LBRA,"{") \
+  X(TK_RBRA,"}") \
+  X(TK_ADD,"+") \
+  X(TK_SUB,"-") \
+  X(TK_MUL,"*") \
+  X(TK_DIV,"/") \
+  X(TK_DIVTRUCT,"//") \
+  X(TK_MOD,"%") \
+  X(TK_POW,"**") \
+  X(TK_ASSIGN,"=") \
+  X(TK_EQ,"==") \
+  X(TK_NE,"!=") \
+  X(TK_LT,"<") \
+  X(TK_LE,"<=") \
+  X(TK_GT,">") \
+  X(TK_GE,">=") \
+  X(TK_AND,"and") \
+  X(TK_OR,"or") \
+  X(TK_NOT,"not") \
+  X(TK_PIPE,"|") \
+  X(TK_DOT,".") \
+  X(TK_COMMA,",") \
+  X(TK_COLON,":") \
+  X(TK_STRING,"<string>") \
+  X(TK_NUMBER,"<number>") \
+  X(TK_VARIABLE,"<variable>") \
+  X(TK_TRUE,"<true>") \
+  X(TK_FALSE,"<false>") \
+  X(TK_NONE,"<none>") \
+  X(TK_EOF,"<eof>") \
+  X(TK_UNKNOWN,"<unknown>")
 
+#define X(A) A ,
+enum {
+  TOKEN_LIST(A)
   SIZE_OF_TOKENS
 };
+#undef X
 
 const char* tk_get_name( int );
 
@@ -93,10 +155,10 @@ int tk_body_escape( char c ) {
   return c == '{';
 }
 
-/* A pretty small stack based VM. Every constants are loaded into stack
- * for manipulation. Each operator is almost a 1:1 mapping. Pretty simple.
- */
 
+/* =============================
+ * Virtual Machine
+ * ============================*/
 enum {
   /* arithmatic */
   VM_ADD , VM_SUB , VM_DIV , VM_MUL , VM_MOD , VM_POW ,
@@ -116,6 +178,7 @@ enum {
   VM_POP,
   VM_PUSH  , /* push another piece of data to top of stack */
   VM_MOVE  , /* move a data from the stack to another position */
+  VM_SWAP  , /* swap 2 places on stack */
   VM_LSTR  , /* load str into the stack by lookup */
   VM_LTRUE , /* load true into stack */
   VM_LFALSE, /* load false into stack */
@@ -142,19 +205,18 @@ enum {
   VM_LTUPLE, /* load a tuple into the stack */
   VM_LTUPLE_ADD, /* load a tuple into the stack */
 
-  /* iterator */
-  VM_ITR_BEG, /* setup the iterator frame */
-  VM_ITR_TEST,/* test iterator is correct or not */
-  VM_ITR_DEREF,/* deref the iterator */
-  VM_ITR_MOV, /* move the iterator */
-  VM_ITR_DELETE, /* delete the iterator */
+  /* loop things */
+  VM_LOOP,   /* loop instructions */
+  VM_LOOPREC,/* recursive loop instructions */
 
-  /* jmp */
+  /* jmp , ALL THE JMP ARE ABSOLUTE VALUE , so no jmp parameter is
+   * negative */
   VM_JMP,
   VM_JT, /* jmp when true */
+  VM_JEPT, /* jmp when this object is empty */
 
   /* scope */
-  VM_SCOPE , /* load a scope */
+  VM_SCOPE , /* load current scope */
   VM_ENTER , /* enter into a scope */
   VM_EXIT  , /* exit a scope */
 
@@ -172,7 +234,38 @@ struct program {
   size_t str_len;
   double num_tbl[AJJ_LOCAL_CONSTANT_SIZE];
   size_t num_len;
+  /* parameter prototypes. Program is actually a script based
+   * function routine. Each program will have a prototypes */
+  struct {
+    int name;/* Index of key name for this function
+              * reference into code's constant table */
+    struct ajj_value def_val; /* This value is default value for this function.
+                               * The memory it contains are OWNED by the program.
+                               * Please make sure to delete those memory when
+                               * delete the program objects */
+  } par_list[ AJJ_FUNC_PAR_MAX_SIZE ];
+  size_t par_size;
 };
+
+static inline
+void program_init( struct program* prg ) {
+  prg->len = 0;
+  prg->str_len = 0;
+  prg->num_len = 0;
+  prg->par_size =0;
+}
+
+static inline
+int program_add_par( struct program* prg , int idx , struct ajj_value& val ) {
+  if( prg->par_size == AJJ_FUNC_PAR_MAX_SIZE )
+    return -1;
+  else {
+    prg->par_list[prg->par_size].def_val = val; /* owned the value */
+    prg->par_list[prg->par_size].name = idx;
+    ++prg->par_size;
+    return 0;
+  }
+}
 
 int vm_run( struct ajj* , /* ajj environment */
             struct ajj_object* , /* scope */
@@ -180,29 +273,29 @@ int vm_run( struct ajj* , /* ajj environment */
             ajj_value* output ); /* output for this program */
 
 
-/* parser */
+/* ===============================
+ * Parser
+ * ==============================*/
 int parse( struct ajj* ,
            const char* src,
+           const char* key, /* key for this file */
            ajj_value* output );
 
 
+/* ===============================
+ * Object representation
+ * =============================*/
 
-/* object */
-struct c_func {
+struct c_closure {
   void* udata; /* user data */
   ajj_method func; /* function */
-  char name[ AJJ_SYMBOL_NAME_MAX_SIZE ]; /* name */
 };
 
-struct c_method {
-  ajj_method func;
-  char name [ AJJ_SYMBOL_NAME_MAX_SIZE ];
-};
-
-struct jj_func {
-  struct program code;
-  char name [ AJJ_SYMBOL_NAME_MAX_SIZE ]; /* name */
-};
+static inline
+void c_closure_init( struct c_closure* cc ) {
+  cc->udata = NULL;
+  cc->func = NULL;
+}
 
 enum {
   C_FUNCTION,
@@ -213,91 +306,235 @@ enum {
 
 struct function {
   union {
-    struct c_func c_fn; /* C function */
-    struct c_method c_mt; /* C method */
-    struct jj_func jj_fn; /* JJ_BLOCK/JJ_MACRO */
+    struct c_closure c_fn; /* C function */
+    ajj_method c_mt; /* C method */
+    struct program jj_fn; /* JJ_BLOCK/JJ_MACRO */
   } f;
+  char name[ AJJ_SYMBOL_MAX_SIZE ];
   int tp;
 };
 
-struct object_vtable {
+struct func_table {
+  struct function func_buf[ AJJ_FUNC_LOCAL_BUF_SIZE ];
   struct function* func_tb; /* function table */
-  size_t len;
+  size_t func_len;
+  size_t func_cap;
 
-  struct c_func dtor; /* delete function */
-
-
+  struct c_closure dtor; /* delete function */
   /* object name could be larger than AJJ_SYMBOL_MAX_SIZE , since they
    * can be path of object while the execution */
   const char* name;
 };
 
+/* This function will initialize an existed function table */
+static inline
+void func_table_init( struct func_table* tb ,
+    const struct ajj_dtor* dtor ,
+    const char* name , int own ) {
+  tb->func_tb = tb->func_buf;
+  tb->func_len = 0;
+  tb->func_cap = AJJ_FUNC_LOCAL_BUF_SIZE;
+  tb->dtor = dtor ;
+  tb->name = own ? name : strdup(name);
+}
+
+/* Clear the GUT of func_table object */
+static inline
+void func_table_clear( struct func_table* tb ) {
+  if( tb->func_cap > AJJ_FUNC_LOCAL_BUF_SIZE ) {
+    free(tb->func_tb); /* on heap */
+  }
+  free(tb->name);
+}
+
+/* Add a new function into the func_table */
+static inline
+struct function* func_table_add_func( struct func_table* tb ) {
+  if( tb->func_len == tb->func_cap ) {
+   void* nf = malloc( sizeof(struct function)*(tb->func_cap)*2 );
+   memcpy(nf,tb->func_tb,tb->func_len*sizeof(struct function));
+   if( tb->func_tb != tb->func_buf ) {
+     free(tb->func_tb);
+   }
+   tb->func_tb = nf;
+   tb->func_cap *= 2;
+  }
+  return tb->func_tb + (tb->func_len++);
+}
+
+static inline
+void func_table_shrink_to_fit( struct func_table* tb ) {
+  if( tb->func_cap > AJJ_FUNC_LOCAL_BUF_SIZE ) {
+    if( tb->func_len < tb->func_cap ) {
+      struct function* f = malloc(tb->func_len*sizeof(struct function));
+      memcpy(f,tb->func_tb,sizeof(struct function)*tb->func_len);
+      free(tb->func_tb);
+      tb->func_tb = f;
+      tb->func_cap = func_len;
+    }
+  }
+}
+
+static inline
+struct c_closure*
+func_table_add_c_clsoure( struct func_table* tb , char name[AJJ_SYMBOL_MAX_SIZE] ) {
+  struct function* f = func_table_add_func(tb);
+  strcpy(f->name,name);
+  f->tp = C_FUNCTION;
+  c_closure_init(&(f->f,c_fn));
+  return &(f->f.c_fn);
+}
+
+static inline
+ajj_method*
+func_table_add_c_method( struct func_table* tb , char name[AJJ_SYMBOL_MAX_SIZE] ) {
+  struct function* f = func_table_add_func(tb);
+  strcpy(f->name,name);
+  f->tp = C_METHOD;
+  return &(f->f.c_mt);
+}
+
+static inline
+struct program*
+func_table_add_jj_block( struct func_table* tb, char name[AJJ_SYMBOL_MAX_SIZE] ) {
+  struct function* f = func_table_add_func(tb);
+  strcpy(f->name,name);
+  f->tp = JJ_BLOCK;
+  program_init(&(f->f.jj_fn));
+  return &(f->f.jj_fn);
+}
+
+static inline
+struct program*
+func_table_add_jj_macro( struct func_table* tb, char name[AJJ_SYMBOL_MAX_SIZE] ) {
+  struct function* f = func_table_add_func(tb);
+  strcpy(f->name,name);
+  f->tp = JJ_MACRO;
+  program_init(&(f->f.jj_fn));
+  return &(f->f.jj_fn);
+}
+
 struct object {
   struct dict prop; /* properties of this objects */
-  const struct object_vtable* vtbl; /* function table, not owned by it */
+  const struct func_table* fn_tb; /* This function table can be NULL which
+                                   * simply represents this object doesn't have
+                                   * any defined function related to it */
   void* data; /* object's data */
 };
+
+/* Create an object object */
+static inline
+void object_create( struct object* obj ,
+    const struct func_table* func_tb, void* data ) {
+  dict_create(&(obj->prop));
+  obj->fn_tb = func_tb;
+  obj->data = data;
+}
 
 struct ajj_object {
   struct ajj_object* prev;
   struct ajj_object* next;
-
   struct ajj_object* parent[AJJ_EXTENDS_MAX_SIZE]; /* for extends */
   unsigned short parent_len;
-
   unsigned short tp;
-
   union {
-    struct string str;
-    struct object obj;
+    struct string str; /* string */
+    struct dict d;     /* dictionary */
+    struct list l;     /* list */
+    struct object obj; /* object */
   } val;
-
   unsigned int scp_id;
 };
 
-void ajj_object_destroy( struct ajj* , struct ajj_object* p );
-
+/* Create a single ajj_object which is NOT INITIALZIED with any type
+ * under the scope object "scope" */
 static inline
 struct ajj_object*
 ajj_object_create ( struct ajj* , struct ajj_object* scope );
 
+/* Delete a single ajj_object. This deletion will not destroy
+ * any other objects inside of the linked chain */
+static inline
+struct void
+ajj_object_destroy( struct ajj* , struct ajj_object* obj );
+
+/* Clear an object's internal GUTS , not clear this object from
+ * free list */
+static
+void ajj_object_clear( struct ajj* , struct ajj_object* obj );
+
+
+/* Initialize an created ajj_object to a certain type */
+static inline
+void ajj_object_string( struct ajj_object* obj,
+    const char* str , size_t len , int own ) {
+  obj->val.str.str = own ? str : strdup(str);
+  obj->val.str.len = len;
+  obj->tp = AJJ_VALUE_STRING;
+}
+
+static inline
+void ajj_object_dict( struct ajj_object* obj ) {
+  dict_create(&(obj->val.d));
+  obj->tp = AJJ_VALUE_DICT;
+}
+
+static inline
+void ajj_object_list( struct ajj_object* obj ) {
+  list_create(&(obj->val.l));
+  obj->tp = AJJ_VALUE_LIST;
+}
+
+static
+inline void ajj_object_obj( struct ajj_object* obj ,
+    const struct func_table* fn_tb, void* data ) {
+  object_create(&(obj_val.o),fn_tb,data);
+  obj->tp = AJJ_VALUE_OBJECT;
+}
+
+/* Create an ajj_object serves as the scope object and inherited from
+ * parent object "parent" */
 static inline
 struct ajj_object*
 ajj_object_enter  ( struct ajj* , struct ajj_object* parent );
 
-/* move an object from its own scope to another scope scp */
+/* Exit an ajj_object represented scope. This will delete the scope object
+ * and any objects that is OWNED by this scope object */
+static inline
+struct void
+ajj_object_exit   ( struct ajj* , struct ajj_object* scope );
+
+/* Move an object from its CURRENT scope to target scope "scp" */
 static inline
 struct ajj_object*
 ajj_object_move( struct ajj_object* obj , struct ajj_object* scp ) {
   assert( obj->scp_id < scp->scp_id );
   assert( obj->next != obj->prev ); /* cannot be a singleton scope object */
-
   /* remove object from its existed chain */
   obj->prev->next = obj->next;
   obj->next->prev = obj->prev;
-
   /* insert this object into the scope chain , insert _BEFORE_ this scope */
   scp->prev->next = obj;
   obj->prev = scp->prev;
   scp->prev = obj;
   obj->next = scp->prev;
-
   /* change scope id */
   obj->scp_id = scp->scp_id;
-
   return obj;
 }
 
-/* lookup */
+/* Lookup a symbol recursively from the scope with key "key". If nothing find,
+ * it will return NULL */
 static
-struct ajj_object* ajj_object_find( struct ajj_object* scope ,
-    const char* key );
+struct ajj_object* ajj_object_find( struct ajj_object* scope , const char* key );
 
-/* ajj */
+
+/* =================================
+ * AJJ
+ * ===============================*/
 struct ajj {
   struct all_object global; /* global scope */
   struct slab obj_slab; /* object slab */
 };
-
 
 #endif /* _AJJ_PRIV_H_ */
