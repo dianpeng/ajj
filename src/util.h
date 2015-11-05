@@ -15,6 +15,27 @@ struct string {
 
 extern struct string NULL_STRING;
 
+static inline
+struct string string_dup( struct string str ) {
+  struct string ret;
+  ret.str = strdup(str.str);
+  ret.len = str.len;
+  return ret;
+}
+
+static inline
+struct string string_dupc( const char* str ) {
+  struct string ret;
+  ret.str = strdup(str);
+  ret.len = strlen(str);
+  return ret;
+}
+
+static inline
+int string_eq( struct string l , struct string r ) {
+  return l.len == r.len && strcmp(l.str,r.str) == 0 ;
+}
+
 struct strbuf {
   char* str;
   size_t len;
@@ -103,6 +124,14 @@ struct string strbuf_move( struct strbuf* buf ) {
       return ret;
     }
   }
+}
+
+static inline
+struct string strbuf_tostring( struct strbuf* buf ) {
+  struct string ret;
+  ret.str = buf->str;
+  ret.len = buf->len;
+  return ret;
 }
 
 /* dictionary */

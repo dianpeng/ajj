@@ -5,6 +5,11 @@
 #include <ctype.h>
 #include <assert.h>
 
+/* =================================
+ * Forward
+ * ================================*/
+struct gc_scope;
+
 /* ==================================
  * Tokenizer
  * ================================*/
@@ -104,7 +109,7 @@ enum {
 const char* tk_get_name( int );
 
 int tk_lex( struct tokenizer* tk );
-void tk_consume( struct tokenizer* tk );
+int tk_consume( struct tokenizer* tk );
 
 static inline
 int tk_init( struct tokenizer* tk , const char* src ) {
@@ -171,14 +176,22 @@ enum {
   /* output value */
   VM_PRINT,
 
-  /* memory operation */
-  VM_SETVAR,VM_GETVAR,VM_ATTR,
-
   /* misc */
   VM_POP,
-  VM_PUSH  , /* push another piece of data to top of stack */
-  VM_MOVE  , /* move a data from the stack to another position */
-  VM_SWAP  , /* swap 2 places on stack */
+  VM_TPUSH  , /* push another piece of data to top of stack */
+  VM_TSWAP  , /* swap 2 places on stack */
+  VM_TLOAD  , /* load the top stack element into a position */
+
+  VM_BPUSH  ,
+  BM_BSWAP  ,
+  VM_BLOAD  ,
+
+  /* Move support 2*2 types of addressing mode */
+  VM_BT_MOVE , /* Move (Bottom,Top) */
+  VM_BB_MOVE , /* Move (Bottom,Bottom) */
+  VM_TB_MOVE , /* Move (Top,Bottom) */
+  VM_TT_MOVE , /* Move (Top,Top) */
+
   VM_LSTR  , /* load str into the stack by lookup */
   VM_LTRUE , /* load true into stack */
   VM_LFALSE, /* load false into stack */
@@ -187,23 +200,14 @@ enum {
   VM_LNONE , /* load none into stack */
   VM_LIMM  , /* load an immdiet number into stack */
 
-  VM_VAR_LOAD, /* load a var from scope into stack */
-  VM_VAR_SET  , /* setup a variable in scope */
-  VM_VAR_NEW  , /* new an empty var in scope */
+  /* ATTR */
+  VM_ATTR_SET,
+  VM_ATTR_GET,
 
-  VM_ATTR_LOAD ,/* load the attributes from current object on stack */
-
-  /* dict/object */
-  VM_LDICT, /* load a dict into stack */
-  VM_DICT_ADD, /* add the key value into the dict on the stack */
-
-  /* list */
-  VM_LLIST, /* load a list into the stack */
-  VM_LIST_ADD, /* load a value into the list */
-
-  /* tuple */
-  VM_LTUPLE, /* load a tuple into the stack */
-  VM_LTUPLE_ADD, /* load a tuple into the stack */
+  /* UpValue */
+  VM_UPVAL_SET,
+  VM_UPVAL_GET,
+  VM_UPVAL_DEL,
 
   /* loop things */
   VM_LOOP,   /* loop instructions */
@@ -216,9 +220,13 @@ enum {
   VM_JEPT, /* jmp when this object is empty */
 
   /* scope */
-  VM_SCOPE , /* load current scope */
   VM_ENTER , /* enter into a scope */
   VM_EXIT  , /* exit a scope */
+
+  /* NOP */
+  VM_NOP0,
+  VM_NOP1,
+  VM_NOP2,
 
   /* special instructions for PIPE */
   VM_PIPE  , /* Basically it will make stake(0) = stake(-1) and
@@ -230,15 +238,14 @@ enum {
 struct program {
   void* codes;
   size_t len;
-  struct string *str_tbl[ AJJ_LOCAL_CONSTANT_SIZE ];
+  struct string str_tbl[ AJJ_LOCAL_CONSTANT_SIZE ];
   size_t str_len;
   double num_tbl[AJJ_LOCAL_CONSTANT_SIZE];
   size_t num_len;
   /* parameter prototypes. Program is actually a script based
    * function routine. Each program will have a prototypes */
   struct {
-    int name;/* Index of key name for this function
-              * reference into code's constant table */
+    struct string name;
     struct ajj_value def_val; /* This value is default value for this function.
                                * The memory it contains are OWNED by the program.
                                * Please make sure to delete those memory when
@@ -255,16 +262,155 @@ void program_init( struct program* prg ) {
   prg->par_size =0;
 }
 
-static inline
-int program_add_par( struct program* prg , int idx , struct ajj_value& val ) {
+static
+int program_add_par( struct program* prg ,
+    struct string name ,
+    int own,
+    const struct ajj_value* val ) {
   if( prg->par_size == AJJ_FUNC_PAR_MAX_SIZE )
     return -1;
   else {
-    prg->par_list[prg->par_size].def_val = val; /* owned the value */
-    prg->par_list[prg->par_size].name = idx;
+    assert(name.len < AJJ_SYMBOL_NAME_MAX_SIZE );
+    prg->par_list[prg->par_size].def_val = *val; /* owned the value */
+    prg->par_list[prg->par_size].name = own ? name : string_dup(&name);
     ++prg->par_size;
     return 0;
   }
+}
+
+/* emitter for byte codes */
+struct emitter {
+  struct program* prg;
+  size_t cd_cap;
+};
+
+#define MINIMUM_CODE_PAGE_SIZE 256
+
+static inline
+void reserve_code_page( struct emitter* em , size_t cap ) {
+  void* nc;
+  assert( em->cd_cap < cap );
+  if( em->prg->len == 0 ) {
+    /* for the first time, we allocate a large code page */
+    cap = MINIMUM_CODE_PAGE_SIZE;
+  }
+  nc = malloc(cap);
+  if( em->prg->codes ) {
+    memcpy(nc,em->prg->codes,em->prg->len);
+    free(em->prg->codes);
+  }
+  em->cd_cap = cap;
+}
+
+static inline
+void emit0( struct emitter* em , int bc ) {
+  if( em->cd_cap <= em->prg->len + 9 ) {
+    reserve_code_page(em,2*em->cd_cap);
+  }
+  *((unsigned char*)(em->prg->codes) + em->prg->len)
+    = (unsigned char)(bc);
+  ++(em->prg->len);
+}
+
+static inline
+void emit_int( struct emitter* em , int arg ) {
+  int l;
+  assert( em->cd_cap > em->prg->len + 4 ); /* ensure we have enough space to run */
+  l = (em->prg->len) & 4;
+  switch(l) {
+    case 0:
+      *((int*)(em->prg->codes) + em->prg->len) = arg;
+      break;
+    case 1:
+      {
+        int lower = (arg & 0xff000000) >> 24;
+        int higher= (arg & 0x00ffffff);
+        *((unsigned char*)(em->prg->codes) + em->prg->len)
+          = (unsigned char)lower;
+        *((int*)((unsigned char*)(em->prg->codes) + em->prg->len+1))
+          = higher;
+        break;
+      }
+    case 2:
+      {
+        int lower = (arg & 0xffff0000) >> 16;
+        int higher= (arg & 0x0000ffff);
+        *((int*)((unsigned char*)(em->prg->codes) + em->prg->len))
+          = lower;
+        *((int*)((unsigned char*)(em->prg->codes) + em->prg->len+2))
+          = higher;
+        break;
+      }
+    case 3:
+      {
+        int lower = (arg & 0xffffff00) >> 8;
+        int higher= (arg & 0x000000ff);
+        *((int*)((unsigned char*)(em->prg->codes) + em->prg->len))
+          = lower;
+        *((int*)((unsigned char*)(em->prg->codes) + em->prg->len+3))
+          = higher;
+        break;
+      }
+    default:
+      UNREACHABLE();
+      break;
+  }
+  em->prg->len += 4;
+}
+
+static inline
+void emit1( struct emitter* em , int bc , int a1 ) {
+  emit0(em,bc);
+  emit_int(em,a1);
+}
+
+static inline
+void emit2( struct emitter* em , int bc , int a1 , int a2 ) {
+  emit1(em,bc,a1);
+  emit_int(em,a2);
+}
+
+static inline
+int emitter_put( struct emitter* em , int arg_sz ) {
+  int ret;
+  size_t add;
+  assert( arg_sz == 0 || arg_sz == 1 || arg_sz == 2 );
+  ret = em->prg->len;
+  add = arg_sz * 4 + 1;
+  if( em->cd_cap <= em->prg->len + add ) {
+    reserve_code_page(em,em->cd_cap * 2 );
+  }
+  em->prg->len += add;
+  return ret;
+}
+
+static inline
+void emit0_at( struct emitter* em , int pos , int bc ) {
+  int save = em->prg->len;
+  em->prg->len = pos;
+  emit0(em,bc);
+  em->prg->len = save;
+}
+
+static inline
+void emit1_at( struct emitter* em , int pos , int bc , int a1 ) {
+  int save = em->prg->len;
+  em->prg->len = pos;
+  emit1(em,bc,a1);
+  em->prg->len = save;
+}
+
+static inline
+void emit2_at( struct emitter* em , int pos , int bc , int a1 , int a2 ) {
+  int save = em->prg->len;
+  em->prg->len = pos;
+  emit2(em,bc,a1,a2);
+  em->prg->len = save;
+}
+
+static inline
+int emitter_label( struct emitter* em ) {
+  return (int)(em->prg->len);
 }
 
 int vm_run( struct ajj* , /* ajj environment */
@@ -310,7 +456,7 @@ struct function {
     ajj_method c_mt; /* C method */
     struct program jj_fn; /* JJ_BLOCK/JJ_MACRO */
   } f;
-  char name[ AJJ_SYMBOL_MAX_SIZE ];
+  struct string name;
   int tp;
 };
 
@@ -321,21 +467,19 @@ struct func_table {
   size_t func_cap;
 
   struct c_closure dtor; /* delete function */
-  /* object name could be larger than AJJ_SYMBOL_MAX_SIZE , since they
-   * can be path of object while the execution */
-  const char* name;
+  struct string name;
 };
 
 /* This function will initialize an existed function table */
 static inline
 void func_table_init( struct func_table* tb ,
     const struct ajj_dtor* dtor ,
-    const char* name , int own ) {
+    struct string name , int own ) {
   tb->func_tb = tb->func_buf;
   tb->func_len = 0;
   tb->func_cap = AJJ_FUNC_LOCAL_BUF_SIZE;
   tb->dtor = dtor ;
-  tb->name = own ? name : strdup(name);
+  tb->name = own ? name : string_dup(name);
 }
 
 /* Clear the GUT of func_table object */
@@ -377,9 +521,9 @@ void func_table_shrink_to_fit( struct func_table* tb ) {
 
 static inline
 struct c_closure*
-func_table_add_c_clsoure( struct func_table* tb , char name[AJJ_SYMBOL_MAX_SIZE] ) {
+func_table_add_c_clsoure( struct func_table* tb , struct string name , int own ) {
   struct function* f = func_table_add_func(tb);
-  strcpy(f->name,name);
+  f->name = own ? name : string_dup(name);
   f->tp = C_FUNCTION;
   c_closure_init(&(f->f,c_fn));
   return &(f->f.c_fn);
@@ -387,18 +531,18 @@ func_table_add_c_clsoure( struct func_table* tb , char name[AJJ_SYMBOL_MAX_SIZE]
 
 static inline
 ajj_method*
-func_table_add_c_method( struct func_table* tb , char name[AJJ_SYMBOL_MAX_SIZE] ) {
+func_table_add_c_method( struct func_table* tb , struct string name , int own ) {
   struct function* f = func_table_add_func(tb);
-  strcpy(f->name,name);
+  f->name = own ? name : string_dup(name);
   f->tp = C_METHOD;
   return &(f->f.c_mt);
 }
 
 static inline
 struct program*
-func_table_add_jj_block( struct func_table* tb, char name[AJJ_SYMBOL_MAX_SIZE] ) {
+func_table_add_jj_block( struct func_table* tb, struct string name , int own ) {
   struct function* f = func_table_add_func(tb);
-  strcpy(f->name,name);
+  f->name = own ? name : string_dup(name);
   f->tp = JJ_BLOCK;
   program_init(&(f->f.jj_fn));
   return &(f->f.jj_fn);
@@ -406,9 +550,9 @@ func_table_add_jj_block( struct func_table* tb, char name[AJJ_SYMBOL_MAX_SIZE] )
 
 static inline
 struct program*
-func_table_add_jj_macro( struct func_table* tb, char name[AJJ_SYMBOL_MAX_SIZE] ) {
+func_table_add_jj_macro( struct func_table* tb, struct string name , int own ) {
   struct function* f = func_table_add_func(tb);
-  strcpy(f->name,name);
+  f->name = own ? name : string_dup(name);
   f->tp = JJ_MACRO;
   program_init(&(f->f.jj_fn));
   return &(f->f.jj_fn);
@@ -443,7 +587,7 @@ struct ajj_object {
     struct list l;     /* list */
     struct object obj; /* object */
   } val;
-  unsigned int scp_id;
+  struct gc_scope* scp;
 };
 
 /* Create a single ajj_object which is NOT INITIALZIED with any type
@@ -507,27 +651,16 @@ ajj_object_exit   ( struct ajj* , struct ajj_object* scope );
 /* Move an object from its CURRENT scope to target scope "scp" */
 static inline
 struct ajj_object*
-ajj_object_move( struct ajj_object* obj , struct ajj_object* scp ) {
-  assert( obj->scp_id < scp->scp_id );
-  assert( obj->next != obj->prev ); /* cannot be a singleton scope object */
-  /* remove object from its existed chain */
-  obj->prev->next = obj->next;
-  obj->next->prev = obj->prev;
-  /* insert this object into the scope chain , insert _BEFORE_ this scope */
-  scp->prev->next = obj;
-  obj->prev = scp->prev;
-  scp->prev = obj;
-  obj->next = scp->prev;
-  /* change scope id */
-  obj->scp_id = scp->scp_id;
-  return obj;
-}
+ajj_object_move( struct ajj_object* obj , struct ajj_object* scp );
 
-/* Lookup a symbol recursively from the scope with key "key". If nothing find,
- * it will return NULL */
-static
-struct ajj_object* ajj_object_find( struct ajj_object* scope , const char* key );
-
+/* ================================
+ * GC Scope
+ * ===============================*/
+struct gc_scope {
+  struct ajj_object gc_tail; /* tail of the GC objects list */
+  struct gc_scope* parent;   /* parent scope */
+  unsigned int scp_id;       /* scope id */
+};
 
 /* =================================
  * AJJ

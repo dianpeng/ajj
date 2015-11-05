@@ -3,162 +3,164 @@
 #include <limits.h>
 #include <string.h>
 
-/* emitter for byte codes */
-struct emitter {
-  struct program* prg;
-  size_t cd_cap;
+/* Lexical Scope
+ * Lexical scope cannot cross function boundary. Once a new function
+ * enters, a new set of lexical scope must be initialized */
+struct lex_scope {
+  struct lex_scope* parent; /* parent scope */
+  struct {
+    char name[ AJJ_SYMBOL_NAME_MAX_SIZE ];
+    int idx;
+  } lsys[ AJJ_LOCAL_CONSTANT_SIZE ];
+  size_t len;
+  int end   ; /* Maximum stack offset taken by this scope.
+               * This value must be derived from its nested
+               * scope serves as the base index to store local
+               * variables */
 };
+
+#define MAX_NESTED_FUNCTION_DEFINE 128
 
 struct parser {
   struct ajj* a;
   struct ajj_object* tpl;
   unsigned short unname_cnt;
+
+  /* lexical scope stack. Since our parse is able to parse
+   * multiple functions at same time and save its parsing
+   * context. We maintain a stack of lex_scope objects during
+   * parsing phase.
+   * Also the first element in this array is a dummy element
+   * and serves as a placeholder. */
+  struct lex_scope* cur_scp[ MAX_NESTED_FUNCTION_DEFINE ];
+  size_t scp_tp;
+  int extends; /* Do we have seen extends instructions ?
+                * If extends is seen, then from current parsing,
+                * the parser will enter into a extension mode,
+                * which means everything, except BLOCK is not
+                * allowed and also BLOCK is not automatically
+                * called */
 };
 
-static struct string THIS = { "this" , 4 };
-
-#define MINIMUM_CODE_PAGE_SIZE 256
-
 static inline
-void reserve_code_page( struct emitter* em , size_t cap ) {
-  void* nc;
-  assert( em->cd_cap < cap );
-  if( em->prg->len == 0 ) {
-    /* for the first time, we allocate a large code page */
-    cap = MINIMUM_CODE_PAGE_SIZE;
-  }
-  nc = malloc(cap);
-  if( em->prg->codes ) {
-    memcpy(nc,em->prg->codes,em->prg->len);
-    free(em->prg->codes);
-  }
-  em->cd_cap = cap;
-}
-
-
-static inline
-void emit0( struct emitter* em , int bc ) {
-  if( em->cd_cap <= em->prg->len + 9 ) {
-    reserve_code_page(em,2*em->cd_cap);
-  }
-  *((unsigned char*)(em->prg->codes) + em->prg->len)
-    = (unsigned char)(bc);
-  ++(em->prg->len);
-}
-
-static inline
-void emit_int( struct emitter* em , int arg ) {
-  int l;
-  assert( em->cd_cap > em->prg->len + 4 ); /* ensure we have enough space to run */
-  l = (em->prg->len) & 4;
-  switch(l) {
-    case 0:
-      *((int*)(em->prg->codes) + em->prg->len) = arg;
-      break;
-    case 1:
-      {
-        int lower = (arg & 0xff000000) >> 24;
-        int higher= (arg & 0x00ffffff);
-        *((unsigned char*)(em->prg->codes) + em->prg->len)
-          = (unsigned char)lower;
-        *((int*)((unsigned char*)(em->prg->codes) + em->prg->len+1))
-          = higher;
-        break;
-      }
-    case 2:
-      {
-        int lower = (arg & 0xffff0000) >> 16;
-        int higher= (arg & 0x0000ffff);
-        *((int*)((unsigned char*)(em->prg->codes) + em->prg->len))
-          = lower;
-        *((int*)((unsigned char*)(em->prg->codes) + em->prg->len+2))
-          = higher;
-        break;
-      }
-    case 3:
-      {
-        int lower = (arg & 0xffffff00) >> 8;
-        int higher= (arg & 0x000000ff);
-        *((int*)((unsigned char*)(em->prg->codes) + em->prg->len))
-          = lower;
-        *((int*)((unsigned char*)(em->prg->codes) + em->prg->len+3))
-          = higher;
-        break;
-      }
-    default:
-      UNREACHABLE();
-      break;
-  }
-  em->prg->len += 4;
-}
-
-static inline
-void emit1( struct emitter* em , int bc , int a1 ) {
-  emit0(em,bc);
-  emit_int(em,a1);
-}
-
-static inline
-void emit2( struct emitter* em , int bc , int a1 , int a2 ) {
-  emit1(em,bc,a1);
-  emit_int(em,a2);
-}
-
-static inline
-int put( struct emitter* em , int arg_sz ) {
-  int ret;
-  size_t add;
-  assert( arg_sz == 0 || arg_sz == 1 || arg_sz == 2 );
-  ret = em->prg->len;
-  add = arg_sz * 4 + 1;
-  if( em->cd_cap <= em->prg->len + add ) {
-    reserve_code_page(em,em->cd_cap * 2 );
-  }
-  em->prg->len += add;
-  return ret;
-}
-
-static inline
-void emit0_at( struct emitter* em , int pos , int bc ) {
-  int save = em->prg->len;
-  em->prg->len = pos;
-  emit0(em,bc);
-  em->prg->len = save;
-}
-
-static inline
-void emit1_at( struct emitter* em , int pos , int bc , int a1 ) {
-  int save = em->prg->len;
-  em->prg->len = pos;
-  emit1(em,bc,a1);
-  em->prg->len = save;
-}
-
-static inline
-void emit2_at( struct emitter* em , int pos , int bc , int a1 , int a2 ) {
-  int save = em->prg->len;
-  em->prg->len = pos;
-  emit2(em,bc,a1,a2);
-  em->prg->len = save;
-}
-
-static inline
-int emitter_label( struct emitter* em ) {
-  return (int)(em->prg->len);
-}
+void parse_init( struct parser* p , struct ajj* a );
 
 static
 void report_error( struct parser* , const char* , ... );
 
+#define PTOP() (p->cur_scp[p->scp_tp])
+
+/* Lexical scope operation for parsing */
+static inline
+struct lex_scope* lex_scope_enter( struct parser* p ) {
+  struct lex_scope* scp;
+  scp = malloc(sizeof(*scp));
+  scp->parent = PTOP();
+  scp->end = PTOP()->end;
+  scp->len = 0;
+  return PTOP();
+}
+
+static inline
+struct lex_scope* lex_scope_jump( struct parser* p ) {
+  struct lex_scope* scp;
+  scp = malloc(sizeof(*scp));
+  if( p->scp_tp == MAX_NESTED_FUNCTION_DEFINE ) {
+    report_error(p,"Too much nested functoin definition!");
+    return NULL;
+  } else {
+    ++p->scp_tp;
+    PTOP() = scp;
+    scp->parent = NULL;
+    scp->len = 0;
+    scp->end = 0;
+    return PTOP();
+  }
+}
+
+static inline
+struct lex_scope* lex_scope_exit( struct parser*  p ) {
+  struct lex_scope* scp;
+  assert( PTOP() != NULL );
+  /* move the current ptop to its parent */
+  scp = PTOP()->parent;
+  free( PTOP() );
+  if( scp == NULL ) {
+    PTOP() = NULL; /* don't forget to set it to NULL */
+    /* exit the function scope */
+    assert( p->scp_tp != 0 );
+    --p->scp_tp;
+  } else {
+    PTOP() = scp;
+  }
+  return PTOP();
+}
+
+/* This function is not an actual set but a set if not existed.
+ * Because most of the local symbol definition has such semantic.
+ * This function returns -2 represent error,
+ * returns -1 represent a new symbol is set up
+ * and non-negative number represents the name is found */
+static inline
+int lex_scope_set( struct parser* p , const char* name ) {
+  int i;
+  struct lex_scope* scp = PTOP();
+
+  /* Try to find symbol:name on local scope */
+  for( i = 0 ; i < scp->len ; ++i ) {
+    if( strcmp(scp->lsys[i].name,name) == 0 ) {
+      /* Find one, why we need to define it */
+      return scp->lsys[i].idx;
+    }
+  }
+
+  if( scp->len == AJJ_LOCAL_CONSTANT_SIZE ) {
+    report_error(p,"Too much local constant in a scope!More than :%d",
+        AJJ_LOCAL_CONSTANT_SIZE);
+    return -2; /* We cannot set any more constant */
+  }
+  assert( strlen(name) < AJJ_SYMBOL_NAME_MAX_SIZE );
+  ++scp->len;
+  strcpy(scp->lsys[scp->len].name,name);
+  scp->lsys[scp->len].idx = scp->end++;
+  return -1; /* Indicate we have a new one */
+}
+
 static
-int random_name( struct parser* p , char name[AJJ_SYMBOL_NAME_MAX_SIZE] ) {
+int lex_scope_get( struct parser* p , const char* name ) {
+  struct lex_scope* cur = PTOP();
+  assert( cur ) ;
+  assert( strlen(name) < AJJ_LOCAL_CONSTANT_SIZE );
+  do {
+    int i;
+    for( i = 0 ; i < cur->len ; ++i ) {
+      if( strcmp(name,cur->lsys[i].name) == 0 ) {
+        return cur->lsys[i].idx;
+      }
+    }
+    cur = cur->parent;
+  } while(cur);
+  return -1;
+}
+
+static struct string THIS = { "__this__",8};
+static struct string ARGNUM = {"__argnum__",10};
+static struct string MAIN = { "__main__",8 };
+static struct string CALLER = {"caller",6 };
+
+static
+struct string
+random_name( struct parser* p , char l ) {
+  char name[1024];
+  int result;
   if(p->unname_cnt == USHRT_MAX) {
     report_error(p,"Too much scope/blocks,more than:%d!",USHRT_MAX);
-    return -1;
+    return NULL_STRING;
   }
-  sprintf(name,"@%d",p->unname_cnt);
+  result = sprintf(name,"@%c%d",l,p->unname_cnt);
+  assert(result < AJJ_SYMBOL_NAME_MAX_SIZE );
   ++p->unname_cnt;
-  return 0;
+  return string_dupc(name);
 }
 
 static
@@ -202,9 +204,6 @@ int const_num( struct parser* p , struct program* prg, double num ) {
     return prg->num_len++;
   }
 }
-/* do the parse */
-static
-int parse_expr( struct parser* , struct emitter* , struct tokenizer* );
 
 #define EXPECT(TK) \
   do { \
@@ -231,9 +230,40 @@ int parse_expr( struct parser* , struct emitter* , struct tokenizer* );
     } \
   } while(0)
 
+/* Parser helpers */
+static
+int finish_scope_tag( struct parser* p,
+    struct emitter* em ,
+    struct tokenizer* tk ,
+    int token  ) {
+  UNUSE_ARG(em);
 
-/* constant */
+  EXPECT(TK_LSTMT);
+  tk_consume(tk);
 
+  EXPECT(token);
+  tk_consume(tk);
+
+  EXPECT(TK_RSTMT);
+  tk_consume(tk);
+  return 0;
+}
+
+static
+struct string symbol( struct parser* p , struct tokenizer* tk ) {
+  assert(tk->tk == TK_VARIABLE);
+  if( tk->lexme.len >= AJJ_SYMBOL_NAME_MAX_SIZE ) {
+    report_error(p,"Local symbol is too long ,longer than:%d",
+        AJJ_SYMBOL_NAME_MAX_SIZE);
+    return NULL_STRING;
+  } else {
+    return strbuf_move(&(tk->lexme));
+  }
+}
+
+/* Expr ============================== */
+static
+int parse_expr( struct parser* , struct emitter* , struct tokenizer* );
 /* Parsing a list literals into an object at top of the stack. */
 static
 int parse_list( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
@@ -279,12 +309,33 @@ int parse_literals( struct parser* p, struct emitter* em , struct tokenizer* tk 
 }
 
 static inline
+int parse_var_prefix( struct parser* p , struct emitter* em , struct string val ) {
+  /* Check whether the variable is a local variable or
+   * at least could be */
+  if((idx=lex_scope_get(p,var.str))<0) {
+    /* Not a local variable, must be an upvalue */
+    int const_idx;
+    CALLE((const_idx=const_str(p,em->prg,var,1))<0);
+    /* Now emit a UPVALUE instructions */
+    emit1(em,VM_UPVALUE_GET,const_idx);
+  } else {
+    /* Local variables: just load the onto top of the stack */
+    emit1(em,VM_BPUSH,idx);
+    /* Don't forget to release the var's buffer */
+    string_destroy(&var);
+  }
+  return 0;
+}
+
+
+static inline
 int parse_var( struct parser* p, struct emitter* em , struct tokenizer* tk ) {
+  struct string var;
   int idx;
   assert(tk->tk == TK_VARIABLE);
-  CALLE((idx=const_str(p->a,em->prg,strbuf_move(&(tk->lexme)),1))<0);
-  emit1(em,VM_VAR_LOAD,idx);
-  return 0;
+  CALLE((var = symbol(p,tk))!= NULL_STRING);
+  tk_consume(tk);
+  return parse_var_prefix(p,em,tk);
 }
 
 static
@@ -292,15 +343,13 @@ int parse_attr( struct parser* p, struct emitter* em , struct tokenizer* tk,
     struct string prefix /* owned */) {
   int idx;
   int comp_tk;
-
   assert( tk->tk == TK_LSQR || tk->tk == TK_DOT );
-  if( prefix.str != NULL ) {
+
+  if( prefix == NULL_STRING ) {
     /* We have a symbol name as prefix, we need to load the object
      * whose name is this prefix on to the stack first and then parse
      * the expression and then retrieve the attributes */
-    CALLE((idx=const_str(p,em->prg,prefix,1))<0);
-    /* Emit code load this object on the stack */
-    emit1(em,VM_VAR_LOAD,idx);
+    CALLE(parse_var_prefix(p,em,prefix));
   }
 
   /* Move tokenizer */
@@ -313,7 +362,7 @@ int parse_attr( struct parser* p, struct emitter* em , struct tokenizer* tk,
     EXPECT(TK_VARIABLE);
     CALLE((idx=const_str(p,em->prg,prefix,strbuf_move(&(tk->lexme)),1))<0);
     tk_consume(tk); /* move forward */
-    emit1(em,VM_ATTR_LOAD,idx); /* look up the attributes */
+    emit1(em,VM_ATTR_GET,idx); /* look up the attributes */
   }
 
   /* Now try to parse the end of this component lookup */
@@ -324,8 +373,18 @@ int parse_attr( struct parser* p, struct emitter* em , struct tokenizer* tk,
   return 0;
 }
 
+/* Emit function call
+ * The calling convention for a function is as follow:
+ * 1. Since each function is on different memory page, the VM will save
+ *    2 main registers , EBP (base pointer for local variables) and ESP
+ *    ( end of the stack ). No need to push PC onto stack.
+ * 2. After jumping to a new function, EBP points to the start of stack
+ *    of target callee. The first element on this stack is function par
+ *    numbers. Then follows corresponding number of calling parameters.
+ */
+
 static
-int parse_funccall( struct parser* p , struct emitter* em ,
+int parse_funccall_or_pipe( struct parser* p , struct emitter* em ,
     struct tokenizer* tk , struct string prefix , int pipe ) {
   int idx;
   int num = pipe; /* If this function call is a pipe call, then pipe will set to 1.
@@ -333,16 +392,35 @@ int parse_funccall( struct parser* p , struct emitter* em ,
                    * pipe. But the caller of this function must set up the code
                    * correctly. [ object , pipe_data ]. This typically involes prolog
                    * for moving data around */
+  int pipe_limm = -1;
+  int pipe_tmove= -1;
+  int func_limm = -1;
   assert(tk->tk == TK_LPAR);
   tk_consume(tk);
   if( prefix.str != NULL ) {
     CALLE((idx=const_str(p,em->prg,prefix,1))<0);
-    /* NOTES: When we have the prefix as a input for funccall, it means we
+    /* NOTES: When we have the prefix as a inemitter_put for funccall, it means we
      * are calling a free function. But in our VM, we can only do
      * member function (method) calling, it means we need to load the
      * current scope onto the stack. This instruction is emitted by
      * our callee parse_prefix function*/
   }
+  if(pipe) {
+    /* We need to take consideration of PIPE. PIPE is just a function call
+     * with some special parameter manipulation. If this function call is
+     * a pipe call. */
+    emit1(em,VM_TPUSH,-1); /* Duplicate the value on top of the stack */
+    /* Now we reserve following code to move the functions parameters to the
+     * original places of first parameters.
+     * VM_LIMM(parameter_num) Load parameter num on top of stack
+     * VM_TMOVE(-3) Move the top element of stack to the third top element.
+     */
+    pipe_limm = emitter_put(em,1);
+    pipe_tmove= emitter_put(em,1);
+  } else {
+    func_limm = emitter_put(em,1);
+  }
+
   /* Populating the function parameters */
   if( tk->tk != TK_RPAR ) {
     do {
@@ -361,8 +439,30 @@ int parse_funccall( struct parser* p , struct emitter* em ,
       }
     } while(1);
   }
-  emit1(em,VM_LIMM,num); /* load the number of function parameter on to stack */
   emit1(em,VM_CALL,idx); /* call the function based on current object */
+
+  /* patch the instructions */
+  if(pipe) {
+    assert( pipe_limm > 0 && pipe_tmove > 0 );
+    emit1_at(em,pipe_limm,VM_LIMM,num);
+    emit1_at(em,pipe_tmove,VM_TLOAD,-3);
+  } else {
+    assert( func_limm > 0 );
+    emit1_at(em,func_limm,VM_LIMM,num);
+  }
+  return 0;
+}
+
+/* This function handles the situation that the function is a pipe command shortcut */
+static inline
+int parse_pipecmd( struct parser* p , struct emitter* em ,
+    struct tokenizer* tk , struct string cmd ) {
+  int idx;
+  emit1(em,VM_TPUSH,-1);
+  emit1(em,VM_LIMM,1);
+  emit1(em,VM_TLOAD,-3);
+  CALLE((idx=const_str(p,em->prg,cmd,1))<0);
+  emit1(em,VM_CALL,idx);
   return 0;
 }
 
@@ -370,13 +470,17 @@ static inline
 int parse_prefix( struct parser* p, struct emitter* em , struct tokenizer* tk ) {
   struct string prefix;
   assert(tk->tk == TK_VARIABLE);
-  prefix = strbuf_move(&(tk->lexme));
+  CALLE((prefix=symbol(p,tk))!=NULL_STRING);
+  tk_consume(tk);
   if( tk->tk == TK_RPAR ) {
     emit0(em,VM_SCOPE); /* load scope on stack */
     CALLE(parse_funccall(p,em,tk,prefix,0));
   } else {
     if( tk->tk == TK_DOT || tk->tk == TK_LSQR ) {
       CALLE(parse_attr(p,em,tk,prefix));
+    } else {
+      /* Just a variable name */
+      return parse_var(p,em,tk);
     }
   }
   do {
@@ -385,28 +489,15 @@ int parse_prefix( struct parser* p, struct emitter* em , struct tokenizer* tk ) 
     } else if( tk->tk == TK_DOT || tk->tk == TK_LSQR ) {
       CALLE(parse_attr(p,em,tk,NULL_STRING));
     } else if( tk->tk == TK_PIPE ) {
-      /* Now we emit the pipe prolog:
-       * If we reach here, we know that on our stack, the previous
-       * call's result are on top of the stack, but it must be used
-       * as the first parameter of the pipe functions. And also, we
-       * need to push the current scope object onto the stack as well.
-       * This can be achieved by a special instruction. VM_PIPE */
-      emit0(em,VM_PIPE);
-      /* Now we try to check wether the pipe operator follows a function
-       * call or not. A pipe operator can only fllows a function call !*/
       tk_consume(tk);
-      EXPECT( TK_VARIABLE );
+      CALLE((prefix=
+      EXPECT(TK_VARIABLE);
       prefix = strbuf_move(&(tk->lexme));
       tk_consume(tk);
       if( tk->tk == TK_LPAR ) {
-        /* Now call the followed functions */
-        CALLE(parse_funccall(p,em,tk,prefix,1));
+        CALLE(parse_funccall_or_pipe(p,em,tk,1));
       } else {
-        /* a sinlge pipe command as shortcut */
-        int idx;
-        CALLE((idx=const_str(p,em->prg,prefix,1))<0);
-        emit1(em,VM_LIMM,1);
-        emit1(em,VM_CALL,idx);
+        CALLE(parse_pipecmd(p,em,tk,prefix));
       }
     } else {
       break;
@@ -458,12 +549,8 @@ int parse_unary( struct parser* p, struct emitter* em , struct tokenizer* tk ) {
 
   do {
     switch(tk->tk) {
-      case TK_NOT:
-        PUSH_OP(TK_NOT);
-        break;
-      case TK_SUB:
-        PUSH_OP(TK_SUB);
-        break;
+      case TK_NOT: PUSH_OP(TK_NOT); break;
+      case TK_SUB: PUSH_OP(TK_SUB); break;
       case TK_ADD:
       default:
         break;
@@ -489,37 +576,17 @@ int parse_factor( struct parser* p, struct emitter* em , struct tokenizer* tk ) 
   do {
     int op;
     switch(tk->tk) {
-      case TK_MUL:
-      case TK_DIV:
-      case TK_DIVTRUCT:
-      case TK_MOD:
-      case TK_POW:
-        op = tk->tk;
+      case TK_MUL: op = VM_MUL; break;
+      case TK_DIV: op = VM_DIV; break;
+      case TK_DIVTRUCT: op = VM_DIVTRUCT; break;
+      case TK_MOD: op = VM_MOD; break;
+      case TK_POW: op = VM_POW; break;
         break;
       default:
         goto done;
     }
     CALLE(parse_unary(p,em,tk));
-    switch(op) {
-      case TK_MUL:
-        emit0(em,VM_MUL);
-        break;
-      case TK_DIV:
-        emit0(em,VM_DIV);
-        break;
-      case TK_DIVTRUCT:
-        emit0(em,VM_DIVTRUCT);
-        break;
-      case TK_MOD:
-        emit0(em,VM_MOD);
-        break;
-      case TK_POW:
-        emit0(em,VM_POW);
-        break;
-      default:
-        UNREACHABLE();
-        return -1;
-    }
+    emit0(em,op);
   } while(1);
 
 done: /* finish */
@@ -532,23 +599,12 @@ int parse_term( struct parser* p, struct emitter* em , struct tokenizer* tk ) {
   do {
     int op;
     switch(tk->tk) {
-      case TK_ADD:
-      case TK_SUB:
-        op = tk->tk;
+      case TK_ADD: op = VM_ADD; break;
+      case TK_SUB: op = VM_SUB; break;
       default: goto done;
     }
     CALLE(parse_factor(p,em,tk));
-    switch(op) {
-      case TK_ADD:
-        emit0(em,VM_ADD);
-        break;
-      case TK_SUB:
-        emit0(em,VM_SUB);
-        break;
-      default:
-        UNREACHABLE();
-        return -1;
-    }
+    emit0(em,op);
   } while(1);
 done:
   return 0;
@@ -560,41 +616,19 @@ int parse_cmp( struct parser* p, struct emitter* em , struct tokenizer* tk ) {
   do {
     int op;
     switch(tk->tk) {
-      case TK_EQ:
-      case TK_NE:
-      case TK_LT:
-      case TK_LE:
-      case TK_GT:
-      case TK_GE:
+      case TK_EQ: op = VM_EQ; break;
+      case TK_NE: op = VM_NE; break;
+      case TK_LT: op = VM_LT; break;
+      case TK_LE: op = VM_LE; break;
+      case TK_GT: op = VM_GT; break;
+      case TK_GE: op = VM_GE; break;
         op = tk->tk;
         break;
       default:
         goto done;
     }
     CALLE(parse_term(p,em,tk));
-    switch(op) {
-      case TK_EQ:
-        emit0(em,VM_EQ);
-        break;
-      case TK_NE:
-        emit0(em,VM_NE);
-        break;
-      case TK_LT:
-        emit0(em,VM_LT);
-        break;
-      case TK_LE:
-        emit0(em,VM_LE);
-        break;
-      case TK_GT:
-        emit0(em,VM_GT);
-        break;
-      case TK_GE:
-        emit0(em,VM_GE);
-        break;
-      default:
-        UNREACHABLE();
-        return -1;
-    }
+    emit0(em,op);
   } while(1);
 done:
   return 0;
@@ -606,25 +640,13 @@ int parse_logic( struct parser* p, struct emitter* em , struct tokenizer* tk ) {
   do {
     int op;
     switch(tk->tk) {
-      case TK_AND:
-      case TK_OR:
-        op = tk->tk;
-        break;
+      case TK_AND: op = VM_AND; break;
+      case TK_OR:  op = VM_OR ; break;
       default:
         goto done;
     }
     CALLE(parse_cmp(p,em,tk));
-    switch(op) {
-      case TK_AND:
-        emit0(em,VM_AND);
-        break;
-      case TK_OR:
-        emit0(em,VM_OR);
-        break;
-      default:
-        UNREACHABLE();
-        return -1;
-    }
+    emit0(em,op);
   } while(1);
 done:
   return 0;
@@ -642,49 +664,16 @@ int parse_expr( struct parser* p, struct emitter* em , struct tokenizer* tk ) {
     tk_consume(tk);
     CALLE(parse_logic(p,em,tk));
     /* Swap the top 2 value here */
-    emit2(em,VM_SWAP,-1,-2); /* The stack is growing up , ESP(assume we have) is
-                              * pointing to the first unused element in the stack,
-                              * and we use ESP to calculate the position of stack,
-                              * so ESP-1 : is the top most used element, the ESP-2
-                              * is the second most used element. */
+    emit2(em,VM_TSWAP,-1,-2); /* The stack is growing up , ESP(assume we have) is
+                               * pointing to the first unused element in the stack,
+                               * and we use ESP to calculate the position of stack,
+                               * so ESP-1 : is the top most used element, the ESP-2
+                               * is the second most used element. */
     EXPECT(TK_ELSE);
     tk_consume(tk);
 
-    CALLE(parse_logic(p,em,tk));
     emit0(em,VM_TENARY);
   }
-}
-
-/* this function load this pointer onto stack. The this pointer represent this template
- * objects. It is set up manually during the parsing phase */
-static inline
-int load_this( struct parser* p,
-    struct emitter* em ,
-    struct tokenizer* tk ) {
-  int idx;
-  UNUSE_ARG(tk);
-  CALLE((idx=const_str(p,THIS,0))<0);
-  emit1(em,VM_VAR_LOAD,idx);
-  return 0;
-}
-
-static
-int finish_scope_tag( struct parser* p,
-    struct emitter* em ,
-    struct tokenizer* tk ,
-    int token  ) {
-  UNUSE_ARG(em);
-
-  EXPECT(TK_LSTMT);
-  tk_consume(tk);
-
-  EXPECT(token);
-  tk_consume(tk);
-
-  EXPECT(TK_RSTMT);
-  tk_consume(tk);
-
-  return 0;
 }
 
 /* structures */
@@ -693,63 +682,6 @@ static
 int parse_scope( struct parser* ,
     struct emitter* em , struct tokenizer* tk , int gen_scope );
 
-/* parse the following scope as a unnamed closure*/
-static
-int parse_set( struct parser* p,
-    struct emitter* em , struct tokenizer* tk ) {
-  int idx;
-  assert( tk->tk == TK_SET );
-  tk_consume(tk);
-
-  EXPECT(TK_VARIABLE);
-  CALLE((idx=const_str(p,em->prg,strbuf_move(&(tk->lexme)),1))<0);
-
-  /* check if we have an pending expression or just end of the SET scope*/
-  if( tk->tk == TK_RSTMT ) {
-    int txt_idx;
-    /* end of the set scope , so it is a scop based set */
-    tk_consume(tk);
-
-    EXPECT(TK_TEXT);
-    CALLE((txt_idx=const_str(p,em->prg,strbuf_move(&(tk->lexme)),1))<0);
-    tk_consume(tk);
-
-    /* load the text on to stack */
-    emit1(em,VM_LSTR,txt_idx);
-
-    /* set up the var based on the stack */
-    emit1(em,VM_VAR_SET,idx);
-    CALLE(finish_scope_tag(p,em,tk,TK_SET));
-    return 0;
-  } else if( tk->tk == TK_ASSIGN ) {
-    tk_consume(tk);
-    CALLE(parse_expr(p,em,tk));
-    emit1(em,VM_VAR_SET,idx);
-    return 0;
-  } else {
-    report_error(p,"Set scope either uses \"=\" to indicate a one line assignment,\
-        or uses a scope based set!");
-    return -1;
-  }
-}
-
-static
-int parse_do( struct parser* p,
-    struct emitter* em , struct tokenizer* tk ) {
-  assert( tk->tk == TK_DO );
-  tk_consume(tk);
-
-  CALLE(parse_expr(p,em,tk));
-
-  /* We left the expression output on the stack, which is not
-   * what we want. Therefore we emit a VM_POP instructions to
-   * clear the stack */
-  emit0(em,VM_POP);
-
-  EXPECT(TK_RSTMT);
-  tk_consume(tk);
-  return 0;
-}
 
 static
 int parse_print( struct parser* p,
@@ -782,20 +714,14 @@ int parse_branch ( struct parser* p,
 
   assert( tk->tk == TK_IF );
   tk_consume(tk);
-
   CALLE(parse_expr(p,em,tk));
-
   /* condition failed jump */
-  cond_jmp = put(em,1);
-
+  cond_jmp = emitter_put(em,1);
   EXPECT(TK_RSTMT);
   tk_consume(tk);
-
   CALLE(parse_scope(p,em,tk,1));
-
   /* jump out of the scope */
-  PUSH_JMP(put(em,1));
-
+  PUSH_JMP(emitter_put(em,1));
   do {
     switch(tk->tk) {
       case TK_ENDFOR:
@@ -813,15 +739,13 @@ int parse_branch ( struct parser* p,
             report_error(p,"Expect endfor since else tag is seen before!");
             return -1;
           }
-
           tk_consume(tk);
           assert(cond_jmp > 0 );
-
           /* modify the previous conditional jmp */
           emit1_at(em,cond_jmp,VM_JMP,emitter_label(em));
           CALLE(parse_expr(p,em,tk));
 
-          cond_jmp = put(em,1);
+          cond_jmp = emitter_put(em,1);
           EXPECT(TK_RSTMT);
           tk_consume(tk);
           break;
@@ -830,10 +754,8 @@ int parse_branch ( struct parser* p,
         { /* else scope */
           tk_consume(tk);
           assert( cond_jmp > 0 );
-
           emit1_at(em,cond_jmp,VM_JMP,emitter_label(em));
           cond_jmp = -1;
-
           EXPECT(TK_RSTMT);
           tk_consume(tk);
           has_else = 1;
@@ -846,7 +768,7 @@ int parse_branch ( struct parser* p,
     }
     CALLE(parse_scope(p,em,tk,1));
     if( !has_else )
-      PUSH_JMP(put(em,1));
+      PUSH_JMP(emitter_put(em,1));
   } while(1);
 done:
   /* patch all rest of the cool things */
@@ -856,6 +778,170 @@ done:
   return 0;
 }
 #undef PUSH_JMP
+
+/* Function
+ * What function ? Jinja doesn't have functions !
+ * Finally each jinja building block needs to be mapped to some existed
+ * or well definied unit that can be executed. A functions here is the
+ * basic building block for:
+ * 1) Macros
+ * 2) Blocks
+ * 3) For loop
+ * 4) Main function
+ * It forms the basic way for executing those jinja template codes.
+ *
+ * When we enter into the function, the value stack should already
+ * have some value there. EBP register points to position that is
+ * owned by us, but there're values there already.
+ * EBP --> parameter_num
+ *           par1
+ *           par2
+ *           ...
+ * ESP -->  <end-of-stack>
+ * However, those value has been named by local variables.
+ * NOTES: parse_func_prolog is always not generating ANY scope based
+ * instructions. These instructions should be generated by caller
+ * function.
+ */
+
+static void
+parse_func_prolog( struct parser* p , struct emitter* em ) {
+  size_t i;
+  /* Generate __argnum__ */
+  CALLE(lex_scope_set(p,ARGNUM)==-2);
+  for( i = 0 ; i < em->prg->par_size ; ++i ) {
+    /* Generate rest of named parameters */
+    CALLE(lex_scope_set(p,em->prg->par_list[i])==-2);
+  }
+}
+
+static int
+parse_func_body( struct parser* p , struct emitter* em ,
+    struct tokenizer* tk ) {
+  struct lex_scope* scp = PTOP();
+  assert( PTOP()->parent == NULL );
+  assert( PTOP()->len == 0 );
+  assert( PTOP()->end == 0 );
+
+  CALLE(lex_scope_jump(p) != NULL);
+
+  parse_func_prolog(p,em,tk); /* Parsing the prolog */
+  /* start to parse the function body ,which is just
+   * another small code scope */
+  CALLE(parse_scope(p,em,tk,1));
+  /* Generate return instructions */
+  emit0(em,VM_RET);
+  /* Notes, after calling this function, the tokenizer should still
+   * have tokens related to end of the callin scope */
+
+  lex_scope_exit(p);
+  assert( PTOP() == scp ); /* Check */
+  return 0;
+}
+
+/* This function is used to parse strict const expression for default
+ * value of each function parameters */
+static int
+parse_constexpr( struct parser* p , struct tokenizer* tk ,
+    struct ajj_value* output );
+
+/* Parse function declaration, although we only used it in MACRO right
+ * now. But it may be extended to be used some other places as well */
+static int
+parse_func_prototype( struct parser* p , struct tokenizer* tk ,
+    struct program* prg ) {
+  assert( tk->tk == TK_LPAR );
+  tk_consume(tk);
+  if( tk->tk == TK_RPAR ) {
+    tk_consume(0);
+    return 0;
+  } else {
+    do {
+      struct string par_name;
+      struct ajj_value def_val = AJJ_NONE;
+      /* Building prototype of function */
+      EXPECT(TK_VARIABLE);
+      CALLE((par_name=symbol(p,tk))!= NULL_STRING);
+      tk_consume(tk);
+      if( tk->tk == TK_EQ ) {
+        tk_consume(tk);
+        /* We have a default value , parse it through constexpr */
+        CALLE(parse_constexpr(p,tk,&def_val));
+      }
+      /* Add it into the function prototype */
+      CALLE(program_add_par(prg,par_name,&def_val));
+      /* Check if we can exit or continue */
+      if( tk->tk == TK_COMMA ) {
+        tk_consume(tk);
+        continue;
+      } else if( tk->tk == TK_RPAR ) {
+        tk_consume(tk);
+        break;
+      }
+    } while(1);
+    return 0;
+  }
+}
+
+static int
+parse_macro( struct parser* p , struct tokenizer* tk ) {
+  struct emitter new_em;
+  struct program* new_prg;
+  struct string name;
+
+  assert(tk->tk == TK_MACRO);
+  tk_consume(tk);
+  /* We need the name of the macro then we can get a new
+   * program objects */
+  EXPECT(TK_VARIABLE);
+  CALLE((name = symbol(p,tk)) != NULL_STRING);
+  assert(p->tpl->val.obj.fn_tb);
+  /* Add a new function into the table */
+  new_prg = func_table_add_jj_macro(
+      p->tpl->val.obj.fn_tb,name,1);
+  new_em.prg = new_prg;
+  /* Parsing the prototype */
+  CALLE(parse_func_prototype(p,tk,new_prg));
+  EXPECT(TK_RSTMT); tk_consume(tk);
+
+  /* Parsing the rest of the body */
+  CALLE(parse_func_body(p,tk,&new_em));
+  EXPECT(TK_ENDMACRO); tk_consume(tk);
+  EXPECT(TK_RSTMT); tk_consume(tk);
+  return 0;
+}
+
+/* Block inside of Jinja is still an functions, the difference is that a
+ * block will be compiled into a ZERO-parameter functions and automatically
+ * gets called when we are not have extends instructions */
+static int
+parse_block( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
+  struct string name;
+  struct new_prg* new_prg;
+  struct emitter new_em;
+  assert(tk->tk == TK_BLOCK);
+  tk_consume(tk);
+  EXPECT(TK_VARIABLE);
+  CALLE((name=symbol(p,tk)) != NULL_STRING);
+  if( p->extends == 0 ) {
+    int idx;
+    CALLE((idx=const_str(p,em->prg,name,0))<0);
+    /* Generate caller code since we haven't seen any extends
+     * instructions yet */
+    emit1(em,VM_LIMM,0);
+    emit1(em,VM_CALL,idx);
+  }
+  assert(p->tpl->val.obj.fn_tb);
+  new_prg = func_table_add_jj_block(
+      p->tpl->val.obj.fn_tb,name,1);
+  new_em.prg = new_prg;
+  /* Parsing the functions */
+  CALLE(parse_func_body(p,&new_em,tk));
+  /* Parsing the rest of the body */
+  EXPECT(TK_ENDBLOCK);tk_consume(tk);
+  EXPECT(TK_RSTMT);tk_consume(tk);
+  return 0;
+}
 
 /* for loop
  * In jinja, for loop is actually kind of complicated. We will use some
@@ -873,17 +959,6 @@ int parse_loop_cond( struct parser* p , struct emitter* em ,
   return parse_logic(p,em,tk);
 }
 
-static inline
-int parse_loop_filter( struct parser* p , struct emitter* em ,
-    struct tokenizer* tk ) {
-  /* Filter for loop is like this: if condition */
-  if( tk->tk == TK_IF ) {
-    tk_consume(tk);
-    CALLE(parse_loop_cond(p,em,tk));
-  }
-  return 0;
-}
-
 /* This function compiles the for body into the closure. What is for
  * body:
  * {% for symbolname in expr (filter) (recursive) %}
@@ -898,16 +973,17 @@ static int parse_for_body( struct parser* p ,
     struct tokenizer* tk ,
     struct string key,
     struct string val ) {
-  char name[AJJ_SYMBOL_NAME_MAX_SIZE]; /* random name buffer */
+  struct string name;
   int idx;
   int kv_idx;
   struct emitter cl_em; /* new program's emitter */
   struct program* new_prg; /* new program */
   int recur = 0;
   int jmp_pos;
+  int ft_jmp_pos = -1;
 
   /* get unique name */
-  CALLE(random_name(p,name));
+  CALLE((name=random_name(p,'l')) != NULL_STRING);
   /* get unique name index in CURRENT scope */
   CALLE((idx=const_str(p,em->prg,name,0)));
   /* compile the loop target onto stack */
@@ -918,7 +994,7 @@ static int parse_for_body( struct parser* p ,
    * top stack is empty . First we duplicate the stack value, since
    * jump will consume one value, then we do a jump */
   emit1(em,VM_PUSH,-1);
-  jmp_pos = put(em,1); /* setup the tag for jmp */
+  jmp_pos = emitter_put(em,1); /* setup the tag for jmp */
 
   /* We cannot generate VM_LOOP/VM_LOOPREC until we see the recursive
    * keyword. However we could defer this operation until we finish the
@@ -929,8 +1005,10 @@ static int parse_for_body( struct parser* p ,
   assert( p->tpl->tp == AJJ_VALUE_OBJECT );
   assert( p->tpl->val.obj.fn_tb != NULL  );
   /* Set up the new program scopes */
-  cl.prg = new_prg = func_table_add_jj_block(tb,name);
-  /* Add function parameters here */
+  cl.prg = new_prg = func_table_add_jj_block(
+      p->tpl->val.obj.fn_tb,name);
+
+  /* Add function parameters into its prototype definition */
   if( key_name.str ) {
     CALLE((kv_idx=const_str(p,new_prg,key_name,1))<0);
     CALLE(program_add_par(new_prg,kv_idx,AJJ_NONE));
@@ -939,8 +1017,17 @@ static int parse_for_body( struct parser* p ,
     CALLE((kv_idx=const_str(p,new_prg,val_name,1))<0);
     CALLE(program_add_par(new,kv_idx,AJJ_NONE));
   }
-  /* Generate code for filters */
-  CALLE(parse_loop_filter(p,&cl_em,tk));
+  /* Add prolog for functions */
+  CALLE(parse_func_prolog(p,&cl_em));
+
+  /* Enter into the new scope for parsing */
+  CALLE(lex_scope_jump(p) != NULL);
+  /* Generate filter if we have one */
+  if( tk->tk == TK_IF ) {
+    tk_consume(tk);
+    CALLE(parse_expr(p,&cl_em,tk));
+    ft_jmp_pos = emitter_put(&cl_em,1); /* Reserve a  place for jumping */
+  }
 
   /* Now we should left with keyword recursive or %} */
   if( tk->tk == TK_RECURSIVE ) {
@@ -951,10 +1038,15 @@ static int parse_for_body( struct parser* p ,
   tk_consume(tk);
 
   /* parse the closure itself */
-  CALLE(parse_body(p,&cl_em,tk,0));
-
-  /* generate epilog for function call */
+  CALLE(parse_body(p,&cl_em,tk,1));
+  /* if we have a filter, we will direct the jump here */
+  if( ft_jmp_pos >= 0 ) {
+    emit1_at(&cl_em,ft_jmp_pos,VM_JT,emitter_label(&cl_em));
+  }
+  /* generate prolog for function call */
   emit0(&cl_em,VM_RET);
+  /* leave the current parsing scope */
+  lex_scope_exit(p);
 
   /* Now we need to generate code that actually calls into
    * each closure during the loop phase */
@@ -973,11 +1065,8 @@ static int parse_for_body( struct parser* p ,
     /* Now generate code for else branch */
     CALLE(parse_scope(p,em,tk,1));
   }
-  EXPECT(TK_ENDFOR);
-  tk_consume(tk);
-
-  EXPECT(TK_RSTMT);
-  tk_consume(tk);
+  EXPECT(TK_ENDFOR); tk_consume(tk);
+  EXPECT(TK_RSTMT); tk_consume(tk);
 
   /* We may not enter into an else scope, so it is possible
    * that the jmp_pos is not patched correctly here . We
@@ -991,9 +1080,9 @@ static int parse_for_body( struct parser* p ,
 }
 
 /* Parsing the for loop body.
- * This function act as a parser prolog by only parsing the symbol inside of
+ * This function act as a parse prolog by only parsing the symbol inside of
  * for loop : {% for symbol1,symbol2 in ...
- * Rest of the parser code is in parse_for_body. For symbol that has name "_"
+ * Rest of the parse code is in parse_for_body. For symbol that has name "_"
  * we treat it is not used there. */
 static
 int parse_for( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
@@ -1024,20 +1113,143 @@ int parse_for( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
   }
   EXPECT(TK_IN);
   tk_consume(tk);
+  /* Ignore underscore since they serves as placeholder */
+  if( strcmp(key->str,"_") == 0 ) {
+    string_destroy(&key);
+    key = NULL_STRING;
+  }
+  if( strcmp(val->str,"_") == 0 ) {
+    string_destroy(&val);
+    val = NULL_STRING;
+  }
   return parse_for_body(p,em,tk,key,val);
 }
 
+/* Call
+ * We don't support passing function from MACRO to CALL, since this looks wired
+ * and also makes implementation complicated because it introduces some specific
+ * situations. We support letting the macro access a VARIABLE called caller to
+ * get content from the call scope. This is a variable called caller , but not a
+ * function called caller.
+ */
+static int
+parse_call( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
+  struct string name;
+  struct string text;
+  int text_idx;
+  int caller_idx;
+  int vm_lstr = -1;
+  int vm_upvalue_set = -1;
+  assert(tk->tk == TK_CALL);
+  tk_consume(tk);
+  EXPECT(TK_VARIABLE);
+  CALLE((name=symbol(p,tk))!=NULL_STRING);
+  tk_consume(tk);
 
+  /* Because we cannot know the text we want to insert as an upvalue
+   * before parsing the function call. We need to reserve instructions
+   * spaces in current code page.
+   * VM_LSTR(idx);
+   * VM_UPVALUE_SET(idx); */
+  vm_lstr = emitter_put(em,1);
+  vm_upvalue_set = emitter_put(em,1);
+  /* Now we start to parse the func call */
+  CALLE(parse_funccall_or_pipe(p,em,tk,name,0));
+  EXPECT(TK_RSTMT);tk_consume(tk);
+  EXPECT(TK_TEXT);
+  /* Get text index in string pool */
+  text = strbuf_move(&(tk->lexme));
+  tk_consume(tk);
+  CALLE((text_idx=const_str(p,em->prg,text,1))<0);
+  /* Get caller index in string pool */
+  CALLE((caller_idx=const_str(p,em->prg,CALLER,0))<0);
+  emit1_at(em,vm_lstr,VM_LSTR,text_idx);
+  emit1_at(em,vm_upvalue_set,VM_UPVALUE_SET,caller_idx);
+  /* Clear the upvalue */
+  emit1(em,VM_UPVALUE_DEL,caller_idx);
+  CALLE(finish_scope_tag(p,em,tk,TK_ENDCALL));
+  return 0;
+}
 
+/* Filter Scope */
+static int
+parse_filter( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
+  struct string name;
+  struct string text;
+  int vm_lstr = -1;
+  int text_idx;
 
+  assert(tk->tk == TK_FILTER);
+  tk_consume(tk);
+  EXPECT((name=symbol(p,tk))!=NULL_STRING);
+  tk_consume(tk);
+  vm_lstr = emitter_put(em,1);
 
+  if( tk->tk == TK_LPAR ) {
+    CALLE(parse_funccall_or_pipe(p,em,tk,name,1));
+  } else {
+    CALLE(parse_pipecmd(p,em,tk,name));
+  }
+  EXPECT(TK_RSTMT); tk_consume(tk);
+  text = strbuf_move(&(tk->lexme));
+  CALLE((text_idx=const_str(p,em->prg,text,1))<0);
+  emit1_at(em,vm_lstr,VM_LSTR,text_idx);
+  CALLE(finish_scope_tag(p,em,tk,TK_ENDFILTER));
+}
 
+/* Set Scope */
+static
+int parse_set( struct parser* p,
+    struct emitter* em , struct tokenizer* tk ) {
+  int ret = 0;
+  int var_idx;
 
+  assert( tk->tk == TK_SET );
+  tk_consume(tk);
 
+  EXPECT(TK_VARIABLE);
+  CALLE((var_idx=lex_scope_set(p,strbuf_tostring(tk->lexme)))==-2);
+  tk_consume(tk); /* Move forward */
 
+  /* check if we have an pending expression or just end of the SET scope*/
+  if( tk->tk == TK_RSTMT ) {
+    int txt_idx;
+    /* end of the set scope , so it is a scop based set */
+    tk_consume(tk);
+    EXPECT(TK_TEXT);
+    CALLE((txt_idx=const_str(p,em->prg,strbuf_move(&(tk->lexme)),1))<0);
+    tk_consume(tk);
+    /* load the text on to stack */
+    emit1(em,VM_LSTR,txt_idx);
+    /* we need to move this static text into the position of that
+     * variable there */
+    if( var_idx >= 0 ) {
+      /* This is a setting operations, since this symbol is somehow been used */
+      emit1(em,VM_BSTORE,var_idx);
+    } else {
+      /* This is a no-op since the current top of the stack has been
+       * assigend to that local symbol */
+    }
+    /* set up the var based on the stack */
+    CALLE(finish_scope_tag(p,em,tk,TK_SET));
+    return 0;
+  } else if( tk->tk == TK_ASSIGN ) {
+    tk_consume(tk);
+    CALLE(parse_expr(p,em,tk));
+    if( var_idx >= 0 ) {
+      emit1(em,VM_BSTORE,var_idx);
+    }
+    EXPECT(TK_RSTMT); tk_consume(tk);
+    return 0;
+  } else {
+    report_error(p,"Set scope either uses \"=\" to indicate a one line assignment,\
+        or uses a scope based set!");
+    return -1;
+  }
+}
 
+/* Do */
+static int
+parse_do( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
 
-
-
-
-
+}

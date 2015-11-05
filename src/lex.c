@@ -1,4 +1,4 @@
-#include "lex.h"
+#include "ajj-priv.h"
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
@@ -509,12 +509,12 @@ int tk_lex( struct tokenizer* tk ) {
     case TOKENIZE_RAW:
       return tk_lex_raw(tk);
     default:
-      assert(0);
+      UNREACHABLE();
       return -1;
   }
 }
 
-void tk_consume( struct tokenizer* tk ) {
+int tk_consume( struct tokenizer* tk ) {
   assert( tk->tk != TK_UNKNOWN && tk->tk != TK_EOF );
   assert( tk->tk_len > 0 );
 
@@ -528,4 +528,5 @@ void tk_consume( struct tokenizer* tk ) {
     tk->mode = TOKENIZE_JINJA;
   }
   tk->pos += tk->tk_len;
+  return tk_lex(tk);
 }
