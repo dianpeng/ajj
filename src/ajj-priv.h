@@ -2,8 +2,10 @@
 #define _AJJ_PRIV_H_
 #include "ajj.h"
 #include "util.h"
+
 #include <ctype.h>
 #include <assert.h>
+#include <stdio.h>
 
 /* =================================
  * Forward
@@ -63,6 +65,11 @@ enum {
   X(TK_IN,"in") \
   X(TK_AS,"as") \
   X(TK_RECURSIVE,"recursive") \
+  X(TK_CONTINUE,"continue") \
+  X(TK_BREAK,"break") \
+  X(TK_UPVALUE,"upvalue") \
+  X(TK_OVERRIDE,"override") \
+  X(TK_FIXED,"fix") \
   X(TK_LPAR,"(") \
   X(TK_RPAR,")") \
   X(TK_LSQR,"[") \
@@ -164,76 +171,85 @@ int tk_body_escape( char c ) {
 /* =============================
  * Virtual Machine
  * ============================*/
-enum {
-  /* arithmatic */
-  VM_ADD , VM_SUB , VM_DIV , VM_MUL , VM_MOD , VM_POW ,
-  VM_EQ  , VM_NE  , VM_LT  , VM_LE  , VM_GT  , VM_GE  ,
-  VM_AND , VM_OR  , VM_NOT , VM_NEG , VM_DIVTRUCT , VM_TENARY ,
 
-  /* function invoking */
-  VM_CALL,VM_RET,
+#define VM_INSTRUCTIONS(X) \
+  X(VM_ADD,"add") \
+  X(VM_SUB,"sub") \
+  X(VM_DIV,"div") \
+  X(VM_MUL,"mul") \
+  X(VM_MOD,"mod") \
+  X(VM_POW,"pow") \
+  X(VM_EQ,"eq") \
+  X(VM_NE,"ne") \
+  X(VM_LT,"lt") \
+  X(VM_LE,"le") \
+  X(VM_GT,"gt") \
+  X(VM_GE,"ge") \
+  X(VM_AND,"and") \
+  X(VM_OR,"or") \
+  X(VM_NOT,"not") \
+  X(VM_NEG,"neg") \
+  X(VM_DIVTRUCT,"divtruct") \
+  X(VM_TENARY,"tenary") \
+  X(VM_CALL,"call") \
+  X(VM_RET,"ret") \
+  X(VM_PRINT,"print") \
+  X(VM_POP,"pop") \
+  X(VM_TPUSH,"tpush") \
+  X(VM_TSWAP,"tswap") \
+  X(VM_TLOAD,"tload") \
+  X(VM_BPUSH,"bpush") \
+  X(VM_BSWAP,"bswap") \
+  X(VM_BLOAD,"bload") \
+  X(VM_BT_MOVE,"bt_move") \
+  X(VM_BB_MOVE,"bb_move") \
+  X(VM_TB_MOVE,"tb_move") \
+  X(VM_TT_MOVE,"tt_move") \
+  X(VM_LSTR,"lstr") \
+  X(VM_LTRUE,"ltrue") \
+  X(VM_LFALSE,"lfalse") \
+  X(VM_LNUM,"lnum") \
+  X(VM_LZERO,"lzero") \
+  X(VM_LNONE,"lnone") \
+  X(VM_LIMM,"limm") \
+  X(VM_LLIST,"llist") \
+  X(VM_LDICT,"ldict") \
+  X(VM_ATTR_SET,"attrset") \
+  X(VM_ATTR_PUSH,"attrpush") \
+  X(VM_ATTR_GET,"attrget") \
+  X(VM_UPVALUE_SET,"upvalueset") \
+  X(VM_UPVALUE_GET,"upvalueget") \
+  X(VM_UPVALUE_DEL,"upvaluedel") \
+  X(VM_LOOP,"loop") \
+  X(VM_LOOPREC,"looprec") \
+  X(VM_JMP,"jmp") \
+  X(VM_JT,"jt") \
+  X(VM_JEPT,"jept") \
+  X(VM_ENTER,"enter") \
+  X(VM_EXIT,"exit") \
+  X(VM_PIPE,"pipe") \
+  X(VM_INCLUDE,"include") \
+  X(VM_IMPORT,"import") \
+  X(VM_IMPORT_SYMBOL,"importsymbol") \
+  X(VM_EXTENDS,"extends")
 
-  /* output value */
-  VM_PRINT,
-
-  /* misc */
-  VM_POP,
-  VM_TPUSH  , /* push another piece of data to top of stack */
-  VM_TSWAP  , /* swap 2 places on stack */
-  VM_TLOAD  , /* load the top stack element into a position */
-
-  VM_BPUSH  ,
-  BM_BSWAP  ,
-  VM_BLOAD  ,
-
-  /* Move support 2*2 types of addressing mode */
-  VM_BT_MOVE , /* Move (Bottom,Top) */
-  VM_BB_MOVE , /* Move (Bottom,Bottom) */
-  VM_TB_MOVE , /* Move (Top,Bottom) */
-  VM_TT_MOVE , /* Move (Top,Top) */
-
-  VM_LSTR  , /* load str into the stack by lookup */
-  VM_LTRUE , /* load true into stack */
-  VM_LFALSE, /* load false into stack */
-  VM_LNUM  , /* load number into stack */
-  VM_LZERO , /* load zero into stack */
-  VM_LNONE , /* load none into stack */
-  VM_LIMM  , /* load an immdiet number into stack */
-
-  /* ATTR */
-  VM_ATTR_SET,
-  VM_ATTR_GET,
-
-  /* UpValue */
-  VM_UPVAL_SET,
-  VM_UPVAL_GET,
-  VM_UPVAL_DEL,
-
-  /* loop things */
-  VM_LOOP,   /* loop instructions */
-  VM_LOOPREC,/* recursive loop instructions */
-
-  /* jmp , ALL THE JMP ARE ABSOLUTE VALUE , so no jmp parameter is
-   * negative */
-  VM_JMP,
-  VM_JT, /* jmp when true */
-  VM_JEPT, /* jmp when this object is empty */
-
-  /* scope */
-  VM_ENTER , /* enter into a scope */
-  VM_EXIT  , /* exit a scope */
-
-  /* NOP */
-  VM_NOP0,
-  VM_NOP1,
-  VM_NOP2,
-
-  /* special instructions for PIPE */
-  VM_PIPE  , /* Basically it will make stake(0) = stake(-1) and
-              * stake(-1) = current-scope */
-
+enum vm_instructions {
+#define X(A,B) A,
+  VM_INSTRUCTIONS(X),
   SIZE_OF_INSTRUCTIONS
+#undef X
 };
+
+const char* vm_get_instr_name( int );
+
+#define LOOP_CONTINUE 0
+#define LOOP_BREAK 1
+
+extern struct string THIS = { "__this__",8};
+extern struct string ARGNUM = {"__argnum__",10};
+extern struct string MAIN = { "__main__",8 };
+extern struct string CALLER = {"__caller__",10};
+extern struct string SUPER  = {"__super__",9};
 
 struct program {
   void* codes;
@@ -246,10 +262,10 @@ struct program {
    * function routine. Each program will have a prototypes */
   struct {
     struct string name;
-    struct ajj_value def_val; /* This value is default value for this function.
-                               * The memory it contains are OWNED by the program.
-                               * Please make sure to delete those memory when
-                               * delete the program objects */
+    struct ajj_value def_val; /* Default value for function parameters.
+                               * These values are owned by the scope that owns
+                               * this template object. It is typically global
+                               * scope */
   } par_list[ AJJ_FUNC_PAR_MAX_SIZE ];
   size_t par_size;
 };
@@ -418,6 +434,9 @@ int vm_run( struct ajj* , /* ajj environment */
             const struct program* , /* program to be executed */
             ajj_value* output ); /* output for this program */
 
+/* Dump an program to output */
+void vm_dump( const struct program* prg, FILE* output );
+
 
 /* ===============================
  * Parser
@@ -474,12 +493,12 @@ struct func_table {
 static inline
 void func_table_init( struct func_table* tb ,
     const struct ajj_dtor* dtor ,
-    struct string name , int own ) {
+    struct string* name , int own ) {
   tb->func_tb = tb->func_buf;
   tb->func_len = 0;
   tb->func_cap = AJJ_FUNC_LOCAL_BUF_SIZE;
   tb->dtor = dtor ;
-  tb->name = own ? name : string_dup(name);
+  tb->name = own ? *name : string_dup(name);
 }
 
 /* Clear the GUT of func_table object */
@@ -521,9 +540,9 @@ void func_table_shrink_to_fit( struct func_table* tb ) {
 
 static inline
 struct c_closure*
-func_table_add_c_clsoure( struct func_table* tb , struct string name , int own ) {
+func_table_add_c_clsoure( struct func_table* tb , struct string* name , int own ) {
   struct function* f = func_table_add_func(tb);
-  f->name = own ? name : string_dup(name);
+  f->name = own ? *name : string_dup(name);
   f->tp = C_FUNCTION;
   c_closure_init(&(f->f,c_fn));
   return &(f->f.c_fn);
@@ -531,18 +550,18 @@ func_table_add_c_clsoure( struct func_table* tb , struct string name , int own )
 
 static inline
 ajj_method*
-func_table_add_c_method( struct func_table* tb , struct string name , int own ) {
+func_table_add_c_method( struct func_table* tb , struct string* name , int own ) {
   struct function* f = func_table_add_func(tb);
-  f->name = own ? name : string_dup(name);
+  f->name = own ? *name : string_dup(name);
   f->tp = C_METHOD;
   return &(f->f.c_mt);
 }
 
 static inline
 struct program*
-func_table_add_jj_block( struct func_table* tb, struct string name , int own ) {
+func_table_add_jj_block( struct func_table* tb, struct string* name , int own ) {
   struct function* f = func_table_add_func(tb);
-  f->name = own ? name : string_dup(name);
+  f->name = own ? *name : string_dup(name);
   f->tp = JJ_BLOCK;
   program_init(&(f->f.jj_fn));
   return &(f->f.jj_fn);
@@ -550,9 +569,9 @@ func_table_add_jj_block( struct func_table* tb, struct string name , int own ) {
 
 static inline
 struct program*
-func_table_add_jj_macro( struct func_table* tb, struct string name , int own ) {
+func_table_add_jj_macro( struct func_table* tb, struct string* name , int own ) {
   struct function* f = func_table_add_func(tb);
-  f->name = own ? name : string_dup(name);
+  f->name = own ? *name : string_dup(name);
   f->tp = JJ_MACRO;
   program_init(&(f->f.jj_fn));
   return &(f->f.jj_fn);
@@ -666,8 +685,8 @@ struct gc_scope {
  * AJJ
  * ===============================*/
 struct ajj {
-  struct all_object global; /* global scope */
   struct slab obj_slab; /* object slab */
+  struct gc_scope gc_root; /* root of the gc scope */
 };
 
 #endif /* _AJJ_PRIV_H_ */

@@ -4,10 +4,24 @@
 #include <stddef.h>
 #include <assert.h>
 
-#define UNREACHABLE() assert(!"UNREACHABLE!")
-#define UNUSE_ARG(X) (void)(X)
+/* Forward =================================== */
+struct ajj_value;
 
-/* string */
+#ifndef UNREACHABLE
+#define UNREACHABLE() assert(!"UNREACHABLE!")
+#endif /* UNREACHABLE */
+
+#ifndef UNUSE_ARG
+#define UNUSE_ARG(X) (void)(X)
+#endif /* UNUSE_ARG */
+
+#define STRBUF_MOVE_THRESHOLD 1024
+
+#define DICT_LOCAL_BUF_SIZE 4
+#define LIST_LOCAL_BUF_SiZE 4
+
+/* String implementation. All the data owned by this
+ * string are on heap. We don't SSO for string object */
 struct string {
   const char* str;
   size_t len;
@@ -16,10 +30,10 @@ struct string {
 extern struct string NULL_STRING;
 
 static inline
-struct string string_dup( struct string str ) {
+struct string string_dup( const struct string* str ) {
   struct string ret;
-  ret.str = strdup(str.str);
-  ret.len = str.len;
+  ret.str = strdup(str->str);
+  ret.len = str->len;
   return ret;
 }
 
@@ -31,10 +45,33 @@ struct string string_dupc( const char* str ) {
   return ret;
 }
 
+/* Do not call string_destroy on constant string */
 static inline
-int string_eq( struct string l , struct string r ) {
-  return l.len == r.len && strcmp(l.str,r.str) == 0 ;
+struct string string_const( const char* str , size_t len ) {
+  struct string ret;
+  ret.str = str;
+  ret.len = len;
+  return ret;
 }
+
+static inline
+int string_eq( const struct string* l , const struct string* r ) {
+  assert( !string_null(l) );
+  assert( !string_null(r) );
+  return l->len == r->len && strcmp(l->str,r->str) == 0 ;
+}
+
+static inline
+void string_destroy( struct string* str ) {
+  if( str->str ) free(str->str);
+}
+
+static inline
+int string_null( struct string* str ) {
+  return str->str == NULL;
+}
+
+/* String buffer ========================== */
 
 struct strbuf {
   char* str;
@@ -42,7 +79,6 @@ struct strbuf {
   size_t cap;
 };
 
-#define STRBUF_MOVE_THRESHOLD 1024
 
 static inline
 void strbuf_reserve( struct strbuf* buf , size_t cap ) {
@@ -95,32 +131,28 @@ void strbuf_reset( struct strbuf* buf ) {
 }
 
 static inline
-struct string strbuf_move( struct strbuf* buf ) {
+void strbuf_move( struct strbuf* buf , struct string* output ) {
   /* If the occupied the buffer is larger than 1/2 of string buffer
    * and its length is smaller than 1KB( small text ). We just return
    * the buffer directly. Otherwise, we do a deep copy */
-  struct string ret;
 
   if( buf->len > STRBUF_MOVE_THRESHOLD ) {
     if( buf->len == buf->cap ) {
-      ret.str = buf->str;
-      ret.len = buf->len;
+      output->str = buf->str;
+      output->len = buf->len;
       buf->cap = buf->len = 0;
-      return ret;
     } else {
-      ret.str = strdup(buf->str);
-      ret.len = buf->len;
-      return ret;
+      output->str = strdup(buf->str);
+      output->len = buf->len;
     }
   } else {
     if( buf->len >= buf->cap/2 ) {
-      ret.str = buf->str;
-      ret.len = buf->len;
+      output->str = buf->str;
+      output->len = buf->len;
       buf->cap = buf->len = 0;
-      return ret;
     } else {
-      ret.str = strdup(buf->str);
-      ret.len = buf->len;
+      output->str = strdup(buf->str);
+      output->len = buf->len;
       return ret;
     }
   }
@@ -135,17 +167,32 @@ struct string strbuf_tostring( struct strbuf* buf ) {
 }
 
 /* dictionary */
+struct dict_entry {
+  struct ajj_value value;
+  struct string key;
+  int hash; /* fullhash for this key */
+  int next : 30; /* next resolved collision */
+  int empty: 1 ; /* whether this one is empty */
+  int del  : 1 ; /* whether this one is deleted
+                           * Please be sure that , if the empty is set to 0,
+                           * it will never be reset back to 1 even if it is
+                           * deleted somehow. The delete is just a marker says
+                           * that in the future, this piece of memory could be
+                           * used */
+};
+
 struct dict {
-  void* entry;
+  struct dict_entry lbuf[DICT_LOCAL_BUF_SIZE];
+  struct dict_entry* entry;
   size_t cap;
   size_t len;
 };
 
 void dict_create( struct dict* );
 void dict_destroy(struct dict* );
-int dict_insert( struct dict* , const char* , void* );
-int dict_remove( struct dict* , const char* );
-void* dict_find  ( struct dict* , const char* );
+int dict_insert( struct dict* , const struct string* , const struct ajj_value* val );
+int dict_remove( struct dict* , const struct string* , struct ajj_value* output );
+struct ajj_value* dict_find  ( struct dict* , const struct string* );
 void dict_clear( struct dict* );
 #define dict_size(d) ((d)->len)
 
@@ -156,21 +203,25 @@ int dict_iter_has  ( const struct dict* d, int itr ) {
   return itr < d->len;
 }
 int dict_iter_move ( const struct dict* , int itr );
-void* dict_iter_deref( const struct dict* , int itr );
+
+struct ajj_value*
+dict_iter_deref( struct dict* , int itr );
 
 /* list */
 struct list {
-  void** entry;
+  struct ajj_value lbuf[LIST_LOCAL_BUF_SIZE];
+  struct ajj_value* entry;
   size_t cap;
   size_t len;
 };
 
 void list_create( struct list* );
 void list_destroy(struct list* );
-void list_push( struct list* , void* );
+void list_push( struct list* , const struct ajj_value* val );
 #define list_size(l) ((l)->len)
 static inline
-void* list_index( struct list* l , size_t i ) {
+const struct ajj_value*
+list_index( struct list* l , size_t i ) {
   assert(i < l->len);
   return l->entry[i];
 }
