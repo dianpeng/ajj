@@ -514,7 +514,7 @@ int tk_lex( struct tokenizer* tk ) {
   }
 }
 
-int tk_consume( struct tokenizer* tk ) {
+int tk_move( struct tokenizer* tk ) {
   assert( tk->tk != TK_UNKNOWN && tk->tk != TK_EOF );
   assert( tk->tk_len > 0 );
 

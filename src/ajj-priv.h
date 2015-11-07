@@ -7,6 +7,32 @@
 #include <assert.h>
 #include <stdio.h>
 
+#define MINIMUM_CODE_PAGE_SIZE 256
+#define LOOP_CONTINUE 0
+#define LOOP_BREAK 1
+
+
+/* Helper macro to insert into double linked list */
+#define LINIT(X) \
+  do { \
+    (X)->next = (X); \
+    (X)->prev = (X); \
+  } while(0)
+
+#define LINSERT(X,T) \
+  do { \
+    (X)->next = (T); \
+    (X)->prev = (T)->prev; \
+    (T)->prev->next = (X); \
+    (T)->prev = (X); \
+  } while(0)
+
+#define LREMOVE(X) \
+  do { \
+    (X)->prev->next = (X)->next; \
+    (X)->next->prev = (X)->prev; \
+  } while(0)
+
 /* =================================
  * Forward
  * ================================*/
@@ -108,7 +134,7 @@ enum {
 
 #define X(A) A ,
 enum {
-  TOKEN_LIST(A)
+  TOKEN_LIST(A),
   SIZE_OF_TOKENS
 };
 #undef X
@@ -116,7 +142,7 @@ enum {
 const char* tk_get_name( int );
 
 int tk_lex( struct tokenizer* tk );
-int tk_consume( struct tokenizer* tk );
+int tk_move( struct tokenizer* tk );
 
 static inline
 int tk_init( struct tokenizer* tk , const char* src ) {
@@ -135,7 +161,7 @@ void tk_destroy( struct tokenizer* tk ) {
 static inline
 int tk_expect( struct tokenizer* tk , int t ) {
   if( tk_lex(tk) == t ) {
-    tk_consume(tk);
+    tk_move(tk);
     return 0;
   } else {
     return -1;
@@ -242,9 +268,6 @@ enum vm_instructions {
 
 const char* vm_get_instr_name( int );
 
-#define LOOP_CONTINUE 0
-#define LOOP_BREAK 1
-
 extern struct string THIS = { "__this__",8};
 extern struct string ARGNUM = {"__argnum__",10};
 extern struct string MAIN = { "__main__",8 };
@@ -278,7 +301,7 @@ void program_init( struct program* prg ) {
   prg->par_size =0;
 }
 
-static
+static inline
 int program_add_par( struct program* prg ,
     struct string name ,
     int own,
@@ -300,7 +323,6 @@ struct emitter {
   size_t cd_cap;
 };
 
-#define MINIMUM_CODE_PAGE_SIZE 256
 
 static inline
 void reserve_code_page( struct emitter* em , size_t cap ) {
@@ -441,10 +463,8 @@ void vm_dump( const struct program* prg, FILE* output );
 /* ===============================
  * Parser
  * ==============================*/
-int parse( struct ajj* ,
-           const char* src,
-           const char* key, /* key for this file */
-           ajj_value* output );
+int parse( struct ajj* , const char* src,
+           const char* key, ajj_value* output );
 
 
 /* ===============================
@@ -484,8 +504,9 @@ struct func_table {
   struct function* func_tb; /* function table */
   size_t func_len;
   size_t func_cap;
-
-  struct c_closure dtor; /* delete function */
+  ajj_class_dtor dtor;
+  ajj_class ctor ctor;
+  void* udata;
   struct string name;
 };
 
@@ -507,7 +528,7 @@ void func_table_clear( struct func_table* tb ) {
   if( tb->func_cap > AJJ_FUNC_LOCAL_BUF_SIZE ) {
     free(tb->func_tb); /* on heap */
   }
-  free(tb->name);
+  string_destroy(&(tb->name));
 }
 
 /* Add a new function into the func_table */
@@ -537,6 +558,11 @@ void func_table_shrink_to_fit( struct func_table* tb ) {
     }
   }
 }
+
+/* Find a new function in func_table */
+static
+struct function* func_table_find_func( struct func_table* tb,
+    const struct string* name );
 
 static inline
 struct c_closure*
@@ -613,13 +639,21 @@ struct ajj_object {
  * under the scope object "scope" */
 static inline
 struct ajj_object*
-ajj_object_create ( struct ajj* , struct ajj_object* scope );
+ajj_object_create ( struct ajj* , struct gc_scope* scope );
+
+static inline
+struct ajj_object*
+ajj_object_create_child( struct ajj* , struct ajj_object* obj ) {
+  return ajj_object_create(ajj,obj->scp);
+}
 
 /* Delete a single ajj_object. This deletion will not destroy
  * any other objects inside of the linked chain */
 static inline
-struct void
-ajj_object_destroy( struct ajj* , struct ajj_object* obj );
+void ajj_object_destroy( struct ajj* , struct ajj_object* obj );
+
+static inline
+void ajj_object_move( struct gc_scope* scope , struct ajj_object* obj );
 
 /* Clear an object's internal GUTS , not clear this object from
  * free list */
@@ -637,9 +671,23 @@ void ajj_object_string( struct ajj_object* obj,
 }
 
 static inline
+struct ajj_object*
+ajj_object_create_string( struct ajj* a, struct gc_scope* scp,
+    const char* str, size_t len , int own ) {
+  return ajj_object_string( ajj_object_create(a,scp),
+      str,len,own);
+}
+
+static inline
 void ajj_object_dict( struct ajj_object* obj ) {
   dict_create(&(obj->val.d));
   obj->tp = AJJ_VALUE_DICT;
+}
+
+static inline
+struct ajj_object*
+ajj_object_create_dict( struct ajj* a, struct gc_scope* scp ) {
+  return ajj_object_dict(ajj_object_create(a,scp));
 }
 
 static inline
@@ -648,11 +696,32 @@ void ajj_object_list( struct ajj_object* obj ) {
   obj->tp = AJJ_VALUE_LIST;
 }
 
-static
-inline void ajj_object_obj( struct ajj_object* obj ,
+static inline
+struct ajj_object*
+ajj_object_create_list( struct ajj* a, struct gc_scope* scp ) {
+  return ajj_object_list(ajj_object_create(a,scp));
+}
+
+static inline
+void ajj_object_obj( struct ajj_object* obj ,
     const struct func_table* fn_tb, void* data ) {
   object_create(&(obj_val.o),fn_tb,data);
   obj->tp = AJJ_VALUE_OBJECT;
+}
+
+static inline
+struct ajj_object*
+ajj_object_create_obj( struct ajj* a, struct gc_scope* scp ) {
+  return ajj_object_obj(ajj_object_create(a,scp));
+}
+
+static inline
+struct ajj_value ajj_value_assign( struct ajj_object* obj ) {
+  struct ajj_value val;
+  assert(obj->tp != AJJ_VALUE_NOT_USE);
+  val.type = obj->tp;
+  val.value.object = obj;
+  return val;
 }
 
 /* Create an ajj_object serves as the scope object and inherited from
@@ -681,12 +750,50 @@ struct gc_scope {
   unsigned int scp_id;       /* scope id */
 };
 
+static inline
+struct gc_scope* gc_scope_create( struct ajj*, struct gc_scope* scp );
+
+/* This function will destroy all the gc scope allocated memory and also
+ * the gc_scope object itself */
+static
+void gc_scope_destroy( struct ajj* , struct gc_scope* );
+
+
 /* =================================
  * AJJ
  * ===============================*/
 struct ajj {
   struct slab obj_slab; /* object slab */
+  struct slab gc_slab;  /* gc_scope slab */
   struct gc_scope gc_root; /* root of the gc scope */
 };
+
+static inline
+struct gc_scope* gc_root( struct ajj* a ) {
+  return &(a->gc_root);
+}
+
+
+/* ==========================================
+ * INLINE implementation
+ * =========================================*/
+static inline
+struct gc_scope* gc_scope_create( struct ajj* a, struct gc_scope* scp ) {
+  struct gc_scope* new_scp = slab_malloc(&(a->gc_slb));
+  new_scp->parent = scp;
+  new_scp->scp_id = scp->scp_id+1;
+  LINIT(&(new_scp->gc_tail));
+  return new_scope;
+}
+
+static inline
+struct ajj_object*
+ajj_object_create( struct ajj* a , struct gc_scope* scp ) {
+  struct ajj_object* obj = slab_malloc(&(a->obj_slab));
+  /* linked the new object into the gc_list */
+  LINSERT(obj,&(scp->gc_tail));
+  obj->tp = AJJ_VALUE_NOT_USE; /* invalid object that is not used */
+  return obj;
+}
 
 #endif /* _AJJ_PRIV_H_ */

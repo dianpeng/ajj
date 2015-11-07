@@ -12,15 +12,23 @@
  */
 
 static
-int dict_hash( const struct string* key );
-
+unsigned int dict_hash( const struct string* key ) {
+  /* This hash function implementation is taken from LUA */
+  size_t i;
+  const size_t sz = key->len;
+  unsigned int h = STRING_HASH_SEED;
+  for( i = 0 ; i < sz ; ++i ) {
+    h = h ^((h<<5)+(h>>2)) + (unsigned int)(key->str[i]);
+  }
+  return h;
+}
 
 /* Insert a key into the hash table and return a slot entry to the caller.
  * This entry may be already in used ( return an existed one ) or a new one */
 static
 struct dict_entry* dict_insert_entry( struct dict* d , const struct string* key,
-    int fullhash , int insert ) {
-  int idx = fullhash & (d->cap-1);
+    unsigned int fullhash , int insert ) {
+  unsigned int idx = fullhash & (d->cap-1);
   struct dict_entry* e;
   e = d->entry + idx;
 
@@ -42,7 +50,7 @@ struct dict_entry* dict_insert_entry( struct dict* d , const struct string* key,
           return ne;
         }
       }
-      if( ne->next < 0 )
+      if( ne->end )
         break;
       ne = d->entry + ne->next;
     } while(1);
@@ -53,14 +61,15 @@ struct dict_entry* dict_insert_entry( struct dict* d , const struct string* key,
 
     if( ret == NULL ) {
       /* linear probing here */
-      int h = fullhash;
+      unsigned int h = fullhash;
       while(1) {
         ret = d->entry + (++h &(d->cap-1));
         if( ret->empty || ret->del )
           break;
       }
-      assert(ne->next <0);
+      assert( ne->end );
       ne->next = ret - d->entry;
+      ne->end = 0;
     }
     return ret;
   }
@@ -90,7 +99,7 @@ void dict_rehash( struct dict* d ) {
     if(e->del) e->del = 0;
     if(e->empty) {
       e->empty = 1;
-      e->next = -1;
+      e->end = 1;
     }
   }
   if(d->entry != d->lbuf)
@@ -113,7 +122,7 @@ int dict_insert( struct dict* d, const struct string* key, const struct ajj_valu
   if( e->del ) e->del = 0;
   if( e->empty ) {
     e->empty = 0;
-    e->next = -1;
+    e->end = 1;
   }
   ++d->len;
   e->hash = fh;
@@ -126,6 +135,10 @@ int dict_remove( struct dict* d , const struct string* key , struct ajj_value* o
   if( e == NULL )
     return -1;
   else {
+    assert(!e->empty);
+    assert(!e->del);
+    /* destroy the key */
+    string_destroy(&(e->key));
     if( output )
       *output = e->value;
     e->del = 1;
@@ -137,4 +150,123 @@ int dict_remove( struct dict* d , const struct string* key , struct ajj_value* o
 struct ajj_value* dict_find( struct dict* d , const struct string* key ) {
   struct dict_entry* e;
   return (e=dict_insert_entry(d,key,dict_hash(key),0)) ? &(e->value) : NULL;
+}
+
+void dict_clear( struct dict* d ) {
+  int i;
+  /* We need to traversal through the dictionary to release all the key
+   * since they all are on the heap */
+  for( i = 0 ; i < d->cap ; ++i ) {
+    struct dict_entry* e = d->entry + i;
+    if( !e->empty && !e->del ) {
+      string_destroy(&(e->key));
+    }
+  }
+  if( d->cap > DICT_LOCAL_BUF_SIZE ) {
+    free(d->entry);
+  }
+  d->cap = DICT_LOCAL_BUF_SIZE;
+  d->len = 0;
+}
+
+int dict_iter_start( const struct dict* d ) {
+  int ret = 0;
+  for( ; ret < d->cap ; ++ret ) {
+    struct dict_entry* e = d->entry + ret;
+    if( !e->empty && !e->del )
+      return ret;
+  }
+  return ret;
+}
+
+int dict_iter_move( const struct dict* d , int itr ) {
+  for( ++itr ; itr < d->cap ; ++itr ) {
+    struct dict_entry* e = d->entry + itr;
+    if( !e->empty && !e->del )
+      return itr;
+  }
+}
+
+static
+void list_reserve( struct list* l ) {
+  void* mem;
+  assert( l->cap >= LIST_LOCAL_BUF_SIZE );
+  mem = malloc(sizeof(struct ajj_value)*2*l->cap);
+  memcpy(mem,l->entry,l->len*sizeof(struct ajj_value));
+  if( l->lbuf != l->entry )
+    free(l->entry);
+  l->entry = mem;
+  l->cap *= 2;
+}
+
+void list_push( struct list* l , const struct ajj_value* val ) {
+  if( l->cap == l->len )
+    list_reserve(l);
+  l->entry[l->len] = *val;
+  ++(l->len);
+}
+
+void list_destroy( struct list* l ) {
+  if( l->lbuf != l->entry )
+    free(l->entry);
+  l->cap = LIST_LOCAL_BUF_SIZE;
+  l->entry = l->lbuf;
+  l->len = 0;
+}
+
+static
+void slab_reserve( struct slab* sl ) {
+  const size_t cap = sl->cur_cap * 2;
+  void* mem = malloc(sizeof(struct chunk) + sl->cur_cap*sl->obj_sz*2);
+  void* h;
+  size_t i;
+
+  ((struct chunk*)mem)->next = sl->ck;
+  sl->ck = mem;
+  h = mem = (char*)(mem) + sizeof(struct chunk);
+
+  for( i = 0 ; i < cap-1 ; ++i ) {
+    ((struct freelist*)(mem))->next =
+      ((char*)mem) + sl->obj_sz;
+    mem = (char*)mem + sl->obj_sz;
+  }
+  ((struct freelist*)(mem))->next = NULL;
+  sl->fl = h;
+  sl->cur_cap = cap;
+}
+
+void slab_create( struct slab* sl , size_t cap , size_t obj_sz ) {
+  cap = cap < 32 ? 16 : cap/2;
+  sl->obj_sz = obj_sz;
+  sl->fi = sl->ck = NULL;
+  sl->cur_cap = cap;
+  slab_reserve( sl );
+}
+
+void* slab_malloc( struct slab* sl ) {
+  void* ret;
+  if( sl->fl == NULL ) {
+    slab_reserve(sl);
+  }
+  ret = sl->fl;
+  sl->fl = sl->fl->next;
+  return ret;
+}
+
+void slab_free( struct slab* sl , void* ptr ) {
+  ((struct freelist*)ptr)->next = sl->fl;
+  sl->fl = ptr;
+}
+
+
+void slab_destroy( struct slab* sl ) {
+  struct chunk* c = sl->ck;
+  struct chunk* n;
+  while( c ) {
+    n = c->next;
+    free(c);
+    c = n;
+  }
+  sl->ck = sl->fl = NULL;
+  sl->cur_cap = sl->obj_sz = 0;
 }

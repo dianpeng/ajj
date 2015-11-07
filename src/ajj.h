@@ -11,18 +11,27 @@
 #define AJJ_FUNC_PAR_MAX_SIZE 16
 
 struct ajj_value;
-struct ajj_context;
+struct ajj_object;
 
-typedef int (*ajj_method)( struct ajj_context* , /* execution context */
+typedef int (*ajj_method)( struct ajj* , /* execution context */
     void* , /* user data */
     struct ajj_value[AJJ_METHOD_PARAMETER_LIST_MAX_SIZE] ,
     size_t ,
     struct ajj_value* );
 
-struct ajj_object_proto {
+typedef void* (*ajj_class_ctor)( struct ajj* ,
+    void* ,
+    struct ajj_value[AJJ_METHOD_PARAMETER_LIST_MAX_SIZE] ,
+    size_t );
+
+typedef void (*ajj_class_dtor)( struct ajj* ,
+    void* udata , void* object );
+
+struct ajj_class {
   char name[ AJJ_SYMBOL_NAME_MAX_SIZE ]; /* name of the symbol */
-  ajj_method ctor;
-  ajj_method dtor;
+
+  ajj_class_ctor ctor;
+  ajj_class_dtor dtor;
 
   struct {
     ajj_method method;
@@ -33,13 +42,16 @@ struct ajj_object_proto {
   void* udata; /* user data shared by all the functions */
 };
 
+struct ajj_function {
+  ajj_method entry;
+  void* udata;
+};
+
 struct ajj_value {
   union {
-    void* object;
+    struct ajj_value* object;
     double number;
     int boolean;
-    int itr_idx;
-    void* itr_ptr;
   } value;
   int type;
 };
@@ -49,6 +61,7 @@ extern ajj_value AJJ_FALSE;
 extern ajj_value AJJ_NONE;
 
 enum {
+  AJJ_VALUE_NOT_USE = 0,
   AJJ_VALUE_NUMBER,
   AJJ_VALUE_BOOLEAN,
   AJJ_VALUE_NONE,
@@ -60,55 +73,48 @@ enum {
   AJJ_VALUE_SIZE
 };
 
-struct ajj* ajj_create();
-void ajj_destroy( struct ajj* );
-
-/* casting an ajj pointer to the ajj_context pointer */
 static inline
-struct ajj_context* ajj_to_context( struct ajj* a ) {
-  return (struct ajj_context*)(a);
+struct ajj_value ajj_value_true( ) {
+  struct ajj_value value;
+  value->type = AJJ_VALUE_BOOLEAN;
+  value->value.boolean = 1;
+  return value;
 }
 
-/* misc function to help develop ajj */
-void ajj_new_dict( struct ajj_context* , struct ajj_value* );
-void ajj_new_tuple(struct ajj_context* , struct ajj_value* );
-void ajj_new_list( struct ajj* , struct ajj_value* );
+static inline
+struct ajj_value ajj_value_false() {
+  struct ajj_value value;
+  value->type = AJJ_VALUE_BOOLEAN;
+  value->value.boolean = 0;
+  return value;
+}
 
-int
-ajj_dict_add( struct ajj* , struct ajj_value* , const struct ajj_value* , int overwrite );
-const struct ajj_value* 
-ajj_dict_find( struct ajj* , const struct ajj_value* , const char* );
-size_t
-ajj_dict_len( const struct ajj_value* );
+static inline
+struct ajj_value ajj_value_boolean( int b ) {
+  struct ajj_value value;
+  value->type = AJJ_VALUE_BOOLEAN;
+  value->value.boolean = b;
+}
 
-int ajj_tuple_add(struct ajj* , struct ajj_value* , const struct ajj_value* );
+static inline
+struct ajj_value ajj_value_number( double val ) {
+  struct ajj_value value;
+  value->type = AJJ_VALUE_NUMBER;
+  value->value.number = val;
+  return value;
+}
+
+/* List API =============================== */
+void ajj_list_push( const struct ajj_value*, const struct ajj_value* );
+void ajj_list_clear( const struct ajj_value* );
+size_t ajj_list_size( const struct ajj_value* );
+struct ajj_value* ajj_list_index( struct ajj_value* , size_t );
+
+/* Dict API ============================== */
+int ajj_dict_insert( const struct ajj_value* , const char* key ,
+    const struct ajj_value* val );
 const struct ajj_value*
-ajj_tuple_index(struct ajj* , const struct ajj_value* , int index );
-size_t
-ajj_tuple_len( const struct ajj_value* );
-
-int ajj_list_add(struct ajj* , struct ajj_value* , const struct ajj_value* );
-const struct ajj_value*
-ajj_list_index(struct ajj*, const struct ajj_value* , int index );
-size_t
-ajj_list_len( const struct ajj_value* );
-
-int ajj_register_number( struct ajj* , const char* key , double value );
-int ajj_register_string( struct ajj* , const char* key , const char* );
-int ajj_register_boolean( struct ajj* , const char* key  , int );
-int ajj_register_none( struct ajj* , const char* key );
-int ajj_register_dict( struct ajj* , const char* key , const struct ajj_value* );
-int ajj_register_list( struct ajj* , const char* key , const struct ajj_value* );
-int ajj_register_tuple(struct ajj* , const char* key , const struct ajj_value* );
-
-int ajj_unregister( struct ajj* , const char* key );
-
-/* the memory for const struct ajj_object_method* must be persistent during the execution
- * of process. AJJ will just use it instead of copying the value . General method is to
- * use a static array for this piece of memory */
-int ajj_register_object(struct ajj* , const struct ajj_object_proto* );
-
-/* render the text */
-char* ajj_render( struct ajj* , const char* input , size_t* len );
+ajj_dict_find( const struct ajj_value* , const char* key );
+int ajj_dict_delete( const struct ajj_value* , const char* key );
 
 #endif /* _AJJ_H_ */

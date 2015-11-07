@@ -20,6 +20,9 @@ struct ajj_value;
 #define DICT_LOCAL_BUF_SIZE 4
 #define LIST_LOCAL_BUF_SiZE 4
 
+#define STRING_HASH_SEED 1771
+#define DICT_MAX_SIZE (1<<29)
+
 /* String implementation. All the data owned by this
  * string are on heap. We don't SSO for string object */
 struct string {
@@ -170,10 +173,11 @@ struct string strbuf_tostring( struct strbuf* buf ) {
 struct dict_entry {
   struct ajj_value value;
   struct string key;
-  int hash; /* fullhash for this key */
-  int next : 30; /* next resolved collision */
-  int empty: 1 ; /* whether this one is empty */
-  int del  : 1 ; /* whether this one is deleted
+  unsigned int hash; /* fullhash for this key */
+  unsigned int next : 29; /* next resolved collision */
+  unsigned int end  : 1 ; /* end of the collision chain */
+  unsigned int empty: 1 ; /* whether this one is empty */
+  unsigned int del  : 1 ; /* whether this one is deleted
                            * Please be sure that , if the empty is set to 0,
                            * it will never be reset back to 1 even if it is
                            * deleted somehow. The delete is just a marker says
@@ -188,11 +192,24 @@ struct dict {
   size_t len;
 };
 
-void dict_create( struct dict* );
-void dict_destroy(struct dict* );
+static inline void dict_create( struct dict* d ) {
+  d->cap = DICT_LOCAL_BUF_SIZE;
+  d->entry = d->lbuf;
+  d->len = 0;
+}
+
+static inline void dict_destroy(struct dict* d) {
+  dict_clear(d);
+}
+
+/* XXX_c APIs are used to help dealing with the public interfaces ,since public
+ * interfaces are not using struct string objects */
 int dict_insert( struct dict* , const struct string* , const struct ajj_value* val );
+int dict_insert_c( struct dict* , const char* key , const struct ajj_value* val );
 int dict_remove( struct dict* , const struct string* , struct ajj_value* output );
+int dict_remove_c( struct dict* , const char* key , const struct ajj_value* val );
 struct ajj_value* dict_find  ( struct dict* , const struct string* );
+struct ajj_value* dict_find_c( struct dict* , const char* key );
 void dict_clear( struct dict* );
 #define dict_size(d) ((d)->len)
 
@@ -200,12 +217,16 @@ void dict_clear( struct dict* );
 int dict_iter_start( const struct dict* );
 static inline
 int dict_iter_has  ( const struct dict* d, int itr ) {
-  return itr < d->len;
+  return itr < d->cap;
 }
 int dict_iter_move ( const struct dict* , int itr );
 
-struct ajj_value*
-dict_iter_deref( struct dict* , int itr );
+static inline
+struct ajj_value* dict_iter_deref( struct dict* , int itr ) {
+  struct dict_entry* e = d->entry + itr;
+  assert( !e->empty && !e->del );
+  return &(e->value);
+}
 
 /* list */
 struct list {
@@ -215,7 +236,13 @@ struct list {
   size_t len;
 };
 
-void list_create( struct list* );
+static inline
+void list_create( struct list* l ) {
+  l->entry = l->lbuf;
+  l->cap = LIST_LOCAL_BUF_SIZE;
+  l->len = 0;
+}
+
 void list_destroy(struct list* );
 void list_push( struct list* , const struct ajj_value* val );
 #define list_size(l) ((l)->len)
@@ -246,11 +273,18 @@ void* list_iter_deref( const struct list* l , int itr ) {
 }
 
 /* slab memory pool */
+struct chunk {
+  struct chunk* next;
+};
+
+struct freelist {
+  struct freelist* next;
+};
+
 struct slab {
-  void* chunk;
-  void* free_list;
+  struct chunk* ck;
+  struct freelist* fl;
   size_t cur_cap;
-  size_t max_cap;
   size_t obj_sz;
 };
 
