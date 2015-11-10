@@ -18,10 +18,11 @@ struct ajj_value;
 #define STRBUF_MOVE_THRESHOLD 1024
 
 #define DICT_LOCAL_BUF_SIZE 4
-#define LIST_LOCAL_BUF_SiZE 4
+#define LIST_LOCAL_BUF_SIZE 4
 
 #define STRING_HASH_SEED 1771
 #define DICT_MAX_SIZE (1<<29)
+#define STRBUF_INIT_SIZE 64
 
 /* String implementation. All the data owned by this
  * string are on heap. We don't SSO for string object */
@@ -95,12 +96,20 @@ void strbuf_reserve( struct strbuf* buf , size_t cap ) {
 }
 
 static inline
+void strbuf_create( struct strbuf* buf ) {
+  buf->str = NULL;
+  buf->len = 0;
+  strbuf_reserve(buf,STRBUF_INIT_SIZE);
+}
+
+static inline
 void strbuf_push( struct strbuf* buf , char c ) {
   if( buf->cap == 0 || buf->cap == buf->len+1 ) {
     strbuf_reserve( buf ,
         buf->cap == 0 ? STRBUF_MINIMUM : buf->cap*2 );
   }
   buf->str[buf->len] = c;
+  buf->str[buf->len+1]=0; /* always make sure it is ended with null terminator */
   ++(buf->len);
 }
 

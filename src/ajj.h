@@ -10,21 +10,23 @@
 #define AJJ_FUNC_LOCAL_BUF_SIZE 16
 #define AJJ_FUNC_PAR_MAX_SIZE 16
 
+struct ajj;
 struct ajj_value;
 struct ajj_object;
+struct ajj_context;
 
-typedef int (*ajj_method)( struct ajj* , /* execution context */
+typedef int (*ajj_method)( struct ajj_context* , /* execution context */
     void* , /* user data */
     struct ajj_value[AJJ_METHOD_PARAMETER_LIST_MAX_SIZE] ,
     size_t ,
     struct ajj_value* );
 
-typedef void* (*ajj_class_ctor)( struct ajj* ,
+typedef void* (*ajj_class_ctor)( struct ajj_context* ,
     void* ,
     struct ajj_value[AJJ_METHOD_PARAMETER_LIST_MAX_SIZE] ,
     size_t );
 
-typedef void (*ajj_class_dtor)( struct ajj* ,
+typedef void (*ajj_class_dtor)( struct ajj_context* ,
     void* udata , void* object );
 
 struct ajj_class {
@@ -103,6 +105,21 @@ struct ajj_value ajj_value_number( double val ) {
   value->value.number = val;
   return value;
 }
+
+static inline
+int ajj_value_to_boolean( const struct ajj_value* val ) {
+  assert(val->type == AJJ_VALUE_BOOLEAN);
+  return val->value.boolean;
+}
+
+static inline
+double ajj_value_to_number( const struct ajj_value* val ) {
+  assert(val->type == AJJ_VALUE_NUMBER);
+  return val->value.number;
+}
+
+static
+const char* ajj_value_to_str( const struct ajj_value* val );
 
 /* List API =============================== */
 void ajj_list_push( const struct ajj_value*, const struct ajj_value* );

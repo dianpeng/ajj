@@ -26,8 +26,8 @@ unsigned int dict_hash( const struct string* key ) {
 /* Insert a key into the hash table and return a slot entry to the caller.
  * This entry may be already in used ( return an existed one ) or a new one */
 static
-struct dict_entry* dict_insert_entry( struct dict* d , const struct string* key,
-    unsigned int fullhash , int insert ) {
+struct dict_entry* dict_insert_entry_c( struct dict* d ,
+    const char* key , unsigned int fullhash , int insert ) {
   unsigned int idx = fullhash & (d->cap-1);
   struct dict_entry* e;
   e = d->entry + idx;
@@ -45,7 +45,7 @@ struct dict_entry* dict_insert_entry( struct dict* d , const struct string* key,
         if( ret == NULL )
           ret = ne;
       } else {
-        if( ne->hash == fullhash && string_eq(&ne->key,key) ) {
+        if( ne->hash == fullhash && (strcmp(key,ne->key.str)==0) )
           /* We found an existed one here */
           return ne;
         }
@@ -73,6 +73,16 @@ struct dict_entry* dict_insert_entry( struct dict* d , const struct string* key,
     }
     return ret;
   }
+}
+
+static
+struct dict_entry* dict_insert_entry(struct dict* d,
+    const struct string* key,
+    unsigned int fullhash, int insert ) {
+  return dict_insert_entry_c(d,
+      key->str,
+      fullhash,
+      insert);
 }
 
 /* rehashing */

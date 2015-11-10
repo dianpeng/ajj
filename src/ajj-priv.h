@@ -193,7 +193,6 @@ int tk_body_escape( char c ) {
   return c == '{';
 }
 
-
 /* =============================
  * Virtual Machine
  * ============================*/
@@ -243,6 +242,7 @@ int tk_body_escape( char c ) {
   X(VM_ATTR_SET,"attrset") \
   X(VM_ATTR_PUSH,"attrpush") \
   X(VM_ATTR_GET,"attrget") \
+  X(VM_ATTR_CALL,"attrcall") \
   X(VM_UPVALUE_SET,"upvalueset") \
   X(VM_UPVALUE_GET,"upvalueget") \
   X(VM_UPVALUE_DEL,"upvaluedel") \
@@ -272,7 +272,8 @@ extern struct string THIS = { "__this__",8};
 extern struct string ARGNUM = {"__argnum__",10};
 extern struct string MAIN = { "__main__",8 };
 extern struct string CALLER = {"__caller__",10};
-extern struct string SUPER  = {"__super__",9};
+extern struct string SUPER  = {"super",5};
+extern struct string SELF   = {"self",4};
 
 struct program {
   void* codes;
@@ -463,9 +464,28 @@ void vm_dump( const struct program* prg, FILE* output );
 /* ===============================
  * Parser
  * ==============================*/
-int parse( struct ajj* , const char* src,
-           const char* key, ajj_value* output );
+int parse( struct ajj* , struct gc_scope* ,
+    const char* src, const char* key, ajj_value* output );
 
+/* =================================
+ * Json
+ * ================================*/
+
+/* Parse a json document into a OBJECT object. The json and ajj object
+ * has a 1:1 mapping. The internal mapping is as follow :
+ * json:string --> string
+ * json:null   --> None
+ * json:boolean--> boolean
+ * json:number --> number
+ * json:list   --> list
+ * json:object --> dictionary */
+
+int json_decode ( struct ajj* , struct gc_scope* ,
+    const char* , struct ajj_value* );
+
+/* Serialize the object to a json document insides of struct strbuf.
+ * User need to initialize output strbuf object before calling it */
+int json_encode ( const struct ajj_value* , struct strbuf* );
 
 /* ===============================
  * Object representation
@@ -507,7 +527,7 @@ struct func_table {
   ajj_class_dtor dtor;
   ajj_class ctor ctor;
   void* udata;
-  struct string name;
+  struct string name; /* object's name */
 };
 
 /* This function will initialize an existed function table */
@@ -647,19 +667,12 @@ ajj_object_create_child( struct ajj* , struct ajj_object* obj ) {
   return ajj_object_create(ajj,obj->scp);
 }
 
-/* Delete a single ajj_object. This deletion will not destroy
- * any other objects inside of the linked chain */
+/* Delete routine. Delete a single object from its GC. This deletion
+ * function will only delete the corresponding object , not its children,
+ * it is not safe to delete children, since the parent object doesn't
+ * really have the ownership */
 static inline
 void ajj_object_destroy( struct ajj* , struct ajj_object* obj );
-
-static inline
-void ajj_object_move( struct gc_scope* scope , struct ajj_object* obj );
-
-/* Clear an object's internal GUTS , not clear this object from
- * free list */
-static
-void ajj_object_clear( struct ajj* , struct ajj_object* obj );
-
 
 /* Initialize an created ajj_object to a certain type */
 static inline
@@ -715,6 +728,26 @@ ajj_object_create_obj( struct ajj* a, struct gc_scope* scp ) {
   return ajj_object_obj(ajj_object_create(a,scp));
 }
 
+/* ===================================================
+ * Value wrapper for internal use
+ * =================================================*/
+
+static inline
+void ajj_value_destroy( struct ajj* a , struct ajj_value* val ) {
+  assert(val->type != AJJ_VALUE_NOT_USE);
+  if( val->type != AJJ_VALUE_BOOLEAN &&
+      val->type != AJJ_VALUE_NONE &&
+      val->type != AJJ_VALUE_NUMBER )
+    ajj_object_destroy(a,val->value.object);
+}
+
+static inline
+const struct string* ajj_value_to_string( const struct ajj_value* val ) {
+  assert(val->type == AJJ_VALUE_STRING);
+  return &(val->value.object->val.str);
+}
+
+
 static inline
 struct ajj_value ajj_value_assign( struct ajj_object* obj ) {
   struct ajj_value val;
@@ -723,23 +756,6 @@ struct ajj_value ajj_value_assign( struct ajj_object* obj ) {
   val.value.object = obj;
   return val;
 }
-
-/* Create an ajj_object serves as the scope object and inherited from
- * parent object "parent" */
-static inline
-struct ajj_object*
-ajj_object_enter  ( struct ajj* , struct ajj_object* parent );
-
-/* Exit an ajj_object represented scope. This will delete the scope object
- * and any objects that is OWNED by this scope object */
-static inline
-struct void
-ajj_object_exit   ( struct ajj* , struct ajj_object* scope );
-
-/* Move an object from its CURRENT scope to target scope "scp" */
-static inline
-struct ajj_object*
-ajj_object_move( struct ajj_object* obj , struct ajj_object* scp );
 
 /* ================================
  * GC Scope
