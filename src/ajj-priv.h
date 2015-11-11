@@ -584,10 +584,18 @@ static
 struct function* func_table_find_func( struct func_table* tb,
     const struct string* name );
 
+/* Get function from func table */
+static
+struct function* func_table_get_func( const struct func_table* tb,
+    const struct string* name );
+
 static inline
 struct c_closure*
 func_table_add_c_clsoure( struct func_table* tb , struct string* name , int own ) {
-  struct function* f = func_table_add_func(tb);
+  struct function* f = func_table_get_func(tb,name);
+  if( f != NULL )
+    return NULL;
+  f = func_table_add_func(tb);
   f->name = own ? *name : string_dup(name);
   f->tp = C_FUNCTION;
   c_closure_init(&(f->f,c_fn));
@@ -597,7 +605,10 @@ func_table_add_c_clsoure( struct func_table* tb , struct string* name , int own 
 static inline
 ajj_method*
 func_table_add_c_method( struct func_table* tb , struct string* name , int own ) {
-  struct function* f = func_table_add_func(tb);
+  struct function* f = func_table_get_func(tb,name);
+  if( f != NULL )
+    return NULL;
+  f = func_table_add_func(tb);
   f->name = own ? *name : string_dup(name);
   f->tp = C_METHOD;
   return &(f->f.c_mt);
@@ -606,7 +617,10 @@ func_table_add_c_method( struct func_table* tb , struct string* name , int own )
 static inline
 struct program*
 func_table_add_jj_block( struct func_table* tb, struct string* name , int own ) {
-  struct function* f = func_table_add_func(tb);
+  struct function* f = func_table_get_func(tb,name);
+  if( f != NULL )
+    return NULL;
+  f = func_table_add_func(tb);
   f->name = own ? *name : string_dup(name);
   f->tp = JJ_BLOCK;
   program_init(&(f->f.jj_fn));
@@ -616,7 +630,10 @@ func_table_add_jj_block( struct func_table* tb, struct string* name , int own ) 
 static inline
 struct program*
 func_table_add_jj_macro( struct func_table* tb, struct string* name , int own ) {
-  struct function* f = func_table_add_func(tb);
+  struct function* f = func_table_get_func(tb,name);
+  if( f != NULL )
+    return NULL;
+  f = func_table_add_func(tb);
   f->name = own ? *name : string_dup(name);
   f->tp = JJ_MACRO;
   program_init(&(f->f.jj_fn));
