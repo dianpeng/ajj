@@ -97,7 +97,6 @@ void func_table_shrink_to_fit( struct func_table* tb ) {
 }
 
 /* Find a new function in func_table */
-static
 struct function* func_table_find_func( struct func_table* tb,
     const struct string* name );
 
@@ -191,7 +190,6 @@ struct ajj_object {
 
 /* Create a single ajj_object which is NOT INITIALZIED with any type
  * under the scope object "scope" */
-static
 struct ajj_object*
 ajj_object_create ( struct ajj* , struct gc_scope* scope );
 

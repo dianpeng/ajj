@@ -184,6 +184,7 @@ int json_decode( struct ajj* a, struct gc_scope* scp,
         if( TOP().st == V || TOP().st == K ) {
           int i = pos+1;
           int c;
+          strbuf_reset(&(TOP().k));
           for( ; (c=src[i]) ; ++i ) {
             if( c == '\\' ) {
               if( src[i+1] == '\"' ) {

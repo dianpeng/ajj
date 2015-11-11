@@ -943,14 +943,19 @@ int parse_scope( struct parser* , struct emitter* em ,
     struct tokenizer* tk , int enter_scope );
 
 static
-int parse_print( struct parser* p,
-    struct emitter* em , struct tokenizer* tk ) {
+int parse_print( struct parser* p, struct emitter* em ,
+    struct tokenizer* tk ) {
+  assert(tk->tk == TK_LEXP);
+  tk_move(tk);
   CALLE(parse_expr(p,em,tk));
-
   emit0(em,VM_PRINT);
   CONSUME(TK_REXP);
   return 0;
 }
+
+static
+int parse_branch_body( struct parser* , struct emitter* em,
+    struct tokenizer* tk );
 
 static
 int parse_branch ( struct parser* p,
@@ -978,7 +983,7 @@ int parse_branch ( struct parser* p,
 
   CONSUME(TK_RSTMT);
 
-  CALLE(parse_scope(p,em,tk,1));
+  CALLE(parse_branch_body(p,em,tk));
   /* jump out of the scope */
   PUSH_JMP(emitter_put(em,1));
   do {
@@ -1022,7 +1027,7 @@ int parse_branch ( struct parser* p,
             tk_get_name(tk->tk));
         return -1;
     }
-    CALLE(parse_scope(p,em,tk,1));
+    CALLE(parse_branch_body(p,em,tk));
     if( !has_else )
       PUSH_JMP(emitter_put(em,1));
   } while(1);
@@ -1519,6 +1524,57 @@ parse_do( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
   return 0;
 }
 
+/* Move */
+static int
+parse_move( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
+  /* Move is simple, just find 2 memory position and then move the value */
+  int dst_idx;
+  int src_idx;
+
+  assert(tk->tk == TK_MOVE);
+  tk_move(tk);
+
+  EXPECT(TK_VARIABLE); /* dest variable */
+  CALLE((dst_idx=lex_scope_get(p,
+          strbuf_tostring(&(tk->lexme)).str))<0);
+  tk_move(tk);
+
+  EXPECT(TK_VARIABLE); /* target variable */
+  CALLE((src_idx=lex_scope_get(p,
+          strbuf_tostring(&(tk->lexme)).str))<0);
+  tk_move(tk);
+
+  EXEPCT(TK_RSTMT);
+  emit2(em,VM_BB_MOVE,dst_idx,src_idx);
+  return 0;
+}
+
+/* Upvalue */
+static int
+parse_upvalue( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
+  int var_idx;
+
+  assert( tk->tk == TK_UPVALUE );
+  tk_move(tk);
+  EXPECT(TK_VARIABLE);
+  CALLE((var_idx=const_str(p,em->prg,strbuf_move(&(tk->lexme)),1))<0);
+  tk_move(tk);
+  CALLE(parse_expr(p,em,tk));
+  emit1(em,VM_UPVALUE_SET,var_idx);
+  EXPECT(TK_RSTMT);
+
+  /* Start to parsing the body */
+  CALLE(parse_scope(p,em,tk,1));
+
+  /* Generate deletion for this scope */
+  emit1(em,VM_UPVALUE_DEL,var_idx);
+
+  CONSUME(TK_ENDVALUE);
+  CONSUME(TK_RSTMT);
+  return 0;
+}
+
+
 /* Loop control statements.
  * Our loop body is actually compiled into a function, and later on the
  * code will call into this function each time. To control this sort of
@@ -1774,7 +1830,10 @@ parse_extends( struct parser * p , struct emitter* em , struct tokenizer* tk ) {
  * Parser dispatch loop
  * ======================================================*/
 
-/* loop scope */
+/* loop scope.
+ * Inside of a loop scope, user is not allowed to emit instruction
+ * for include,import,extends. But allow emit continue,break . */
+
 static int
 parse_loop_scope( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
   /* We don't promptly emit VM_ENTER to mark the GC to allocate memory
@@ -1785,7 +1844,6 @@ parse_loop_scope( struct parser* p , struct emitter* em , struct tokenizer* tk )
   size_t num = PTOP()->len;
   int enter = emitter_put(em,0);
 
-  emit0(em,VM_ENTER); /* For GC */
   do {
     if( tk->tk == TK_TEXT ) {
       struct string text;
@@ -1817,22 +1875,27 @@ parse_loop_scope( struct parser* p , struct emitter* em , struct tokenizer* tk )
         HANDLE_CASE(WITH,with)
         HANDLE_CASE(SET,set)
         HANDLE_CASE(FILTER,filter)
+        HANDLE_CASE(UPVALUE,upvalue)
         /* exceptions : elif and else will be treated as a end of
          * body tag as well */
         case TK_ELSE:
         case TK_ELIF:
           goto done;
         case TK_DO:
-          return parse_do(p,tk,em);
+          return parse_do(p,em,tk);
         case TK_BREAK:
-          return parse_break(p,tk,em);
+          return parse_break(p,em,tk);
         case TK_CONTINUE:
-          return parse_continue(p,tk,em);
+          return parse_continue(pk,em,tk);
+        case TK_MOVE:
+          return parse_move(p,em,tk);
         default:
           report_error("Unkonwn token in a loop scope:%s!",
               tk_get_name(tk->tk));
           return -1;
       }
+    } else if( tk->tk == TK_LEXP ) {
+      CALLE(parse_print(p,em,tk));
     } else {
       /* Unrecognized token */
       report_error("Unknown token in a loop scope:%s!",
@@ -1850,6 +1913,92 @@ done:
   } else {
     emit0_at(em,enter,VM_NOP1); /* empty instructions */
   }
+  return 0;
+}
+
+/* branch scope.
+ * No break,continue,also not include,import and extends allowed */
+static int
+parse_branch_scope( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
+  /* We don't promptly emit VM_ENTER to mark the GC to allocate memory
+   * page. We track the current stack's local symbol number. If local symbol
+   * number goes up then we will emit a VM_ENTER to force VM perform GC when
+   * properly , also for loop_scope body, the lex_scope is already emitted */
+
+  size_t num;
+  int enter;
+  /* enter lexical scope */
+  CALLE(lex_scope_enter(p) !=NULL);
+
+  num = PTOP()->len;
+  enter = emitter_put(em,0);
+
+  do {
+    if( tk->tk == TK_TEXT ) {
+      struct string text;
+      int text_id;
+      /* emit code for displaying this chunk of text */
+      text = strbuf_move(&(tk->lexme));
+      CALLE((text_id=const_str(p,em->prg,text,1))<0);
+      emit1(em,VM_LSTR,text_id);
+      emit0(em,VM_PRINT);
+      tk_move(tk);
+    }
+
+#define HANDLE_CASE(T,t) \
+    case TK_##T: \
+      CALLE(parse_##t(p,em,tk)); \
+      break; \
+    case TK_END##T: \
+      goto done;
+
+    if( tk->tk == TK_LSTMT ) {
+      tk_consuem(tk);
+      /* dispatch */
+      switch(tk->tk) {
+        HANDLE_CASE(FOR,for)
+        HANDLE_CASE(IF,branch)
+        HANDLE_CASE(MACRO,macro)
+        HANDLE_CASE(BLOCK,block)
+        HANDLE_CASE(CALL,call)
+        HANDLE_CASE(WITH,with)
+        HANDLE_CASE(SET,set)
+        HANDLE_CASE(FILTER,filter)
+        HANDLE_CASE(UPVALUE,upvalue)
+        /* exceptions : elif and else will be treated as a end of
+         * body tag as well */
+        case TK_ELSE:
+        case TK_ELIF:
+          goto done;
+        case TK_DO:
+          return parse_do(p,em,tk);
+        case TK_MOVE:
+          return parse_move(p,em,tk);
+        default:
+          report_error("Unkonwn token in a branch scope:%s!",
+              tk_get_name(tk->tk));
+          return -1;
+      }
+    } else if( tk->tk == TK_LEXP ) {
+      CALLE(parse_print(p,em,tk));
+    } else {
+      /* Unrecognized token */
+      report_error("Unknown token in a branch scope:%s!",
+          tk_get_name(tk->tk));
+      return -1;
+    }
+  } while(1)
+
+#undef HANDLE_CASE
+
+done:
+  if( num < PTOP()->len ) {
+    emit0_at(em,enter,VM_ENTER);
+    emit0(em,VM_LEAVE);
+  } else {
+    emit0_at(em,enter,VM_NOP1); /* empty instructions */
+  }
+  lex_scope_exit(p);
   return 0;
 }
 
@@ -1899,6 +2048,7 @@ parse_scope( struct parser* p , struct emitter* em ,
           HANDLE_CASE(Call,call)
           HANDLE_CASE(MACRO,macro)
           HANDLE_CASE(BLOCK,block)
+          HANDLE_CASE(UPVALUE,upvalue)
           case TK_INCLUDE:
             return parse_include(p,em,tk);
           case TK_IMPORT:
@@ -1912,11 +2062,19 @@ parse_scope( struct parser* p , struct emitter* em ,
             return parse_do(p,em,tk);
           case TK_WITH:
             return parse_with(p,em,tk);
+          case TK_MOVE:
+            return parse_with(p,em,tk);
           default:
-            report_error("Unkonwn token in a loop scope:%s!",
+            report_error(p,tk,"Unkonwn token in scope:%s!",
                 tk_get_name(tk->tk));
             return -1;
         }
+      } else if( tk->tk == TK_LEXP ) {
+        return parse_print(p,em,tk);
+      } else {
+        report_error(p,tk,"Unkonwn token in scope:%s!",
+            tk_get_name(tk->tk));
+        return -1;
       }
     }
   } while(1);

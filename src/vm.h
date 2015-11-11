@@ -287,7 +287,6 @@ int vm_run_func( struct ajj* ,
     size_t len,
     ajj_value* output );
 
-static
 int vm_run_jj( struct ajj* a,
     struct ajj_object* tp ,
     struct ajj_value par[AJJ_FUNC_PAR_MAX_SIZE],

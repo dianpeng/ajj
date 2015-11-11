@@ -97,6 +97,10 @@ int tk_keyword_check( struct tokenizer* tk , const char* str , int i ) {
     return 7;
   if( str[8] && str[8] != tk->src[i+8] )
     return 8;
+  if( str[9] && str[9] != tk->src[i+9] )
+    return 9;
+  if( str[10]&& str[10]!= tk->src[i+10])
+    return 10;
   assert(0);
   return -1;
 }
@@ -133,7 +137,7 @@ int tk_lex_keyword( struct tokenizer* tk , int offset ) {
  * C: call,continue
  * D: do
  * E: elif,else,endfor,endmacro,endcall,
- *    endfilter,endset,endblock,endwith,endraw,
+ *    endfilter,endset,endblock,endwith,
  *    endupvalue,endinclude
  * F: from,filter,false,False,fix
  * G: -
@@ -218,9 +222,6 @@ int tk_lex_keyword_or_id( struct tokenizer* tk ) {
         else if( (len=tk_keyword_check(tk,"with")) == 4 &&
             tk_not_id_rchar(tk->src[k+5]))
           RETURN(TK_ENDWITH,7);
-        else if( (len=tk_keyword_check(tk,"raw")) == 3 &&
-            tk_not_id_rchar(tk->src[k+4]))
-          RETURN(TK_ENDRAW,6);
         else if( (len=tk_keyword_check(tk,"include")) == 7 &&
             tk_not_id_rchar(tk->src[k+8]))
           RETURN(TK_ENDINCLUDE,10);
@@ -449,12 +450,9 @@ int tk_lex_script( struct tokenizer* tk ) {
   } while(1);
 }
 
-/* raw and endraw is treated specially since it actually
- * contains multiple tokens however they will be treated
- * as one token , by this we could switch tokenizer's states
- * without bothering the parser.
- */
-
+/* For the raw/endraw block , we handle it entirely in lexing phase.
+ * We silently filter out raw/endraw tags and then returns the included
+ * text as a text to the upper caller as if no such token there */
 static
 int tk_check_single_keyword( struct tokenizer* tk , const char* str , size_t len ) {
   size_t i = tk->pos + 2; /* skip the {% */
@@ -483,7 +481,7 @@ done:
         continue;
       case '%':
         if( tk->src[i+1] == '}' ) {
-          return (i-tk->pos);
+          return (i-tk->pos+2);
         }
         return -1;
       default:
@@ -502,6 +500,41 @@ int tk_check_raw( struct tokenizer* tk ) {
 static inline
 int tk_check_endraw( struct tokenizer* tk ) {
   return tk_check_single_keyword(tk,"endraw",6);
+}
+
+/* This function will get all the text data inside of the raw scope
+ * and then finish its raw tag. */
+static
+int tk_lex_raw( struct tokenizer* tk ) {
+  size_t i = tk->pos;
+  char nc;
+  char c;
+  assert( tk->mode = TOKENIZE_RAW );
+
+  strbuf_reset(&(tk->lexme));
+  for( ; (c = tk->src[i]) ; ++i ) {
+    if( c == '{' ) {
+      if( tk->src[i+1] == '%' ) {
+        /* check whether it is a endraw tag or not */
+        int offset;
+        if( (offset=tk_check_endraw(tk)) >0 ) {
+          /* checking if we have some data in the buffer or not */
+          if( tk->lexme.len == 0 ) {
+            /* we don't have any data, it is an empty raw/endraw.
+             * so we just move the parser forward */
+            tk->pos += offset;
+            return tk_lex(tk);
+          } else {
+            tk->pos += offset;
+            RETURN(TK_TEXT,tk->lexme.len+offset);
+          }
+        }
+      }
+    }
+    strbuf_push(c);
+  }
+  /* EOF meet, which is unexpected */
+  RETURN(TK_UNKNOWN,tk->lexme.len);
 }
 
 static
@@ -533,8 +566,10 @@ int tk_lex_jinja( struct tokenizer* tk ) {
               } else {
                 if( offset < 0 )
                   RETURN(TK_UNKNOWN,0);
-                else
-                  RETURN(TK_RAW,2+offset);
+                else {
+                  tk->pos += offset;
+                  return tk_lex_raw(tk);
+                }
               }
             }
           case '{':
@@ -569,42 +604,6 @@ done:
   }
 }
 
-static
-int tk_lex_raw( struct tokenizer* tk ) {
-  size_t i = tk->pos;
-  char nc;
-  char c;
-  assert( tk->mode = TOKENIZE_RAW );
-
-  strbuf_reset(&(tk->lexme));
-  for( ; (c = tk->src[i]) ; ++i ) {
-    if( c == '{' ) {
-      if( tk->src[i+1] == '%' ) {
-        /* check whether it is a endraw tag or not */
-        int offset;
-        if( (offset = tk_check_endraw(tk)) < 0 ) {
-          if( tk->lexme.len > 0 ) {
-            /* We fail at the second try , since at that time we
-             * can have multiple diagnostic information */
-            RETURN(TK_TEXT,(i->tk->pos));
-          }
-          RETURN(TK_UNKNOWN,0);
-        } else {
-          if( offset > 0 ) {
-            if( tk->lexme.len > 0 )
-              RETURN(TK_TEXT,(i->tk->pos));
-            else
-              RETURN(TK_ENDRAW,(2+offset));
-          }
-        }
-      }
-    }
-    strbuf_push(c);
-  }
-  /* EOF meet, which is unexpected */
-  RETURN(TK_UNKNOWN,tk->lexme.len);
-}
-
 /* public interfaces */
 int tk_lex( struct tokenizer* tk ) {
   switch(tk->mode){
@@ -612,8 +611,6 @@ int tk_lex( struct tokenizer* tk ) {
       return tk_lex_jinja(tk);
     case TOKENIZE_SCRIPT:
       return tk_lex_script(tk);
-    case TOKENIZE_RAW:
-      return tk_lex_raw(tk);
     default:
       UNREACHABLE();
       return -1;
@@ -626,10 +623,6 @@ int tk_move( struct tokenizer* tk ) {
 
   if( tk->tk == TK_LSTMT || tk->tk == TK_LEXP ) {
     tk->mode = TOKENIZE_SCRIPT;
-  } else if ( tk->tk == TK_RAW ) {
-    tk->mode = TOKENIZE_RAW;
-  } else if ( tk->tk == TK_ENDRAW ) {
-    tk->mode = TOKENIZE_JINJA;
   } else if( tk->tk == TK_RSTMT || tk->tk == TK_REXP ) {
     tk->mode = TOKENIZE_JINJA;
   }

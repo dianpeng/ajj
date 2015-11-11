@@ -6,7 +6,8 @@ struct tokenizer {
   const char* src;
   size_t pos;
   int tk;
-  size_t tk_len;
+  size_t tk_len; /* This represent the length of the this token's corresponding
+                  * part inside of the jinja template source code */
   int mode; /* tell me which tokenize mode need to go into */
   struct strubuf lexme; /* for lexme */
   double num_lexme; /* only useful when the token is TK_NUMBER */
@@ -14,8 +15,7 @@ struct tokenizer {
 
 enum {
   TOKENIZE_JINJA,
-  TOKENIZE_SCRIPT,
-  TOKENIZE_RAW
+  TOKENIZE_SCRIPT
 };
 
 #define TOKEN_LIST(X) \
@@ -45,8 +45,6 @@ enum {
   X(TK_MOVE,"move") \
   X(TK_BLOCK,"block") \
   X(TK_ENDBLOCK,"endblock") \
-  X(TK_RAW,"raw") \
-  X(TK_ENDRAW,"endraw") \
   X(TK_EXTENDS,"extends") \
   X(TK_IMPORT,"import") \
   X(TK_INCLUDE,"include") \
