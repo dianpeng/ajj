@@ -119,16 +119,44 @@ void dict_rehash( struct dict* d ) {
 }
 
 
-int dict_insert( struct dict* d, const struct string* key, const struct ajj_value* val ) {
+int dict_insert( struct dict* d, const struct string* key , int own ,
+    const struct ajj_value* val ) {
   int fh;
   struct dict_entry* e;
+
+  if( d->len == DICT_MAX_SIZE )
+    return -1;
 
   if( d->cap == d->len )
     dict_rehash(d);
 
   fh = dict_hash(key);
   e = dict_insert_entry(d,key,fh,1);
-  e->key = string_dup(key);
+  e->key = own ? *key : string_dup(key);
+  if( e->del ) e->del = 0;
+  if( e->empty ) {
+    e->empty = 0;
+    e->end = 1;
+  }
+  ++d->len;
+  e->hash = fh;
+  e->value = *val;
+  return 0;
+}
+
+int dict_insert_c( struct dict* , const char* key , const struct ajj_value* val ) {
+  int fh;
+  struct dict_entry* e;
+
+  if( d->len == DICT_MAX_SIZE )
+    return -1;
+
+  if( d->cap == d->len )
+    dict_rehash(d);
+
+  fh = dict_hash(key);
+  e = dict_insert_entry_c(d,key,fh,1);
+  e->key = string_dupc(key);
   if( e->del ) e->del = 0;
   if( e->empty ) {
     e->empty = 0;
@@ -147,7 +175,26 @@ int dict_remove( struct dict* d , const struct string* key , struct ajj_value* o
   else {
     assert(!e->empty);
     assert(!e->del);
+    assert(string_eq(&(e->key),key));
     /* destroy the key */
+    string_destroy(&(e->key));
+    if( output )
+      *output = e->value;
+    e->del = 1;
+    --d->cap;
+    return 0;
+  }
+}
+
+int dict_remove_c( struct dict* d , const char* key , struct ajj_value* output ) {
+  struct dict_entry* e = dict_insert_entry_c(d,key,dict_hash(key),0);
+  if( e == NULL )
+    return -1;
+  else {
+    assert(!e->empty);
+    assert(!e->del);
+    assert(string_eqc(&(d->key),key));
+    /* destroy string */
     string_destroy(&(e->key));
     if( output )
       *output = e->value;
@@ -160,6 +207,11 @@ int dict_remove( struct dict* d , const struct string* key , struct ajj_value* o
 struct ajj_value* dict_find( struct dict* d , const struct string* key ) {
   struct dict_entry* e;
   return (e=dict_insert_entry(d,key,dict_hash(key),0)) ? &(e->value) : NULL;
+}
+
+struct ajj_value* dict_find_c( struct dict* d , const char* key ) {
+  struct dict_entry* e;
+  return (e=dict_insert_entry_c(d,key,dict_hash(key),0)) ? &(e->value) : NULL;
 }
 
 void dict_clear( struct dict* d ) {
@@ -197,6 +249,10 @@ int dict_iter_move( const struct dict* d , int itr ) {
   }
 }
 
+/* ========================
+ * List implementation
+ * ======================*/
+
 static
 void list_reserve( struct list* l ) {
   void* mem;
@@ -223,6 +279,10 @@ void list_destroy( struct list* l ) {
   l->entry = l->lbuf;
   l->len = 0;
 }
+
+/* =====================
+ * Slab implementation
+ * =====================*/
 
 static
 void slab_reserve( struct slab* sl ) {

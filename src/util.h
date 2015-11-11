@@ -24,8 +24,31 @@ struct ajj_value;
 #define DICT_MAX_SIZE (1<<29)
 #define STRBUF_INIT_SIZE 64
 
-/* String implementation. All the data owned by this
- * string are on heap. We don't SSO for string object */
+/* Helper macro to insert into double linked list */
+#define LINIT(X) \
+  do { \
+    (X)->next = (X); \
+    (X)->prev = (X); \
+  } while(0)
+
+#define LINSERT(X,T) \
+  do { \
+    (X)->next = (T); \
+    (X)->prev = (T)->prev; \
+    (T)->prev->next = (X); \
+    (T)->prev = (X); \
+  } while(0)
+
+#define LREMOVE(X) \
+  do { \
+    (X)->prev->next = (X)->next; \
+    (X)->next->prev = (X)->prev; \
+  } while(0)
+
+
+/* =================================
+ * String , it supports value smeantic
+ * ===============================*/
 struct string {
   const char* str;
   size_t len;
@@ -66,6 +89,12 @@ int string_eq( const struct string* l , const struct string* r ) {
 }
 
 static inline
+int string_eqc( const struct string* l , const char* str ) {
+  assert(!string_null(l));
+  return strcmp(l->str,str) == 0;
+}
+
+static inline
 void string_destroy( struct string* str ) {
   if( str->str ) free(str->str);
 }
@@ -75,8 +104,10 @@ int string_null( struct string* str ) {
   return str->str == NULL;
 }
 
-/* String buffer ========================== */
-
+/* ====================================================
+ * String buffer
+ * Support pushing back and buffer manipulation
+ * ===================================================*/
 struct strbuf {
   char* str;
   size_t len;
@@ -178,7 +209,11 @@ struct string strbuf_tostring( struct strbuf* buf ) {
   return ret;
 }
 
-/* dictionary */
+
+/* ===========================================
+ * Dictionary
+ * =========================================*/
+
 struct dict_entry {
   struct ajj_value value;
   struct string key;
@@ -213,7 +248,8 @@ static inline void dict_destroy(struct dict* d) {
 
 /* XXX_c APIs are used to help dealing with the public interfaces ,since public
  * interfaces are not using struct string objects */
-int dict_insert( struct dict* , const struct string* , const struct ajj_value* val );
+int dict_insert( struct dict* , const struct string* , int own ,
+    const struct ajj_value* val );
 int dict_insert_c( struct dict* , const char* key , const struct ajj_value* val );
 int dict_remove( struct dict* , const struct string* , struct ajj_value* output );
 int dict_remove_c( struct dict* , const char* key , const struct ajj_value* val );
@@ -237,7 +273,10 @@ struct ajj_value* dict_iter_deref( struct dict* , int itr ) {
   return &(e->value);
 }
 
-/* list */
+/* ======================================
+ * List
+ * ====================================*/
+
 struct list {
   struct ajj_value lbuf[LIST_LOCAL_BUF_SIZE];
   struct ajj_value* entry;
@@ -281,7 +320,9 @@ void* list_iter_deref( const struct list* l , int itr ) {
   return list_index(l,itr);
 }
 
-/* slab memory pool */
+/* ========================================
+ * Slab
+ * ======================================*/
 struct chunk {
   struct chunk* next;
 };

@@ -222,7 +222,7 @@ int const_num( struct parser* p , struct program* prg, double num ) {
   }
 }
 /* Parser helpers */
-static
+static inline
 int finish_scope_tag( struct parser* p, struct tokenizer* tk , int token  ) {
   CONSUME(TK_LSTMT);
   CONSUME(token);
@@ -230,7 +230,7 @@ int finish_scope_tag( struct parser* p, struct tokenizer* tk , int token  ) {
   return 0;
 }
 
-static
+static inline
 int symbol( struct parser* p , struct tokenizer* tk , struct string* output ) {
   assert(tk->tk == TK_VARIABLE);
   if( tk->lexme.len >= AJJ_SYMBOL_NAME_MAX_SIZE ) {
@@ -252,13 +252,7 @@ int parse_expr( struct parser* , struct emitter* , struct tokenizer* );
  * The problem is how to generate code that create the list for you, to do this
  * we will use instruction VM_ATTR_PUSH */
 static int parse_seq( struct parser* p , struct emitter* em ,
-    struct tokenizer* tk , int ltk , int rtk ) {
-  assert(tk->tk == token);
-  tk_move(tk);
-
-  /* load an empty list onto the stack */
-  emit0(em,VM_LLIST);
-
+    struct tokenizer* tk , int rtk ) {
   /* check if it is an empty list */
   if( tk->tk == rtk ) {
     tk_move(tk);
@@ -286,13 +280,44 @@ static int parse_seq( struct parser* p , struct emitter* em ,
 
 static
 int parse_list( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
-  return parse_seq(p,em,tk,TK_LSQR,TK_RSQR);
+  assert(tk->tk == TK_LSQR);
+  tk_move(tk);
+  emit0(em,VM_LLIST); /* load an empty list onto the stack */
+  return parse_seq(p,em,tk,TK_RSQR);
 }
 
-/* tuple is just an alias of the list */
+/* Tuple is ambigious by its self !
+ * varible1 = (1+2);
+ * Whether we need to treat the (1+2) as an singleton tuple or an expression with
+ * parentheses , we don't know. Python indicates this by forcing you uses a comma
+ * appending after the each element which makes it context free. We need to parse
+ * this sort of thing when we see a leading parenthenses ! Take an extra step to
+ * look ahead */
 static
-int parse_tuple( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
-  return parse_seq(p,em,tk,TK_LPAR,TK_RPAR);
+int parse_tuple_or_subexpr( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
+  /* We cannot look back and I don't want to patch the code as well.
+   * So we have to spend an extra instruction on top of it in case
+   * it is an tuple */
+  int instr = emitter_put(em,0);
+
+  assert(tk->tk == TK_LPAR);
+  tk_move(tk);
+
+  /* Parsing the expression here at first */
+  CALLE(parse_expr(p,em,tk));
+
+  /* Checking if we have pending comma or not */
+  if( tk->tk == TK_COMMA ) {
+    /* this is an tuple here */
+    emit0_at(em,instr,VM_LLIST);
+    emit0(em,VM_ATTR_PUSH);
+    return parse_seq(p,em,tk,TK_RPAR);
+  } else {
+    CONSUME(TK_RPAR);
+    /* Emit a NOP initially since we don't have a real tuple */
+    emit0_at(em,instr,VM_NOP0);
+    return 0;
+  }
 }
 
 static
@@ -330,41 +355,6 @@ int parse_dict( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
       return -1;
     }
   } while(1);
-  return 0;
-}
-
-static
-int parse_literals( struct parser* p, struct emitter* em , struct tokenizer* tk ) {
-  int idx;
-  switch(tk->tk) {
-    case TK_TRUE:
-      emit0(em,VM_LTRUE);
-      break;
-    case TK_FALSE:
-      emit0(em,VM_LFALSE);
-      break;
-    case TK_NONE:
-      emit0(em,VM_LNONE);
-      break;
-    case TK_NUMBER:
-      CALLE((idx=const_num(p,em->prg,tk->num_lexme))<0);
-      emit1(em,VM_LNUM,idx);
-      break;
-    case TK_STRING:
-      CALLE((idx=const_str(p,em->prg,strbuf_move(&(tk->lexme)),1))<0);
-      emit1(em,VM_LSTR,idx);
-      break;
-    case TK_LSQR:
-      return parse_list(p,em,tk);
-    case TK_LPAR:
-      return parse_tuple(p,em,tk);
-    case TK_LBRA:
-      return parse_dict(p,em,tk);
-    default:
-      UNREACHABLE();
-      return -1;
-  }
-  tk_move(tk);
   return 0;
 }
 
@@ -538,7 +528,7 @@ int parse_pipecmd( struct parser* p , struct emitter* em ,
   return 0;
 }
 
-static inline
+static
 int parse_prefix( struct parser* p, struct emitter* em , struct tokenizer* tk ) {
   struct string prefix;
   assert(tk->tk == TK_VARIABLE);
@@ -575,32 +565,43 @@ int parse_prefix( struct parser* p, struct emitter* em , struct tokenizer* tk ) 
   return 0;
 }
 
-static inline
+static
 int parse_atomic( struct parser* p, struct emitter* em , struct tokenizer* tk ) {
   switch(tk->tk) {
     case TK_VARIABLE:
       return parse_prefix(p,em,tk);
     case TK_STRING:
+      CALLE((idx=const_str(p,em->prg,strbuf_move(&(tk->lexme)),1))<0);
+      emit1(em,VM_LSTR,idx);
+      break;
     case TK_TRUE:
+      emit0(em,VM_LTRUE);
+      break;
     case TK_FALSE:
+      emit0(em,VM_LFALSE);
+      break;
     case TK_NONE:
+      emit0(em,VM_LNONE);
+      break;
     case TK_NUMBER:
-    case TK_LSQR:
-    case TK_LBRA:
-      return parse_literals(p,em,tk);
+      CALLE((idx=const_num(p,em->prg,tk->num_lexme))<0);
+      emit1(em,VM_LNUM,idx);
+      break;
     case TK_LPAR:
-      tk_move(tk);
-      if(parse_expr(p,em,tk))
-        return -1;
-      CONSUME(TK_RPAR);
-      return 0;
+      return parse_tuple_or_subexpr(p,em,tk);
+    case TK_LSQR:
+      return parse_list(p,em,tk);
+    case TK_LBRA:
+      return parse_dict(p,em,tk);
     default:
       report_error(p,tk,"Unexpect token here:%s",tk_get_name(tk->tk));
       return -1;
   }
+  tk_move(tk);
+  return 0;
 }
 
-static inline
+static
 int parse_unary( struct parser* p, struct emitter* em , struct tokenizer* tk ) {
   unsigned char op[1024]; /* At most we support 1024 unary operators */
   int op_len = 0;

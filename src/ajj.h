@@ -13,20 +13,19 @@
 struct ajj;
 struct ajj_value;
 struct ajj_object;
-struct ajj_context;
 
-typedef int (*ajj_method)( struct ajj_context* , /* execution context */
+typedef int (*ajj_method)( struct ajj* , /* execution context */
     void* , /* user data */
     struct ajj_value[AJJ_METHOD_PARAMETER_LIST_MAX_SIZE] ,
     size_t ,
     struct ajj_value* );
 
-typedef void* (*ajj_class_ctor)( struct ajj_context* ,
+typedef void* (*ajj_class_ctor)( struct ajj* ,
     void* ,
     struct ajj_value[AJJ_METHOD_PARAMETER_LIST_MAX_SIZE] ,
     size_t );
 
-typedef void (*ajj_class_dtor)( struct ajj_context* ,
+typedef void (*ajj_class_dtor)( struct ajj* ,
     void* udata , void* object );
 
 struct ajj_class {
@@ -58,10 +57,6 @@ struct ajj_value {
   int type;
 };
 
-extern ajj_value AJJ_TRUE;
-extern ajj_value AJJ_FALSE;
-extern ajj_value AJJ_NONE;
-
 enum {
   AJJ_VALUE_NOT_USE = 0,
   AJJ_VALUE_NUMBER,
@@ -75,28 +70,9 @@ enum {
   AJJ_VALUE_SIZE
 };
 
-static inline
-struct ajj_value ajj_value_true( ) {
-  struct ajj_value value;
-  value->type = AJJ_VALUE_BOOLEAN;
-  value->value.boolean = 1;
-  return value;
-}
-
-static inline
-struct ajj_value ajj_value_false() {
-  struct ajj_value value;
-  value->type = AJJ_VALUE_BOOLEAN;
-  value->value.boolean = 0;
-  return value;
-}
-
-static inline
-struct ajj_value ajj_value_boolean( int b ) {
-  struct ajj_value value;
-  value->type = AJJ_VALUE_BOOLEAN;
-  value->value.boolean = b;
-}
+extern ajj_value AJJ_TRUE;
+extern ajj_value AJJ_FALSE;
+extern ajj_value AJJ_NONE;
 
 static inline
 struct ajj_value ajj_value_number( double val ) {
