@@ -1,4 +1,8 @@
-#include "ajj-priv.h"
+#include "ajj.h"
+#include "util.h"
+#include "parse.h"
+#include "vm.h"
+
 #include <stdlib.h>
 #include <limits.h>
 #include <string.h>
@@ -1637,82 +1641,91 @@ parse_with( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
 }
 
 /* Include
- * Include allows user to include another rendered template. But, we don't
- * support any benaivor specifier from Jinja2. However, we have one extension
- * that allows the user to setup context variable/upvalue for rendering that
- * specific included template which allows user to do customization.
- * {% include template_name upvalue %}
- *   {% upvalue name expression (override)/(fix) %}
- *   {% upvalue name expression (voerride)/(fix) %}
- * {% endinclude %}
- * Or the old way to do include like this:
- * {% include template_name %}
+ * Include allows user to include another rendered template. In jinja2, include
+ * supports those specifier to add some context information. Here, we don't support
+ * the concept in Jinaj2 , but we support something new here. We allow user to
+ * customize the running environment and also the execution thing by using upvalue.
+ * Upvalue is a kind of value that will be resolved delayed on the runtime. Anyone
+ * could use upvalue to wrap a method call or other things. Include support using
+ * upvalue setting locally _OR_ using json based the text to setup upvalue.
+ * Basically, include supports 3 types of grammar as follow:
+ * {% include template %}
  *
- * Implementation notes:
- * Well, we can just setup the up value in the current code page and then
- * we are done, but we don't do this since potentially user may want to
- * override these values in some other ways which we may not know. So we
- * pass upvalue as parameters to builtin function __include__ to let it
- * decide what behavior it wants to achieve. __include__ just need to return
- * me a string text for rendered , then its done */
+ * {% include template upvalue %}
+ *   {% upvalue name value (fix)/(override) %}
+ *   {% upvalue name value (fix)/(override) %}
+ * {% endinclude %}
+ *
+ * {% include template json jsonfile %}
+ *   {% upvalue name value (fix)/(override) %}
+ * {% endinclude %}
+ *
+ */
+
+static int
+parse_include_body( struct parser* p , struct emitter* em ,
+    struct tokenizer* tk ) {
+  int cnt = 0;
+  do {
+    CONSUME(TK_LSTMT);
+    if( tk->tk == TK_UPVALUE ) {
+      int var_idx;
+      int opt = INCLUDE_UPVALUE_OVERRIDE;
+      tk_move(tk);
+      CALLE((var_idx=const_str(p,em->prg,strbuf_move(&(tk->lexme)),1))<0);
+      CALLE(parse_expr(p,em,tk));
+      /* parsing the options for this upvalue */
+      if( tk->tk == TK_FIX ) {
+        opt = INCLUDE_UPVALUE_FIX;
+        tk_move(tk);
+      } else if (tk->tk == TK_OVERRIDE) {
+        opt = INCLUDE_UPVALUE_OVERRIDE;
+        tk_move(tk);
+      }
+      CONSUME(TK_RSTMT);
+      emit1(em,VM_LIMM,opt);
+    } else {
+      /* Do not check whether this is a endinclude
+       * or not, let include body handle it */
+      return cnt;
+    }
+  } while(1);
+}
 
 static int
 parse_include( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
-  int cnt = 1;
+  int cnt = 0;
+  int opt ;
 
   assert(tk->tk == TK_INCLUDE);
   tk_move(tk);
   CALLE(parse_expr(p,em,tk));
-  if( tk->tk == TK_UPVALUE ) {
-    /* We have an up value scope */
+
+  if( tk->tk == TK_RSTMT ) {
+    /* line inclusion */
+    tk_move(tk);
+  } else if( tk->tk == TK_UPVALUE ) {
     tk_move(tk);
     CONSUME(TK_RSTMT);
-    do {
-      CONSUME(TK_LSTMT);
-      if( tk->tk == TK_UPVALUE ) {
-        int var_idx;
-        struct string var;
-        int imm;
-
-        tk_move(tk);
-        EXPECT(TK_VARIABLE);
-        CALLE(symbol(p,em,&var));
-        CALLE((var_idx=const_str(p,em->prg,&var,1))<0);
-        emit1(em,VM_LSTR,var_idx); /* Load the upvalue name onto the stack */
-        CALLE(parse_expr(p,em,tk));/* Generate the value corresponding to that upvalue */
-        if( tk->tk == TK_FIX ) {
-          imm = 1;
-          tk_move(tk);
-        } else {
-          if( tk->tk == TK_OVERRIDE ) {
-            imm = 0;
-            tk_move(tk);
-          } else if( tk->tk == TK_RSTMT ) {
-            imm = 0;
-          } else {
-            report_error(p,tk,"Upvalue specifier can only be override/fix!");
-            return -1;
-          }
-          CONSUME(TK_RSTMT);
-          emit1(em,VM_LIMM,imm);
-          cnt += 3;
-        }
-      } else if( tk->tk == TK_ENDINCLUDE ) {
-        break;
-      } else {
-        report_error(p,tk,"Unknown token:%s!",tk_get_name(tk->tk));
-        return -1;
-      }
-    } while(1);
-    /* generate the calling instructions */
-    emit1(em,VM_INCLUDE,cnt);
-    tk_move(tk); /* eat TK_ENDINCLUDE */
+    cnt = parse_include_body(p,em,tk);
+    CONSUME(TK_ENDINCLUDE);
     CONSUME(TK_RSTMT);
-    return 0;
+    opt = INCLUDE_UPVALUE;
+  } else if( tk->tk == TK_JSON ) {
+    tk_move(tk);
+    /* json template name */
+    CALLE(parse_expr(p,em,tk));
+    CONSUME(TK_RSTMT);
+    cnt = parse_include_body(p,em,tk);
+    CONSUME(TK_ENDINCLUDE);
+    CONSUME(TK_RSTMT);
+    opt = INCLUDE_JSON;
   } else {
-    CONSUME(TK_RSTMT);
-    emit1(em,VM_INCLUDE,cnt);
+    report_error(p,tk,"Unknown token here in include scope:%s",
+        tk_get_name(tk));
+    return -1;
   }
+  emit2(em,VM_INCLUDE,opt,cnt);
   return 0;
 }
 
@@ -2093,8 +2106,3 @@ done:
   }
   return 0;
 }
-
-
-
-
-

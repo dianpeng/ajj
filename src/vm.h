@@ -9,6 +9,19 @@ struct func_table;
 
 #define MINIMUM_CODE_PAGE_SIZE 256
 
+/* parametr for looping */
+#define LOOP_CONTINUE 0
+#define LOOP_BREAK 1
+
+/* parameter for include instruction */
+#define INCLUDE_NONE 0
+#define INCLUDE_UPVALUE 1
+#define INCLUDE_JSON 2
+
+/* upvalue modifier */
+#define INCLUDE_UPVALUE_FIX 0
+#define INCLUDE_UPVALUE_OVERRIDE 1
+
 #define VM_INSTRUCTIONS(X) \
   X(VM_ADD,"add") \
   X(VM_SUB,"sub") \
