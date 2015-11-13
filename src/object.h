@@ -5,6 +5,7 @@
 #include "ajj-priv.h"
 
 struct gc_scope;
+struct ajj;
 
 struct c_closure {
   void* udata; /* user data */
@@ -43,6 +44,59 @@ struct func_table {
   ajj_class ctor ctor;
   void* udata;
   struct string name; /* object's name */
+};
+
+struct object {
+  struct dict prop; /* properties of this objects */
+  const struct func_table* fn_tb; /* This function table can be NULL which
+                                   * simply represents this object doesn't have
+                                   * any defined function related to it */
+  void* data; /* object's data */
+};
+
+struct ajj_object {
+  struct ajj_object* prev;
+  struct ajj_object* next;
+  struct ajj_object* parent[AJJ_EXTENDS_MAX_SIZE]; /* for extends */
+  unsigned short parent_len;
+  unsigned short tp;
+  union {
+    struct string str; /* string */
+    struct dict d;     /* dictionary */
+    struct list l;     /* list */
+    struct object obj; /* object */
+  } val;
+  struct gc_scope* scp;
+};
+
+/* Internally we separete a const string or a heap based string by
+ * using this tag. Since if it is a AJJ_VALUE_CONST_STRING, then we
+ * will never need to release the string memory */
+#define AJJ_VALUE_CONST_STRING (AJJ_VALUE_SIZE+1)
+
+/* global variable that is used to lookup upvalue/object creation or
+ * function calls */
+
+struct global_var {
+  struct global_var* prev; /* linked back to its parent */
+  struct ajj_value val;
+};
+
+struct gvar {
+  union {
+    struct global_var* value; /* This value is actually pointed to the
+                               * end of the upvalue chain. If value == NULL,
+                               * just means this value is not set yet */
+    struct c_closure func;    /* registered c functions */
+    struct func_table* obj;   /* object prototype */
+  } gut;
+  int type;
+};
+
+enum {
+  GVAR_VALUE,
+  GVAR_FUNCTION,
+  GVAR_OBJECT
 };
 
 /* This function will initialize an existed function table */
@@ -95,6 +149,9 @@ void func_table_shrink_to_fit( struct func_table* tb ) {
     }
   }
 }
+
+static
+void func_table_destroy( struct func_table* tb );
 
 /* Find a new function in func_table */
 struct function* func_table_find_func( struct func_table* tb,
@@ -150,15 +207,6 @@ func_table_add_jj_macro( struct func_table* tb, struct string* name , int own ) 
   program_init(&(f->f.jj_fn));
   return &(f->f.jj_fn);
 }
-
-struct object {
-  struct dict prop; /* properties of this objects */
-  const struct func_table* fn_tb; /* This function table can be NULL which
-                                   * simply represents this object doesn't have
-                                   * any defined function related to it */
-  void* data; /* object's data */
-};
-
 /* Create an object object */
 static inline
 void object_create( struct object* obj ,
@@ -168,25 +216,6 @@ void object_create( struct object* obj ,
   obj->data = data;
 }
 
-struct ajj_object {
-  struct ajj_object* prev;
-  struct ajj_object* next;
-  struct ajj_object* parent[AJJ_EXTENDS_MAX_SIZE]; /* for extends */
-  unsigned short parent_len;
-  unsigned short tp;
-  union {
-    struct string str; /* string */
-    struct dict d;     /* dictionary */
-    struct list l;     /* list */
-    struct object obj; /* object */
-  } val;
-  struct gc_scope* scp;
-};
-
-/* Internally we separete a const string or a heap based string by
- * using this tag. Since if it is a AJJ_VALUE_CONST_STRING, then we
- * will never need to release the string memory */
-#define AJJ_VALUE_CONST_STRING (AJJ_VALUE_SIZE+1)
 
 /* Create a single ajj_object which is NOT INITIALZIED with any type
  * under the scope object "scope" */

@@ -1,3 +1,4 @@
+#include "ajj-priv.h"
 #include "lex.h"
 #include <assert.h>
 #include <string.h>
@@ -34,7 +35,7 @@ int tk_lex_str( struct tokenizer* tk ) {
   size_t i = tk->pos+1;
   char c;
   assert(tk->src[tk->pos] == '\'' );
-  strbuf_reset( &(tk->lexme) );
+  strbuf_reset( &(tk->lexeme) );
 
   for( ; (c=tk->src[i]) ;++i ){
     if( c == '\\' ) {
@@ -52,10 +53,10 @@ int tk_lex_str( struct tokenizer* tk ) {
     } else if( '\'' ) {
       break;
     }
-    strbuf_push(&(tk->lexme),c);
+    strbuf_push(&(tk->lexeme),c);
   }
   /* include the quotes length for this token length */
-  RETURN(TK_STRING,tk->lexme.len+2);
+  RETURN(TK_STRING,tk->lexeme.len+2);
 }
 
 static inline
@@ -64,7 +65,7 @@ int tk_lex_num( struct tokenizer* tk ) {
   char c;
   char** pend;
   errno = 0;
-  tk->num_lexme = strtod(tk->pos+tk->src,&pend);
+  tk->num_lexeme = strtod(tk->pos+tk->src,&pend);
   if( errno != 0 ) {
     RETURN(TK_UNKNOWN,0);
   } else {
@@ -109,22 +110,22 @@ static
 int tk_lex_keyword( struct tokenizer* tk , int offset ) {
   size_t i;
   char c;
-  strbuf_reset(&(tk->lexme));
+  strbuf_reset(&(tk->lexeme));
 
   /* append the existed chunk of string */
   if( offset > 0 )
-    strbuf_append(&(tk->lexme),tk->src+tk->pos,offset);
+    strbuf_append(&(tk->lexeme),tk->src+tk->pos,offset);
 
   /* check reset of the string here */
   for( i = offset + tk->pos ; (c=tk->src[i]) ; ++i ) {
     if( tk_is_id_rchar(c) ) {
-      strbuf_push(&(tk->lexme),c);
+      strbuf_push(&(tk->lexeme),c);
     } else {
       break;
     }
   }
 
-  if( tk->lexme.len == 0 )
+  if( tk->lexeme.len == 0 )
     RETURN(TK_UNKNOWN,0);
   else
     RETURN(TK_VARIABLE,i-tk->pos);
@@ -350,7 +351,7 @@ int tk_lex_script( struct tokenizer* tk ) {
   char nc;
   char c;
   assert(tk->mode = TOKENIZE_SCRIPT);
-  strbuf_reset(&(tk->lexme));
+  strbuf_reset(&(tk->lexeme));
 
   do {
     c = tk->src[i];
@@ -511,7 +512,7 @@ int tk_lex_raw( struct tokenizer* tk ) {
   char c;
   assert( tk->mode = TOKENIZE_RAW );
 
-  strbuf_reset(&(tk->lexme));
+  strbuf_reset(&(tk->lexeme));
   for( ; (c = tk->src[i]) ; ++i ) {
     if( c == '{' ) {
       if( tk->src[i+1] == '%' ) {
@@ -519,14 +520,14 @@ int tk_lex_raw( struct tokenizer* tk ) {
         int offset;
         if( (offset=tk_check_endraw(tk)) >0 ) {
           /* checking if we have some data in the buffer or not */
-          if( tk->lexme.len == 0 ) {
+          if( tk->lexeme.len == 0 ) {
             /* we don't have any data, it is an empty raw/endraw.
              * so we just move the parser forward */
             tk->pos += offset;
             return tk_lex(tk);
           } else {
             tk->pos += offset;
-            RETURN(TK_TEXT,tk->lexme.len+offset);
+            RETURN(TK_TEXT,tk->lexeme.len+offset);
           }
         }
       }
@@ -534,7 +535,7 @@ int tk_lex_raw( struct tokenizer* tk ) {
     strbuf_push(c);
   }
   /* EOF meet, which is unexpected */
-  RETURN(TK_UNKNOWN,tk->lexme.len);
+  RETURN(TK_UNKNOWN,tk->lexeme.len);
 }
 
 static
@@ -543,8 +544,8 @@ int tk_lex_jinja( struct tokenizer* tk ) {
 
   assert( tk->mode == TOKENIZE_JINJA );
 
-  /* reset lexme buffer */
-  strbuf_reset( &(tk->lexme) );
+  /* reset lexeme buffer */
+  strbuf_reset( &(tk->lexeme) );
 
   do {
     char c = tk->src[i];
@@ -557,7 +558,7 @@ int tk_lex_jinja( struct tokenizer* tk ) {
               return tk->tk;
             continue;
           case '%':
-            if( tk->lexme.len > 0 ) {
+            if( tk->lexeme.len > 0 ) {
               RETURN(TK_TEXT,(i-tk->pos));
             } else {
               int offset;
@@ -573,7 +574,7 @@ int tk_lex_jinja( struct tokenizer* tk ) {
               }
             }
           case '{':
-            if( tk->lexme.len > 0 ) {
+            if( tk->lexeme.len > 0 ) {
               RETURN(TK_TEXT,(i-tk->pos));
             } else {
               RETURN(TK_LEXP,2);
@@ -593,11 +594,11 @@ int tk_lex_jinja( struct tokenizer* tk ) {
         break;
     }
     ++i;
-    strbuf_push(&(tk->lexme),c);
+    strbuf_push(&(tk->lexeme),c);
   } while(1);
 
 done:
-  if( tk->lexme.len > 0 ) {
+  if( tk->lexeme.len > 0 ) {
     RETURN(TK_TEXT,(i-tk->pos));
   } else {
     RETURN(TK_EOF,0);

@@ -10,6 +10,9 @@
 #define AJJ_FUNC_LOCAL_BUF_SIZE 16
 #define AJJ_FUNC_PAR_MAX_SIZE 16
 
+/* Indicate how many functions you could recursively call */
+#define AJJ_MAX_CALL_STACK 128
+
 struct ajj;
 struct ajj_value;
 struct ajj_object;

@@ -9,8 +9,8 @@ struct tokenizer {
   size_t tk_len; /* This represent the length of the this token's corresponding
                   * part inside of the jinja template source code */
   int mode; /* tell me which tokenize mode need to go into */
-  struct strubuf lexme; /* for lexme */
-  double num_lexme; /* only useful when the token is TK_NUMBER */
+  struct strubuf lexeme; /* for lexeme */
+  double num_lexeme; /* only useful when the token is TK_NUMBER */
 };
 
 enum {
@@ -113,13 +113,13 @@ int tk_init( struct tokenizer* tk , const char* src ) {
   tk->src = src;
   tk->pos = 0;
   tk->mode = TOKENIZE_JINJA;
-  strbuf_init(&(tk->lexme));
+  strbuf_init(&(tk->lexeme));
   return tk_lex(tk);
 }
 
 static inline
 void tk_destroy( struct tokenizer* tk ) {
-  strbuf_destroy(&(tk->lexme));
+  strbuf_destroy(&(tk->lexeme));
 }
 
 static inline

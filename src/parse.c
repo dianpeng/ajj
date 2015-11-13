@@ -1,11 +1,14 @@
-#include "ajj.h"
+#include "ajj-priv.h"
 #include "util.h"
 #include "parse.h"
+#include "lex.h"
 #include "vm.h"
 
 #include <stdlib.h>
 #include <limits.h>
 #include <string.h>
+#include <stdio.h>
+#include <stdarg.h>
 
 #define EXPECT(TK) \
   do { \
@@ -70,11 +73,33 @@ struct parser {
                 * called */
 };
 
-static inline
-void parse_init( struct parser* p , struct ajj* a );
-
 static
-void report_error( struct parser* , const struct tokenizer* , const char* , ... );
+void report_error( struct parser* p , const struct tokenizer* tk ,
+    const char* format, ... ) {
+  va_list vl;
+  int len;
+  int pos,ln;
+  size_t i;
+
+  /* get the position and line number of tokenizer */
+  pos = ln = 1;
+  for( i = 0 ; i < tk->pos && tk->src[i] ; ++i ) {
+    if( tk->src[i] == '\n' ) {
+      ++ln;pos =0;
+    } else {
+      ++pos;
+    }
+  }
+
+  /* output the prefix message */
+  len = snprintf(p->a->err,1024,"[Parser:(%d,%d)]:",pos,ln);
+  assert( len >0 && len < 1024 );
+
+  /* output the rest messge even it is truncated */
+  va_start(vl,format);
+  len = snprintf(p->a->err+len-1,
+      ERROR_BUFFER_SIZE+1-len, format,vl);
+}
 
 #define PTOP() (p->cur_scp[p->scp_tp])
 
@@ -237,12 +262,12 @@ int finish_scope_tag( struct parser* p, struct tokenizer* tk , int token  ) {
 static inline
 int symbol( struct parser* p , struct tokenizer* tk , struct string* output ) {
   assert(tk->tk == TK_VARIABLE);
-  if( tk->lexme.len >= AJJ_SYMBOL_NAME_MAX_SIZE ) {
+  if( tk->lexeme.len >= AJJ_SYMBOL_NAME_MAX_SIZE ) {
     report_error(p,tk,"Local symbol is too long ,longer than:%d",
         AJJ_SYMBOL_NAME_MAX_SIZE);
     return -1;
   } else {
-    strbuf_move(&(tk->lexme),output);
+    strbuf_move(&(tk->lexeme),output);
     return 0;
   }
 }
@@ -575,7 +600,7 @@ int parse_atomic( struct parser* p, struct emitter* em , struct tokenizer* tk ) 
     case TK_VARIABLE:
       return parse_prefix(p,em,tk);
     case TK_STRING:
-      CALLE((idx=const_str(p,em->prg,strbuf_move(&(tk->lexme)),1))<0);
+      CALLE((idx=const_str(p,em->prg,strbuf_move(&(tk->lexeme)),1))<0);
       emit1(em,VM_LSTR,idx);
       break;
     case TK_TRUE:
@@ -588,7 +613,7 @@ int parse_atomic( struct parser* p, struct emitter* em , struct tokenizer* tk ) 
       emit0(em,VM_LNONE);
       break;
     case TK_NUMBER:
-      CALLE((idx=const_num(p,em->prg,tk->num_lexme))<0);
+      CALLE((idx=const_num(p,em->prg,tk->num_lexeme))<0);
       emit1(em,VM_LNUM,idx);
       break;
     case TK_LPAR:
@@ -873,7 +898,7 @@ parse_constexpr( struct parser* p , struct tokenizer* tk ,
 
   switch(tk->tk) {
     case TK_NUMBER:
-      *output = ajj_value_number( neg ? -tk->num_lexme : tk->num_lexme);
+      *output = ajj_value_number( neg ? -tk->num_lexeme : tk->num_lexeme);
       return 0;
     case TK_STRING:
       if( neg ) {
@@ -883,7 +908,7 @@ parse_constexpr( struct parser* p , struct tokenizer* tk ,
       } else {
         *output = ajj_value_assign(
             ajj_object_create_string(p->a,gc_root(p->a),
-              tk->lexme.str,tk->lexme.len,0));
+              tk->lexeme.str,tk->lexeme.len,0));
         return 0;
       }
     case TK_NONE:
@@ -1361,12 +1386,12 @@ int parse_for( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
    * key,_
    * So at most 2 symbols can be provided here */
   EXPECT(TK_VARIABLE);
-  strbuf_move(&(tk->lexme),&key);
+  strbuf_move(&(tk->lexeme),&key);
   tk_move(tk);
   if( tk->tk == TK_COMMA ) {
     tk_move(tk);
     EXPECT(TK_VARIABLE);
-    strbuf_move(&(tk->lexme),&val);
+    strbuf_move(&(tk->lexeme),&val);
     tk_move(tk);
   } else {
     val = key;
@@ -1416,7 +1441,7 @@ parse_call( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
   CONSUME(TK_RSTMT);
   EXPECT(TK_TEXT);
   /* Get text index in string pool */
-  strbuf_move(&(tk->lexme),&text);
+  strbuf_move(&(tk->lexeme),&text);
   tk_move(tk);
   CALLE((text_idx=const_str(p,em->prg,&text,1))<0);
   /* Get caller index in string pool */
@@ -1453,7 +1478,7 @@ parse_filter( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
     CALLE(parse_pipecmd(p,em,tk,&name));
   }
   CONSUME(TK_RSTMT);
-  strbuf_move(&(tk->lexme),&text);
+  strbuf_move(&(tk->lexeme),&text);
   CALLE((text_idx=const_str(p,em->prg,&text,1))<0);
   emit1_at(em,vm_lstr,VM_LSTR,text_idx);
   CALLE(finish_scope_tag(p,tk,TK_ENDFILTER));
@@ -1482,7 +1507,7 @@ int parse_set( struct parser* p, struct emitter* em , struct tokenizer* tk ) {
   tk_move(tk);
 
   EXPECT(TK_VARIABLE);
-  CALLE((var_idx=lex_scope_set(p,strbuf_tostring(tk->lexme)))==-2);
+  CALLE((var_idx=lex_scope_set(p,strbuf_tostring(tk->lexeme)))==-2);
   tk_move(tk); /* Move forward */
 
   /* check if we have an pending expression or just end of the SET scope*/
@@ -1491,7 +1516,7 @@ int parse_set( struct parser* p, struct emitter* em , struct tokenizer* tk ) {
     /* end of the set scope , so it is a scop based set */
     tk_move(tk);
     EXPECT(TK_TEXT);
-    CALLE((txt_idx=const_str(p,em->prg,strbuf_move(&(tk->lexme)),1))<0);
+    CALLE((txt_idx=const_str(p,em->prg,strbuf_move(&(tk->lexeme)),1))<0);
     tk_move(tk);
     /* load the text on to stack */
     emit1(em,VM_LSTR,txt_idx);
@@ -1540,12 +1565,12 @@ parse_move( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
 
   EXPECT(TK_VARIABLE); /* dest variable */
   CALLE((dst_idx=lex_scope_get(p,
-          strbuf_tostring(&(tk->lexme)).str))<0);
+          strbuf_tostring(&(tk->lexeme)).str))<0);
   tk_move(tk);
 
   EXPECT(TK_VARIABLE); /* target variable */
   CALLE((src_idx=lex_scope_get(p,
-          strbuf_tostring(&(tk->lexme)).str))<0);
+          strbuf_tostring(&(tk->lexeme)).str))<0);
   tk_move(tk);
 
   EXEPCT(TK_RSTMT);
@@ -1561,7 +1586,7 @@ parse_upvalue( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
   assert( tk->tk == TK_UPVALUE );
   tk_move(tk);
   EXPECT(TK_VARIABLE);
-  CALLE((var_idx=const_str(p,em->prg,strbuf_move(&(tk->lexme)),1))<0);
+  CALLE((var_idx=const_str(p,em->prg,strbuf_move(&(tk->lexeme)),1))<0);
   tk_move(tk);
   CALLE(parse_expr(p,em,tk));
   emit1(em,VM_UPVALUE_SET,var_idx);
@@ -1672,7 +1697,7 @@ parse_include_body( struct parser* p , struct emitter* em ,
       int var_idx;
       int opt = INCLUDE_UPVALUE_OVERRIDE;
       tk_move(tk);
-      CALLE((var_idx=const_str(p,em->prg,strbuf_move(&(tk->lexme)),1))<0);
+      CALLE((var_idx=const_str(p,em->prg,strbuf_move(&(tk->lexeme)),1))<0);
       CALLE(parse_expr(p,em,tk));
       /* parsing the options for this upvalue */
       if( tk->tk == TK_FIX ) {
@@ -1862,7 +1887,7 @@ parse_loop_scope( struct parser* p , struct emitter* em , struct tokenizer* tk )
       struct string text;
       int text_id;
       /* emit code for displaying this chunk of text */
-      text = strbuf_move(&(tk->lexme));
+      text = strbuf_move(&(tk->lexeme));
       CALLE((text_id=const_str(p,em->prg,text,1))<0);
       emit1(em,VM_LSTR,text_id);
       emit0(em,VM_PRINT);
@@ -1951,7 +1976,7 @@ parse_branch_scope( struct parser* p , struct emitter* em , struct tokenizer* tk
       struct string text;
       int text_id;
       /* emit code for displaying this chunk of text */
-      text = strbuf_move(&(tk->lexme));
+      text = strbuf_move(&(tk->lexeme));
       CALLE((text_id=const_str(p,em->prg,text,1))<0);
       emit1(em,VM_LSTR,text_id);
       emit0(em,VM_PRINT);
@@ -2039,7 +2064,7 @@ parse_scope( struct parser* p , struct emitter* em ,
     if( tk->tk == TK_TEXT ) {
       struct string text;
       int text_id;
-      text = strbuf_move(&(tk->lexme));
+      text = strbuf_move(&(tk->lexeme));
       CALLE((text_id == const_str(p,em->prg,text,1))<0);
       emit1(em,VM_LSTR,text_id);
       emit0(em,VM_PRINT);

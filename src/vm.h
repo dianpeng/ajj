@@ -1,7 +1,7 @@
 #ifndef _VM_H_
 #define _VM_H_
-#include "util.h"
 #include "ajj.h"
+#include "util.h"
 
 struct ajj;
 struct ajj_object;
@@ -133,6 +133,11 @@ struct calling_stack {
   size_t cur_stk; /* Current stk position */
 };
 
+struct runtime {
+  struct calling_stack call_stk; /* calling stack */
+  struct ajj_object* cur_tmpl;   /* current jinja template */
+  struct ajj_value val_stk[AJJ_MAX_VALUE_STACK_SIZE]; /* current value stack size */
+};
 
 static inline
 void program_init( struct program* prg ) {
@@ -292,6 +297,9 @@ int emitter_label( struct emitter* em ) {
   return (int)(em->prg->len);
 }
 
+/* =============================================
+ * Interfaces
+ * ===========================================*/
 
 int vm_run_func( struct ajj* ,
     struct ajj_object* tp,
