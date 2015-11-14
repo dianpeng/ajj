@@ -12,6 +12,7 @@
 
 /* Indicate how many functions you could recursively call */
 #define AJJ_MAX_CALL_STACK 128
+#define AJJ_MAX_VALUE_STACK_SIZE 1024
 
 struct ajj;
 struct ajj_value;

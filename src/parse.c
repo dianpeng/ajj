@@ -1549,6 +1549,7 @@ parse_do( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
   assert( tk->tk == TK_DO );
   tk_move(tk);
   CALLE(parse_expr(p,em,tk));
+  emit1(em,VM_POP,1);
   CONSUME(TK_RSTMT);
   return 0;
 }

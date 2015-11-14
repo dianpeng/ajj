@@ -2,7 +2,7 @@
 
 /*
  * Dictionary implementation
- * Our dictionary supports traditional : insert , find and remove. The general
+ * Our mapionary supports traditional : insert , find and remove. The general
  * implementation for this is using a chain resolution hash table. Recently I
  * saw Hotspot VM uses such way , for cache coherence , they uses an dynamic
  * array instead of a linked list to solve the collision. We gonna use the method
@@ -12,7 +12,7 @@
  */
 
 static
-unsigned int dict_hash( const struct string* key ) {
+unsigned int map_hash( const struct string* key ) {
   /* This hash function implementation is taken from LUA */
   size_t i;
   const size_t sz = key->len;
@@ -26,10 +26,10 @@ unsigned int dict_hash( const struct string* key ) {
 /* Insert a key into the hash table and return a slot entry to the caller.
  * This entry may be already in used ( return an existed one ) or a new one */
 static
-struct dict_entry* dict_insert_entry_c( struct dict* d ,
+struct map_entry* map_insert_entry_c( struct map* d ,
     const char* key , unsigned int fullhash , int insert ) {
   unsigned int idx = fullhash & (d->cap-1);
-  struct dict_entry* e;
+  struct map_entry* e;
   e = d->entry + idx;
 
   assert(d->len < d->cap);
@@ -37,8 +37,8 @@ struct dict_entry* dict_insert_entry_c( struct dict* d ,
   if( e->empty ) {
     return e;
   } else {
-    struct dict_entry* ret = e->del ? e : NULL;
-    struct dict_entry* ne = e;
+    struct map_entry* ret = e->del ? e : NULL;
+    struct map_entry* ne = e;
     /* Looking froward through the collision chain */
     do {
       if( ne->del ) {
@@ -75,11 +75,25 @@ struct dict_entry* dict_insert_entry_c( struct dict* d ,
   }
 }
 
+#define MAP_VALUE(D,E) (((char*)((D)->value)) + ((E)-((D)->entry))*(D)->obj_sz)
+
+static inline
+void map_value_store( struct map* d, struct map_entry* e , void* val ) {
+  void* pos = MAP_VALUE(d,e);
+  memcpy(pos,val,d->obj_sz);
+}
+
+static inline
+void map_value_load( struct map* d , struct map_entry* e , void* val ) {
+  void* pos = MAP_VALUE(d,e);
+  memcpy(val,pos,d->obj_sz);
+}
+
 static
-struct dict_entry* dict_insert_entry(struct dict* d,
+struct map_entry* map_insert_entry(struct map* d,
     const struct string* key,
     unsigned int fullhash, int insert ) {
-  return dict_insert_entry_c(d,
+  return map_insert_entry_c(d,
       key->str,
       fullhash,
       insert);
@@ -87,51 +101,55 @@ struct dict_entry* dict_insert_entry(struct dict* d,
 
 /* rehashing */
 static
-void dict_rehash( struct dict* d ) {
+void map_rehash( struct map* d ) {
   size_t new_cap = d->cap * 2; /* make sure power of 2 */
-  void* new_buf = calloc(new_cap,sizeof(struct dict_entry));
-  struct dict temp_d;
+  void* new_buf = calloc(new_cap, sizeof(struct map_entry) + d->obj_sz);
+  struct map temp_d;
   int i;
 
   temp_d.entry = new_buf;
   temp_d.cap = new_cap;
   temp_d.len = 0;
+  temp_d.value = (char*)(new_buf) + sizeof(struct map_entry)*new_cap;
 
   for( i = 0 ; i < d->cap ; ++i ) {
-    struct dict_entry* o = d->entry + i;
-    struct dict_entry* e;
+    struct map_entry* o = d->entry + i;
+    struct map_entry* e;
     if( o->del || o->empty )
       continue;
-    e = dict_insert_entry(d,o->key,o->hash,1);
+    e = map_insert_entry(&temp_d,o->key,o->hash,1);
     e->key = o->key;
-    e->value= o->value;
     e->hash = o->hash;
+    map_value_store(&temp_d,e,MAP_VALUE(d,o));
     if(e->del) e->del = 0;
     if(e->empty) {
       e->empty = 1;
       e->end = 1;
     }
   }
-  if(d->entry != d->lbuf)
+
+  /* free old memory if we have to */
+  if(d->entry)
     free(d->entry);
+
   temp_d.len = d->len;
   *d = temp_d;
 }
 
 
-int dict_insert( struct dict* d, const struct string* key , int own ,
-    const struct ajj_value* val ) {
+int map_insert( struct map* d, const struct string* key , int own ,
+    const void* val ) {
   int fh;
-  struct dict_entry* e;
+  struct map_entry* e;
 
   if( d->len == DICT_MAX_SIZE )
     return -1;
 
   if( d->cap == d->len )
-    dict_rehash(d);
+    map_rehash(d);
 
-  fh = dict_hash(key);
-  e = dict_insert_entry(d,key,fh,1);
+  fh = map_hash(key);
+  e = map_insert_entry(d,key,fh,1);
   e->key = own ? *key : string_dup(key);
   if( e->del ) e->del = 0;
   if( e->empty ) {
@@ -140,22 +158,23 @@ int dict_insert( struct dict* d, const struct string* key , int own ,
   }
   ++d->len;
   e->hash = fh;
-  e->value = *val;
+  map_value_store(d,e,val);
   return 0;
 }
 
-int dict_insert_c( struct dict* , const char* key , const struct ajj_value* val ) {
+int map_insert_c( struct map* , const char* key ,
+    const void* val ) {
   int fh;
-  struct dict_entry* e;
+  struct map_entry* e;
 
   if( d->len == DICT_MAX_SIZE )
     return -1;
 
   if( d->cap == d->len )
-    dict_rehash(d);
+    map_rehash(d);
 
-  fh = dict_hash(key);
-  e = dict_insert_entry_c(d,key,fh,1);
+  fh = map_hash(key);
+  e = map_insert_entry_c(d,key,fh,1);
   e->key = string_dupc(key);
   if( e->del ) e->del = 0;
   if( e->empty ) {
@@ -164,12 +183,12 @@ int dict_insert_c( struct dict* , const char* key , const struct ajj_value* val 
   }
   ++d->len;
   e->hash = fh;
-  e->value = *val;
+  map_value_store(d,e,val);
   return 0;
 }
 
-int dict_remove( struct dict* d , const struct string* key , struct ajj_value* output ) {
-  struct dict_entry* e = dict_insert_entry(d,key,dict_hash(key),0);
+int map_remove( struct map* d , const struct string* key , void* output ) {
+  struct map_entry* e = map_insert_entry(d,key,map_hash(key),0);
   if( e == NULL )
     return -1;
   else {
@@ -179,15 +198,15 @@ int dict_remove( struct dict* d , const struct string* key , struct ajj_value* o
     /* destroy the key */
     string_destroy(&(e->key));
     if( output )
-      *output = e->value;
+      map_value_load(d,e,output);
     e->del = 1;
     --d->cap;
     return 0;
   }
 }
 
-int dict_remove_c( struct dict* d , const char* key , struct ajj_value* output ) {
-  struct dict_entry* e = dict_insert_entry_c(d,key,dict_hash(key),0);
+int map_remove_c( struct map* d , const char* key , void* output ) {
+  struct map_entry* e = map_insert_entry_c(d,key,map_hash(key),0);
   if( e == NULL )
     return -1;
   else {
@@ -197,88 +216,88 @@ int dict_remove_c( struct dict* d , const char* key , struct ajj_value* output )
     /* destroy string */
     string_destroy(&(e->key));
     if( output )
-      *output = e->value;
+      map_value_load(d,e,output);
     e->del = 1;
     --d->cap;
     return 0;
   }
 }
 
-struct ajj_value* dict_find( struct dict* d , const struct string* key ) {
-  struct dict_entry* e;
-  return (e=dict_insert_entry(d,key,dict_hash(key),0)) ? &(e->value) : NULL;
+void* map_find( struct map* d , const struct string* key ) {
+  struct map_entry* e = map_insert_entry(d,key,map_hash(key),0);
+  if( e ) {
+    return MAP_VALUE(d,e);
+  } else {
+    return NULL;
+  }
 }
 
-struct ajj_value* dict_find_c( struct dict* d , const char* key ) {
-  struct dict_entry* e;
-  return (e=dict_insert_entry_c(d,key,dict_hash(key),0)) ? &(e->value) : NULL;
+void* map_find_c( struct map* d , const char* key ) {
+  struct map_entry* e = map_insert_entry_c(d,key,map_hash(key),0);
+  if( e ) {
+    return MAP_VALUE(d,e);
+  } else {
+    return NULL;
+  }
 }
 
-void dict_clear( struct dict* d ) {
+void map_create( struct map* d , size_t obj_sz , size_t cap ) {
+  assert( cap >= 2 && (cap&(cap-1)) );
+  assert( obj_sz > 0 );
+  d->obj_sz = obj_sz;
+  d->cap = cap;
+  d->len = 0;
+  d->entry = calloc(cap,sizeof(struct map_entry)+obj_sz);
+  d->value = ((char*)(d->entry)) + cap*sizeof(struct map_entry);
+}
+
+void map_destroy( struct map* d ) {
   int i;
-  /* We need to traversal through the dictionary to release all the key
+  /* We need to traversal through the mapionary to release all the key
    * since they all are on the heap */
   for( i = 0 ; i < d->cap ; ++i ) {
-    struct dict_entry* e = d->entry + i;
+    struct map_entry* e = d->entry + i;
     if( !e->empty && !e->del ) {
       string_destroy(&(e->key));
     }
   }
-  if( d->cap > DICT_LOCAL_BUF_SIZE ) {
-    free(d->entry);
+  free(d->entry);
+  d->entry = d->value = NULL;
+  d->cap = d->len = 0;
+}
+
+void map_clear( struct map* d ) {
+  int i;
+  for( i = 0 ; i < d->cap ; ++i ) {
+    struct map_entry* e = d->entry + i;
+    if( !e->empty ) {
+      if( !e->del ) {
+        string_destroy(&(d->value));
+      }
+      memset(e,0,sizeof(*e));
+    }
   }
-  d->cap = DICT_LOCAL_BUF_SIZE;
   d->len = 0;
 }
 
-int dict_iter_start( const struct dict* d ) {
+int map_iter_start( const struct map* d ) {
   int ret = 0;
   for( ; ret < d->cap ; ++ret ) {
-    struct dict_entry* e = d->entry + ret;
+    struct map_entry* e = d->entry + ret;
     if( !e->empty && !e->del )
       return ret;
   }
   return ret;
 }
 
-int dict_iter_move( const struct dict* d , int itr ) {
+int map_iter_move( const struct map* d , int itr ) {
   for( ++itr ; itr < d->cap ; ++itr ) {
-    struct dict_entry* e = d->entry + itr;
+    struct map_entry* e = d->entry + itr;
     if( !e->empty && !e->del )
       return itr;
   }
 }
 
-/* ========================
- * List implementation
- * ======================*/
-
-static
-void list_reserve( struct list* l ) {
-  void* mem;
-  assert( l->cap >= LIST_LOCAL_BUF_SIZE );
-  mem = malloc(sizeof(struct ajj_value)*2*l->cap);
-  memcpy(mem,l->entry,l->len*sizeof(struct ajj_value));
-  if( l->lbuf != l->entry )
-    free(l->entry);
-  l->entry = mem;
-  l->cap *= 2;
-}
-
-void list_push( struct list* l , const struct ajj_value* val ) {
-  if( l->cap == l->len )
-    list_reserve(l);
-  l->entry[l->len] = *val;
-  ++(l->len);
-}
-
-void list_destroy( struct list* l ) {
-  if( l->lbuf != l->entry )
-    free(l->entry);
-  l->cap = LIST_LOCAL_BUF_SIZE;
-  l->entry = l->lbuf;
-  l->len = 0;
-}
 
 /* =====================
  * Slab implementation

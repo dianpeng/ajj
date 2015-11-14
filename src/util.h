@@ -1,11 +1,10 @@
 #ifndef _UTIL_H_
 #define _UTIL_H_
+
 #include <string.h>
 #include <stddef.h>
 #include <assert.h>
-
-/* Forward =================================== */
-struct ajj_value;
+#include <stdlib.h>
 
 #ifndef UNREACHABLE
 #define UNREACHABLE() assert(!"UNREACHABLE!")
@@ -16,9 +15,6 @@ struct ajj_value;
 #endif /* UNUSE_ARG */
 
 #define STRBUF_MOVE_THRESHOLD 1024
-
-#define DICT_LOCAL_BUF_SIZE 4
-#define LIST_LOCAL_BUF_SIZE 4
 
 #define STRING_HASH_SEED 1771
 #define DICT_MAX_SIZE (1<<29)
@@ -211,11 +207,10 @@ struct string strbuf_tostring( struct strbuf* buf ) {
 
 
 /* ===========================================
- * Dictionary
+ * Map
  * =========================================*/
 
-struct dict_entry {
-  struct ajj_value value;
+struct map_entry {
   struct string key;
   unsigned int hash; /* fullhash for this key */
   unsigned int next : 29; /* next resolved collision */
@@ -229,95 +224,52 @@ struct dict_entry {
                            * used */
 };
 
-struct dict {
-  struct dict_entry lbuf[DICT_LOCAL_BUF_SIZE];
-  struct dict_entry* entry;
+struct map {
+  struct map_entry* entry;
+  void* value;
+
   size_t cap;
   size_t len;
+  size_t obj_sz;
 };
 
-static inline void dict_create( struct dict* d ) {
-  d->cap = DICT_LOCAL_BUF_SIZE;
-  d->entry = d->lbuf;
-  d->len = 0;
-}
+struct map_pair {
+  const struct string* key;
+  const void* val;
+};
 
-static inline void dict_destroy(struct dict* d) {
-  dict_clear(d);
-}
+void map_create( struct map* d , size_t obj_sz ,
+    size_t cap );
+
+void map_destroy(struct map* d);
 
 /* XXX_c APIs are used to help dealing with the public interfaces ,since public
  * interfaces are not using struct string objects */
-int dict_insert( struct dict* , const struct string* , int own ,
-    const struct ajj_value* val );
-int dict_insert_c( struct dict* , const char* key , const struct ajj_value* val );
-int dict_remove( struct dict* , const struct string* , struct ajj_value* output );
-int dict_remove_c( struct dict* , const char* key , const struct ajj_value* val );
-struct ajj_value* dict_find  ( struct dict* , const struct string* );
-struct ajj_value* dict_find_c( struct dict* , const char* key );
-void dict_clear( struct dict* );
-#define dict_size(d) ((d)->len)
+int map_insert( struct map* , const struct string* , int own , const void* val );
+int map_insert_c( struct map* , const char* key , const void* val );
+int map_remove( struct map* , const struct string* , void* val );
+int map_remove_c( struct map* , const char* key , void* val );
+const void* map_find  ( struct map* , const struct string* );
+const void* map_find_c( struct map* , const char* key );
+void map_clear( struct map* );
+#define map_size(d) ((d)->len)
 
-/* iterator for dictionary */
-int dict_iter_start( const struct dict* );
+/* iterator for mapionary */
+int map_iter_start( const struct map* );
 static inline
-int dict_iter_has  ( const struct dict* d, int itr ) {
+int map_iter_has  ( const struct map* d, int itr ) {
   return itr < d->cap;
 }
-int dict_iter_move ( const struct dict* , int itr );
+int map_iter_move ( const struct map* , int itr );
 
 static inline
-struct ajj_value* dict_iter_deref( struct dict* , int itr ) {
-  struct dict_entry* e = d->entry + itr;
+struct map_pair map_iter_deref( struct map* d, int itr ) {
+  struct map_entry* e = d->entry + itr;
+  struct map_pair ret;
   assert( !e->empty && !e->del );
-  return &(e->value);
-}
-
-/* ======================================
- * List
- * ====================================*/
-
-struct list {
-  struct ajj_value lbuf[LIST_LOCAL_BUF_SIZE];
-  struct ajj_value* entry;
-  size_t cap;
-  size_t len;
-};
-
-static inline
-void list_create( struct list* l ) {
-  l->entry = l->lbuf;
-  l->cap = LIST_LOCAL_BUF_SIZE;
-  l->len = 0;
-}
-
-void list_destroy(struct list* );
-void list_push( struct list* , const struct ajj_value* val );
-#define list_size(l) ((l)->len)
-static inline
-const struct ajj_value*
-list_index( struct list* l , size_t i ) {
-  assert(i < l->len);
-  return l->entry[i];
-}
-void list_clear();
-
-/* iterator for list */
-static inline
-int list_iter_begin( const struct list* ) {
-  return 0;
-}
-static inline
-int list_iter_has( const struct list* l , int itr ) {
-  return itr < l->len;
-}
-static inline
-int list_iter_move( const struct list* l , int itr ) {
-  return itr+1;
-}
-static inline
-void* list_iter_deref( const struct list* l , int itr ) {
-  return list_index(l,itr);
+  ret.key = &(e->key);
+  ret.val = ((char*)(d->value)) + (d->obj_sz*(e-(d->entry)));
+  return ret;
 }
 
 /* ========================================

@@ -22,6 +22,109 @@ struct func_table;
 #define INCLUDE_UPVALUE_FIX 0
 #define INCLUDE_UPVALUE_OVERRIDE 1
 
+/* Instructions documentation =====================================================
+ * We will use a stack based VM to do evaluations. It means for our VM, we have a
+ * value stack that is used to store temporary evaluating value and also the local
+ * variables. For each execution frame (function frame), we have 2 registers, one is
+ * EBP points to the start/bottom of the stack ; and the other is the ESP points to
+ * the end/top of the stack. Additionally , a frame also has a PC register points to
+ * the code points.
+ * The execution is based on function/frame, each function has its own code page, it
+ * means each function's code doesn't resides on a single memory page.
+ * In VM, we have 2 types of addressing mode, and all corresponding instructions will
+ * have B or T prefix. B stands from bottom ; and T stands from top.
+ *
+ * Following will describe each instructions meannig, the format is as follow :
+ * instr(par-num) , which stands for , to instruction "instr" , it has "par-num" para
+ * -meters per call. Assume EBP points to the end of value stack ; and ESP points to
+ *  the start of value stack. B[X] = EBP+X ; T[X] = ESP-X
+ *
+ * 1. add(0) : add and pop top 2 values, push the result back to stack.
+ * 2. sub(0) : sub and pop top 2 values, push the result back to stack.
+ * 3. div(0) : div and pop top 2 values, push the result back to stack.
+ * 4. mul(0) : mul and pop top 2 values, push the result back to stack.
+ * 5. pow(0) : pow and pop top 2 values, push the result back to stack.
+ * 6. eq (0) : check equal and pop top 2 values, push result back to stack
+ * 7. ne (0) : check not equal and pop top 2 values, push result back to stack
+ * 8. lt (0) : check less equal and pop top 2 values, push result back to stack
+ * 9. le (0) : check less or equal and pop top 2 values, push result back to stack
+ *10. gt (0) : check greater than and pop top 2 values, push result back to stack
+ *11. ge (0) : check greater than and pop top 2 values, push result back to stack
+ *12. and(0) : check both true and pop top 2 values, push result back to stack
+ *13. or (0) : check one of truen and pop top 2 values, push result back to stack
+ *14. neg(0) : negate and pop top 1 values, push result back to stack.
+ *15. divtruct(0): div truncate and pop top 2 values,push result back to stack.
+ *16. tenary(0): do tenary op and pop top 3 values, push result back to stack.
+ *17. call(2): @1: function name index ; @2: function parameter count ;
+               call a function. Pop all the function calling frame out of stack push result on
+ *18. ret (0): return from a function call.
+ *19. print(0): print and pop top value.
+ *20. pop (1): @1 number of values . Pop top @1 values out.
+ *21. tpush(1): @1 address of value on stack (index).
+                push the value on T[@1] at the top of stack.
+ *22. tswap(2): @1 address of left operand, @2 address of right operand.
+                swap 2 values T[@1],T[@2]
+ *23. bpush(1): @1 address of value on stack(index).
+                push the value on B[@1]
+ *24. bswap(2): @1 address of left operand ; @2 right operand
+                swap 2 values B[@1],B[@2]
+ *25. bt_move(2): @1 address of left operand ; @2 right operand
+                move T[@2] to B[@1].
+ *26. bb_move(2): @1 address of left operand ; @2 right operand
+                move B[@2] to B[@1].
+ *27. tb_move(2): @1 address of left operand ; @2 right operand
+                move B[@2] to T[@1].
+ *28. tt_move(2): @1 address of left operand ; @2 right operand
+                move T[@2] to T[@2].
+ *29. lstr(1): @1 index in constant string table.
+                load the string onto the stack
+ *30. ltrue(0): load trun onto the stack
+ *31. lfalse(0):load false onto the stack
+ *32. lnum(1) : @1 index in constant number table.
+                load the number onto the stack
+ *33. lzero(0): load zero onto stack.
+ *34. lnone(0): load none onto stack.
+ *35. limm(1) : @1 number(integer).
+                load this immdieate number onto stack.
+ *36. llist(0): load an empty list onto stack.
+ *37. ldict(0): load an empty dict onto stack.
+ *38. attrset(0): T[3]: objects ; T[2]: key ; T[1]: value.
+                push "key" and "value" pair into "object" and pop "key" and "value"
+ *39. attrpush(0): T[2]: list ; T[1]: value.
+                push "value" into "list" and pop "value".
+ *40. attrget(0): T[2]:object ; T[1]:key.
+                get value from "object" with "key" onto stack and pop "object" AND "key".
+ *41. attrcall(2): @1 function name index ; @2 function parameters count T.
+                  T[@2+1]: object
+                  call a function with name @1 and has function parameter @2 on "object",
+                  and push the result on stack and pop calling frame out.
+ *42. upvalueset(1): @1 upvalue name.
+                    set upvalue with name @1 with value on T[1] and pop T[1].
+ *43. upvalueget(1): @1 upvalue name.
+                    get upvalue with name @1 onto stack.
+ *44. upvaluedel(1): @1 upvalue name.
+                    del upvalue with name @1
+ *45. loop(1): @1 name of the loop closure
+                basic loop calling , after looping, it will pop the top 1 out of stack.
+ *46. looprec(1): @1 name of the loop closure
+                recursively loop calling, after looping it will pop the top 1 out of stack.
+ *47. jmp(1): @1 PC position.
+                jump to @1
+ *48. jt (1): @1 PC position.
+                jump to @1 only when the top of stack is evaluated to true. Pop T[1].
+ *49. jept(1): @1 PC position.
+                jump to @1 only when T[1] is empty. Pop T[1].
+ *50. enter(0): Enter a GC scope.
+ *51. exit(0) : Exit a GC scope.
+ *52. include(2): @1 include type @2 optional variable.
+                @1 could be 0 (NONE) , 1(UPVALUE) and 2(JSON).
+                @2 is the function parameter if we have.
+                After include/rendering the template on to stack, pop all the related value.
+ *53. import(2): ----
+ *54. import_symbol:
+ *55. extends
+ */
+
 #define VM_INSTRUCTIONS(X) \
   X(VM_ADD,"add") \
   X(VM_SUB,"sub") \
@@ -47,10 +150,8 @@ struct func_table;
   X(VM_POP,"pop") \
   X(VM_TPUSH,"tpush") \
   X(VM_TSWAP,"tswap") \
-  X(VM_TLOAD,"tload") \
   X(VM_BPUSH,"bpush") \
   X(VM_BSWAP,"bswap") \
-  X(VM_BLOAD,"bload") \
   X(VM_BT_MOVE,"bt_move") \
   X(VM_BB_MOVE,"bb_move") \
   X(VM_TB_MOVE,"tb_move") \
@@ -78,7 +179,6 @@ struct func_table;
   X(VM_JEPT,"jept") \
   X(VM_ENTER,"enter") \
   X(VM_EXIT,"exit") \
-  X(VM_PIPE,"pipe") \
   X(VM_INCLUDE,"include") \
   X(VM_IMPORT,"import") \
   X(VM_IMPORT_SYMBOL,"importsymbol") \
@@ -125,18 +225,16 @@ struct func_frame {
   int ebp; /* EBP register */
   int esp; /* ESP register */
   int pc ; /* Program counter register */
+  int par_cnt; /* Function parameters count */
   const char* name; /* Pointer to function name */
 };
 
-struct calling_stack {
-  struct func_frame stk[ AJJ_MAX_CALL_STACK ];
-  size_t cur_stk; /* Current stk position */
-};
-
 struct runtime {
-  struct calling_stack call_stk; /* calling stack */
   struct ajj_object* cur_tmpl;   /* current jinja template */
+  struct func_frame call_stk[ AJJ_MAX_CALL_STACK ];
+  size_t cur_call_stk; /* Current stk position */
   struct ajj_value val_stk[AJJ_MAX_VALUE_STACK_SIZE]; /* current value stack size */
+  size_t cur_val_stk;
 };
 
 static inline
@@ -300,6 +398,9 @@ int emitter_label( struct emitter* em ) {
 /* =============================================
  * Interfaces
  * ===========================================*/
+
+#define VM_ERROR_NOT_VALID_ENTRY -1
+#define VM_ERROR_NO_SUCH_FUNCTION -2
 
 int vm_run_func( struct ajj* ,
     struct ajj_object* tp,

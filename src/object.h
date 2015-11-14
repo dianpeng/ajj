@@ -2,10 +2,18 @@
 #define _OBJECT_H_
 #include "ajj.h"
 #include "util.h"
-#include "ajj-priv.h"
 
 struct gc_scope;
 struct ajj;
+
+/* Internally we separete a const string or a heap based string by
+ * using this tag. Since if it is a AJJ_VALUE_CONST_STRING, then we
+ * will never need to release the string memory */
+#define AJJ_VALUE_CONST_STRING (AJJ_VALUE_SIZE+1)
+
+#define LIST_LOCAL_BUF_SIZE 4
+#define DICT_DEFAULT_BUF_SIZE 4
+#define GVAR_DEFAULT_BUF_SIZE 32
 
 struct c_closure {
   void* udata; /* user data */
@@ -22,7 +30,8 @@ enum {
   C_FUNCTION,
   C_METHOD,
   JJ_BLOCK,
-  JJ_MACRO
+  JJ_MACRO,
+  JJ_MAIN
 };
 
 struct function {
@@ -34,6 +43,14 @@ struct function {
   struct string name;
   int tp;
 };
+
+#define IS_CFUNCTION(f) ((f)->tp == C_FUNCTION)
+#define IS_CMETHOD(f) ((f)->tp == C_METHOD)
+#define IS_JJBLOCK(f) ((f)->tp == JJ_BLOCK)
+#define IS_JJMACRO(f) ((f)->tp == JJ_MACRO)
+#define IS_JJMAIN(f) ((f)->tp == JJ_MAIN)
+#define IS_JINJA(f) ((f)->tp == JJ_BLOCK || (f)->tp == JJ_MACRO || (f)->tp == JJ_MAIN)
+#define IS_C(f) (!IS_JINJA(f))
 
 struct func_table {
   struct function func_buf[ AJJ_FUNC_LOCAL_BUF_SIZE ];
@@ -54,6 +71,136 @@ struct object {
   void* data; /* object's data */
 };
 
+
+/* ======================================
+ * List
+ * ====================================*/
+
+struct list {
+  struct ajj_value lbuf[LIST_LOCAL_BUF_SIZE];
+  struct ajj_value* entry;
+  size_t cap;
+  size_t len;
+};
+
+static inline
+void list_create( struct list* l ) {
+  l->entry = l->lbuf;
+  l->cap = LIST_LOCAL_BUF_SIZE;
+  l->len = 0;
+}
+
+void list_destroy(struct list* );
+void list_push( struct list* , const struct ajj_value* val );
+static inline
+size_t list_size( struct list* l ) {
+  return l->len;
+}
+static inline
+const struct ajj_value*
+list_index( struct list* l , size_t i ) {
+  assert(i < l->len);
+  return l->entry[i];
+}
+void list_clear();
+
+/* iterator for list */
+static inline
+int list_iter_begin( const struct list* ) {
+  return 0;
+}
+static inline
+int list_iter_has( const struct list* l , int itr ) {
+  return itr < l->len;
+}
+static inline
+int list_iter_move( const struct list* l , int itr ) {
+  return itr+1;
+}
+static inline
+void* list_iter_deref( const struct list* l , int itr ) {
+  return list_index(l,itr);
+}
+
+/* =====================================
+ * Dict
+ * just wrapper around map structure
+ * ===================================*/
+static inline
+void dict_create( struct map* d ) {
+  map_create(d,sizeof(struct ajj_value),DICT_DEFAULT_BUF_SIZE);
+}
+
+static inline
+void dict_clear( struct map* d ) {
+  map_clear(d);
+}
+
+static inline
+void dict_destroy( struct map* d ) {
+  map_destroy(d);
+}
+
+static inline
+int dict_insert( struct map* d , const struct string* k,
+    int own, const struct ajj_value* val ) {
+  return dict_insert(d,k,own,val);
+}
+
+static inline
+int dict_insert_c( struct map* d , const char* k,
+    const struct ajj_value* val ) {
+  return dict_insert_c(d,k,val);
+}
+
+static inline
+int dict_remove( struct map* d , const struct string* k,
+    void* val ) {
+  return dict_remove(d,k,val);
+}
+
+static inline
+int dict_remove_c( struct map* d , const char* k, void* val ) {
+  return dict_remove(d,k,val);
+}
+
+static inline
+const struct ajj_value*
+dict_find( struct map* d , const struct string* k ) {
+  return map_find(d,k);
+}
+
+static inline
+const struct ajj_value*
+dict_find_c( struct map* d , const char* k ) {
+  return map_find(d,k);
+}
+
+/* iterator wrapper */
+static inline
+int dict_iter_start( const struct map* d ) {
+  return map_iter_start(d);
+}
+
+static inline
+int dict_iter_move( const struct map* d , int itr ) {
+  return map_itr_move(d,itr);
+}
+
+static inline
+int dict_iter_has( const struct map* d , int itr ) {
+  return itr < d->cap;
+}
+
+static inline
+struct map_pair
+dict_itr_deref( struct map* d , int itr ) {
+  return map_itr_deref(d,itr);
+}
+
+/* ======================================
+ * AJJ_OBJECT
+ * ====================================*/
 struct ajj_object {
   struct ajj_object* prev;
   struct ajj_object* next;
@@ -69,13 +216,11 @@ struct ajj_object {
   struct gc_scope* scp;
 };
 
-/* Internally we separete a const string or a heap based string by
- * using this tag. Since if it is a AJJ_VALUE_CONST_STRING, then we
- * will never need to release the string memory */
-#define AJJ_VALUE_CONST_STRING (AJJ_VALUE_SIZE+1)
 
-/* global variable that is used to lookup upvalue/object creation or
- * function calls */
+/* ================================================
+ * Global variables
+ * only used in environment settings and upvalue
+ * ================================================*/
 
 struct global_var {
   struct global_var* prev; /* linked back to its parent */
@@ -98,6 +243,64 @@ enum {
   GVAR_FUNCTION,
   GVAR_OBJECT
 };
+
+struct gvar_table {
+  struct gvar_table_entry* entries;
+  size_t cap;
+  size_t len;
+};
+
+/* Global varialbes table. Wrapper around map */
+static inline
+void gvar_table_init( struct map* m ) {
+  map_init(m,GVAR_DEFUALT_BUF_SIZE,sizeof(struct gvar));
+}
+
+static inline
+void gvar_table_clear( struct map* m ) {
+  map_clear(m);
+}
+
+static inline
+void gvar_table_destroy( struct map* m ) {
+  map_destroy(m);
+}
+
+static inline
+int gvar_table_insert( struct map* m , const struct string* k,
+    int own, const struct gvar* val ) {
+  return map_insert(m,k,own,val);
+}
+
+static inline
+int gvar_table_insert_c( struct map* m , const char* k,
+    const struct gvar* val ) {
+  return map_insert_c(m,k,val);
+}
+
+static inline
+int gvar_table_remove( struct map* m , const struct string* k,
+    struct gvar* val ) {
+  return map_remove(m,k,val);
+}
+
+static inline
+int gvar_table_remove_c( struct map* m , const char* k,
+    struct gvar* val ) {
+  return map_remove(m,k,val);
+}
+
+static inline
+const struct gvar*
+gvar_tabel_find( struct map* m , const struct string* k ) {
+  return gvar_table_find(m,k);
+}
+
+static inline
+const struct gvar*
+gvar_table_find_c( struct map* m , const char* k ) {
+  return gvar_table_find_c(m,k);
+}
 
 /* This function will initialize an existed function table */
 static inline
@@ -332,6 +535,5 @@ struct ajj_value ajj_value_assign( struct ajj_object* obj ) {
   val.value.object = obj;
   return val;
 }
-
 
 #endif /* _OBJECT_H_ */
