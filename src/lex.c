@@ -439,6 +439,8 @@ int tk_lex_script( struct tokenizer* tk ) {
         RETURN(TK_COMMA,1);
       case ':':
         RETURN(TK_COLON,1);
+      case '?':
+        RETURN(TK_QUESTION,1);
       case '\'':
         return tk_lex_str(tk);
       case '0':case '1':case '2':case '3':case '4':

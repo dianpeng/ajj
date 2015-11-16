@@ -2,6 +2,7 @@
 #define _OBJECT_H_
 #include "ajj.h"
 #include "util.h"
+#include "vm.h"
 
 struct gc_scope;
 struct ajj;
@@ -410,6 +411,7 @@ func_table_add_jj_macro( struct func_table* tb, struct string* name , int own ) 
   program_init(&(f->f.jj_fn));
   return &(f->f.jj_fn);
 }
+
 /* Create an object object */
 static inline
 void object_create( struct object* obj ,
@@ -418,7 +420,6 @@ void object_create( struct object* obj ,
   obj->fn_tb = func_tb;
   obj->data = data;
 }
-
 
 /* Create a single ajj_object which is NOT INITIALZIED with any type
  * under the scope object "scope" */
@@ -526,7 +527,6 @@ const struct string* ajj_value_to_string( const struct ajj_value* val ) {
   return &(val->value.object->val.str);
 }
 
-
 static inline
 struct ajj_value ajj_value_assign( struct ajj_object* obj ) {
   struct ajj_value val;
@@ -535,5 +535,4 @@ struct ajj_value ajj_value_assign( struct ajj_object* obj ) {
   val.value.object = obj;
   return val;
 }
-
 #endif /* _OBJECT_H_ */

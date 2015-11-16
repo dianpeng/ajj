@@ -2,6 +2,8 @@
 #define _LEX_H_
 #include "util.h"
 
+#define CODE_SNIPPET_SIZE
+
 struct tokenizer {
   const char* src;
   size_t pos;
@@ -87,18 +89,18 @@ enum {
   X(TK_DOT,".") \
   X(TK_COMMA,",") \
   X(TK_COLON,":") \
+  X(TK_QUESTION,"?") \
   X(TK_STRING,"<string>") \
   X(TK_NUMBER,"<number>") \
-  X(TK_VARIABLE,"<variable>") \
-  X(TK_TRUE,"<true>") \
+  X(TK_VARIABLE,"<variable>") \ X(TK_TRUE,"<true>") \
   X(TK_FALSE,"<false>") \
   X(TK_NONE,"<none>") \
   X(TK_EOF,"<eof>") \
   X(TK_UNKNOWN,"<unknown>")
 
-#define X(A) A ,
+#define X(A,B) A,
 enum {
-  TOKEN_LIST(A),
+  TOKEN_LIST(X)
   SIZE_OF_TOKENS
 };
 #undef X
@@ -107,6 +109,14 @@ const char* tk_get_name( int );
 
 int tk_lex( struct tokenizer* tk );
 int tk_move( struct tokenizer* tk );
+
+/* Use to get a human readable code snippet for diagnose information.
+ * The snippet is the source line that contains the position "pos".
+ * But at most 128 characters is fetched as upper bound for information.
+ * The return string is owned by the caller, please free it properly */
+void tk_get_code_snippet( const char* src, int pos , char output[CODE_SNIPPET_SIZE] );
+#define tk_get_current_code_snippet(tk,output) \
+  tk_get_code_snippet((tk)->src,(tk)->pos,output)
 
 static inline
 int tk_init( struct tokenizer* tk , const char* src ) {

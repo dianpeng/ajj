@@ -22,7 +22,6 @@ int prev_st( int p , struct state* st ) {
 }
 #undef /* NDEBUG */
 
-
 #define TOP() (stk[p])
 
 #ifndef NDEBUG

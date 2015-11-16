@@ -33,6 +33,12 @@
     } \
   } while(0)
 
+#define emit0(em,BC) emitter_emit0(em,tk->pos,BC)
+#define emit1(em,BC,A1) emitter_emit1(em,tk->pos,BC,A1)
+#define emit2(em,BC,A1,A2) emitter_emit2(em,tk->pos,BC,A1,A2)
+#define emit0_at(em,P,BC) emitter_emit0_at(em,tk->pos,P,BC)
+#define emit1_at(em,P,BC,A1) emitter_emit1_at(em,tk->pos,P,BC,A1)
+#define emit2_at(em,P,BC,A1,A2) emitter_emit2_at(em,tk->pos,P,BC,A1,A2)
 
 /* Lexical Scope
  * Lexical scope cannot cross function boundary. Once a new function
@@ -80,6 +86,7 @@ void report_error( struct parser* p , const struct tokenizer* tk ,
   int len;
   int pos,ln;
   size_t i;
+  char cs[CODE_SNIPPET_SIZE];
 
   /* get the position and line number of tokenizer */
   pos = ln = 1;
@@ -91,8 +98,11 @@ void report_error( struct parser* p , const struct tokenizer* tk ,
     }
   }
 
+  tk_get_current_code_snippet(tk,cs);
+
   /* output the prefix message */
-  len = snprintf(p->a->err,1024,"[Parser:(%d,%d)]:",pos,ln);
+  len = snprintf(p->a->err,1024,
+      "[Parser:(%d,%d)] at:%s!\nMessage:",cs,pos,ln);
   assert( len >0 && len < 1024 );
 
   /* output the rest messge even it is truncated */
@@ -739,12 +749,28 @@ done:
 
 static
 int parse_logic( struct parser* p, struct emitter* em , struct tokenizer* tk ) {
+  int jmp_tb[1024];
+  int bc_tb[1024];
+  int sz = 0;
+  int i;
+  int pos;
+
+#define PUSH_JMP(X) \
+  do { \
+    if( sz == 1024 ) { \
+      report_error(p,tk,"Too much logic component,you have more than 1024!"); \
+      return -1; \
+    } \
+    jmp_tb[sz] = emitter_put(em,1); \
+    bc_tb[sz] = (X); \
+    ++sz; \
+  } while(0)
+
   CALLE(parse_cmp(p,em,tk));
   do {
-    int op;
     switch(tk->tk) {
-      case TK_AND: op = VM_AND; break;
-      case TK_OR:  op = VM_OR ; break;
+      case TK_AND: PUSH_JMP(VM_JLF); break;
+      case TK_OR:  PUSH_JMP(VM_LLT); break;
       default:
         goto done;
     }
@@ -752,30 +778,63 @@ int parse_logic( struct parser* p, struct emitter* em , struct tokenizer* tk ) {
     CALLE(parse_cmp(p,em,tk));
     emit0(em,op);
   } while(1);
+  /* fallback position means we evaluate it to true , since
+   * if all component passes jump, we end up having nothing
+   * on stack. So we need to load true value on stack here */
+  emit0(em,VM_LTRUE);
 done:
+  pos = emitter_label(em);
+  for( i = 0 ; i < sz ; ++i ) {
+    emit1_at(em,jmp_tb[i],bc_tb[i],pos);
+  }
   return 0;
 }
+#undef PUSH_JMP
 
+/* Expression.
+ * We support value1 if cond else value2 format.
+ * The code generation is not simple at all, however. Since the condition is not
+ * the first component, the parser needs to look ahead unlimited tokens to say
+ * whether this is a tenary format or not. We don't have AST, this becomes very
+ * hard. So how to generate the code ?
+ * We inject a jump point before the expression. We turn this instruction into
+ * NOP when it is not tenary. If it is, this instruction will just jump to the
+ * condition part. Then at the end of this expression, we have another jump to
+ * skip the alternative value path. Condition part will follow by a tenary byte
+ * code which simply jumps to corresponding position based on the evaluation.
+ * The NOP is removed during the peephole optimization phase 
+ */
 static
 int parse_expr( struct parser* p, struct emitter* em , struct tokenizer* tk ) {
-  /* expression support tenary in a 'expr if cond else expr' way, which doesn't
-   * really follow the generation of bytecode sequence. basically we want the
-   * condition generated at first, so we use a VM_SWAP operation to swap the
-   * top 2 position in stack to make VM_TENARY works correctly */
+  int fjmp = emitter_put(em,1);
+  int val1_l = emitter_lable(em);
   CALLE(parse_logic(p,em,tk));
   /* Check if we have a pending if or not */
   if( tk->tk == TK_IF ) {
+    int cond_l, end_l;
+    int val1_jmp;
     tk_move(tk);
+
+    /* An unconditional jump to skip the alternative path and condition */
+    val1_jmp = emitter_put(em,1);
+
+    /* Parse the condition part */
+    cond_l = emitter_label(em);
     CALLE(parse_logic(p,em,tk));
-    /* Swap the top 2 value here */
-    emit2(em,VM_TSWAP,-1,-2); /* The stack is growing up , ESP(assume we have) is
-                               * pointing to the first unused element in the stack,
-                               * and we use ESP to calculate the position of stack,
-                               * so ESP-1 : is the top most used element, the ESP-2
-                               * is the second most used element. */
+    emit1(em,VM_JT,val1_1); /* jump to value1 when condition is true */
+
     CONSUME(TK_ELSE);
 
-    emit0(em,VM_TENARY);
+    /* Parse the alternative value */
+    CALLE(parse_logic(p,em,tk));
+    end_l = emitter_label(em);
+
+    /* Patch the jump */
+    emit1_at(em,fjmp,VM_JMP,cond_l);
+    emit1_at(em,val1_jmp,VM_JMP,end_l);
+  } else {
+    /* nothing serious, just issue a NOP */
+    emit1_at(em,fjmp,VM_NOP1,0);
   }
 }
 
@@ -1181,7 +1240,8 @@ parse_macro( struct parser* p , struct tokenizer* tk ) {
   /* Add a new function into the table */
   new_prg = func_table_add_jj_macro(
       p->tpl->val.obj.fn_tb,&name,1);
-  new_em.prg = new_prg;
+  emitter_init(&new_em,new_prg);
+
   /* Parsing the prototype */
   CALLE(parse_func_prototype(p,tk,new_prg));
   CONSUME(TK_RSTMT);
@@ -1213,7 +1273,8 @@ parse_block( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
   assert(p->tpl->val.obj.fn_tb);
   new_prg = func_table_add_jj_block(
       p->tpl->val.obj.fn_tb,&name,1);
-  new_em.prg = new_prg;
+  emitter_init(&new_em,new_prg);
+
   /* Parsing the functions */
   CALLE(parse_func_body(p,&new_em,tk));
   /* Parsing the rest of the body */
@@ -1290,8 +1351,10 @@ static int parse_for_body( struct parser* p ,
   assert( p->tpl->tp == AJJ_VALUE_OBJECT );
   assert( p->tpl->val.obj.fn_tb != NULL  );
   /* Set up the new program scopes */
-  cl.prg = new_prg = func_table_add_jj_block(
+  new_prg = func_table_add_jj_block(
       p->tpl->val.obj.fn_tb,name);
+
+  emiter_init(&cl_em,new_prg);
 
   /* Add function parameters into its prototype definition */
   if( string_null(key) ) {
@@ -1603,7 +1666,6 @@ parse_upvalue( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
   CONSUME(TK_RSTMT);
   return 0;
 }
-
 
 /* Loop control statements.
  * Our loop body is actually compiled into a function, and later on the
@@ -1950,7 +2012,7 @@ done:
     emit0_at(em,enter,VM_ENTER);
     emit0(em,VM_LEAVE);
   } else {
-    emit0_at(em,enter,VM_NOP1); /* empty instructions */
+    emit1_at(em,enter,VM_NOP1,0); /* empty instructions */
   }
   return 0;
 }
@@ -2035,7 +2097,7 @@ done:
     emit0_at(em,enter,VM_ENTER);
     emit0(em,VM_LEAVE);
   } else {
-    emit0_at(em,enter,VM_NOP1); /* empty instructions */
+    emit1_at(em,enter,VM_NOP1,0); /* empty instructions */
   }
   lex_scope_exit(p);
   return 0;
@@ -2125,10 +2187,11 @@ done:
     emit0_at(em,enter,VM_ENTER);
     emit0(em,VM_LEAVE);
   } else {
-    emit0_at(em,enter,VM_NOP1);
+    emit1_at(em,enter,VM_NOP1,0);
   }
   if( enter_scope ) {
     lex_scope_exit(p);
   }
   return 0;
+
 }
