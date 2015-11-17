@@ -78,6 +78,9 @@ extern ajj_value AJJ_TRUE;
 extern ajj_value AJJ_FALSE;
 extern ajj_value AJJ_NONE;
 
+const char*
+ajj_value_get_type_name( const struct ajj_value* );
+
 static inline
 struct ajj_value ajj_value_number( double val ) {
   struct ajj_value value;

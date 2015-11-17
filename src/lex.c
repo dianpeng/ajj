@@ -59,7 +59,7 @@ int tk_lex_str( struct tokenizer* tk ) {
   RETURN(TK_STRING,tk->lexeme.len+2);
 }
 
-static inline
+static
 int tk_lex_num( struct tokenizer* tk ) {
   size_t i = tk->pos+1;
   char c;
@@ -78,7 +78,7 @@ int tk_lex_num( struct tokenizer* tk ) {
  * macro endmacro call endcall filter endfilter
  * raw endraw true false none */
 
-static inline
+static
 int tk_keyword_check( struct tokenizer* tk , const char* str , int i ) {
   if( str[0] != tk->src[i] )
     return 0;
@@ -118,7 +118,7 @@ int tk_lex_keyword( struct tokenizer* tk , int offset ) {
 
   /* check reset of the string here */
   for( i = offset + tk->pos ; (c=tk->src[i]) ; ++i ) {
-    if( tk_is_id_rchar(c) ) {
+    if( tk_id_rchar(c) ) {
       strbuf_push(&(tk->lexeme),c);
     } else {
       break;
@@ -161,7 +161,7 @@ int tk_lex_keyword( struct tokenizer* tk , int offset ) {
  * X: -
  * Y: -
  * Z: - */
-static inline
+static
 int tk_lex_keyword_or_id( struct tokenizer* tk ) {
   size_t i = tk->pos+1;
   int len;
@@ -199,143 +199,143 @@ int tk_lex_keyword_or_id( struct tokenizer* tk ) {
       if( (len = tk_keyword_check(tk,"nd",i+1)) == 2 ) {
         /* end starts */
         size_t k = i + 3;
-        if( (len=tk_keyword_check(tk,"for")) == 3 &&
+        if( (len=tk_keyword_check(tk,"for",i+1)) == 3 &&
             tk_not_id_rchar(tk->src[k+3]) )
           RETURN(TK_ENDFOR,6);
-        else if( (len=tk_keyword_check(tk,"block")) == 5 &&
+        else if( (len=tk_keyword_check(tk,"block",i+1)) == 5 &&
             tk_not_id_rchar(tk->src[k+5]))
           RETURN(TK_ENDBLOCK,8);
-        else if( (len=tk_keyword_check(tk,"if")) == 2 &&
+        else if( (len=tk_keyword_check(tk,"if",i+1)) == 2 &&
             tk_not_id_rchar(tk->src[k+2]) )
           RETURN(TK_ENDIF,5);
-        else if( (len=tk_keyword_check(tk,"set")) == 3 &&
+        else if( (len=tk_keyword_check(tk,"set",i+1)) == 3 &&
             tk_not_id_rchar(tk->src[k+3]) )
           RETURN(TK_ENDSET,6);
-        else if( (len=tk_keyword_check(tk,"filter")) == 6 &&
+        else if( (len=tk_keyword_check(tk,"filter",i+1)) == 6 &&
             tk_not_id_rchar(tk->src[k+6]) )
           RETURN(TK_ENDFILTER,9);
-        else if( (len=tk_keyword_check(tk,"macro")) == 5 &&
+        else if( (len=tk_keyword_check(tk,"macro",i+1)) == 5 &&
             tk_not_id_rchar(tk->src[k+5]))
           RETURN(TK_ENDMACRO,8);
-        else if( (len=tk_keyword_check(tk,"upvalue")) == 7 &&
+        else if( (len=tk_keyword_check(tk,"upvalue",i+1)) == 7 &&
             tk_not_id_rchar(tk->src[k+8]))
           RETURN(TK_ENDUPVALUE,10);
-        else if( (len=tk_keyword_check(tk,"with")) == 4 &&
+        else if( (len=tk_keyword_check(tk,"with",i+1)) == 4 &&
             tk_not_id_rchar(tk->src[k+5]))
           RETURN(TK_ENDWITH,7);
-        else if( (len=tk_keyword_check(tk,"include")) == 7 &&
+        else if( (len=tk_keyword_check(tk,"include",i+1)) == 7 &&
             tk_not_id_rchar(tk->src[k+8]))
           RETURN(TK_ENDINCLUDE,10);
-        else if( (len=tk_keyword_check(tk,"call"))==4 &&
+        else if( (len=tk_keyword_check(tk,"call",i+1))==4 &&
             tk_not_id_rchar(tk->src[k+5]))
           RETURN(TK_ENDCALL,7);
         else
           return tk_lex_keyword(tk,len+3);
-      } else if ((len = tk_keyword_check(tk,"lif")) == 3 &&
+      } else if ((len = tk_keyword_check(tk,"lif",i+1)) == 3 &&
           tk_not_id_rchar(tk->src[i+4]) ) {
         RETURN(TK_ELIF,4);
-      } else if( (len=tk_keyword_check(tk,"lse")) == 3 &&
+      } else if( (len=tk_keyword_check(tk,"lse",i+1)) == 3 &&
             tk_not_id_rchar(tk->src[k+3])) {
           RETURN(TK_ELSE,4);
       } else {
         return tk_lex_keyword(tk,len+1);
       }
     case 'f':
-      if( (len = tk_keyword_check(tk,"ilter")) ==5 &&
+      if( (len = tk_keyword_check(tk,"ilter",i+1)) ==5 &&
           tk_not_id_rchar(tk->src[i+6]) )
         RETURN(TK_FILTER,6);
-      else if( (len = tk_keyword_check(tk,"alse")) == 4 &&
+      else if( (len = tk_keyword_check(tk,"alse",i+1)) == 4 &&
           tk_not_id_rchar(tk->src[i+5]) )
         RETURN(TK_FALSE,5);
-      else if( (len = tk_lex_keyword(tk,"ix")) == 2 &&
+      else if( (len = tk_lex_keyword(tk,"ix",i+1)) == 2 &&
           tk_not_id_rchar(tk->src[i+3]))
         RETURN(TK_FIX,3);
-      else if( (len=tk_keyword_check(tk,"rom")) == 3&&
+      else if( (len=tk_keyword_check(tk,"rom",i+1)) == 3&&
           tk_not_id_rchar(tk->src[i+4]))
         RETURN(TK_FROM,4);
       else
         return tk_lex_keyword(tk,len+1);
     case 'F':
-      if( (len = tk_keyword_check(tk,"alse")) ==4 &&
+      if( (len = tk_keyword_check(tk,"alse",i+1)) ==4 &&
           tk_not_id_rchar(tk->src[i+5]))
         RETURN(TK_FALSE,5);
     case 'i':
-      if( (len = tk_keyword_check(tk,"n")) == 1 &&
+      if( (len = tk_keyword_check(tk,"n",i+1)) == 1 &&
           tk_not_id_rchar(tk->src[i+2]) )
         RETURN(TK_IN,2);
-      else if( (len = tk_keyword_check(tk,"f")) == 1 &&
+      else if( (len = tk_keyword_check(tk,"f",i+1)) == 1 &&
           tk_not_id_rchar(tk->src[i+2]) )
         RETURN(TK_IF,2);
-      else if( (len = tk_keyword_check(tk,"nclude")) == 6 &&
+      else if( (len = tk_keyword_check(tk,"nclude",i+1)) == 6 &&
           tk_not_id_rchar(tk->src[i+7]))
         RETURN(TK_INCLUDE,7);
-      else if( (len = tk_keyword_check(tk,"mport")) == 5 &&
+      else if( (len = tk_keyword_check(tk,"mport",i+1)) == 5 &&
           tk_not_id_rchar(tk->src[i+6]))
         RETURN(TK_IMPORT,6);
       else
         return tk_lex_keyword(tk,len+1);
     case 'j':
-      if( (len=tk_keyword_check(tk,"son")) == 3 &&
+      if( (len=tk_keyword_check(tk,"son",i+1)) == 3 &&
           tk_not_id_rchar(tk->src[i+4]))
         RETURN(TK_JSON,4);
       else
         return tk_lex_keyword(tk,len+1);
     case 'm':
-      if( (len = tk_keyword_check(tk,"acro")) == 4 &&
+      if( (len = tk_keyword_check(tk,"acro",i+1)) == 4 &&
           tk_not_id_rchar(tk->src[i+5]))
         RETURN(TK_MACRO,5);
-      else if( (len = tk_keyword_check(tk,"ove")) == 3 &&
+      else if( (len = tk_keyword_check(tk,"ove",i+1)) == 3 &&
           tk_not_id_rchar(tk->src[i+4]))
         RETURN(TK_MOVE,4);
       else
         return tk_lex_keyword(tk,len+1);
     case 'n':
-      if( (len = tk_keyword_check(tk,"one")) == 3 &&
+      if( (len = tk_keyword_check(tk,"one",i+1)) == 3 &&
           tk_not_id_rchar(tk->src[i+4]))
         RETURN(TK_NONE,4);
       else
         return tk_lex_keyword(tk,len+1);
     case 'N':
-      if( (len = tk_keyword_check(tk,"one")) == 3 &&
+      if( (len = tk_keyword_check(tk,"one",i+1)) == 3 &&
           tk_not_id_rchar(tk->src[i+4]))
         RETURN(TK_NONE,4);
       else
         tk_lex_keyword(tk,len+1);
     case 'o':
-      if( (len = tk_keyword_check(tk,"r")) == 1 &&
+      if( (len = tk_keyword_check(tk,"r",i+1)) == 1 &&
           tk_not_id_rchar(tk->src[i+2]))
         RETURN(TK_OR,2);
-      else if( (len = tk_keyword_check(tk,"verride")) == 7 &&
+      else if( (len = tk_keyword_check(tk,"verride",i+1)) == 7 &&
           tk_not_id_rchar(tk->src[i+8]))
         RETURN(TK_OVERRIDE,8);
       else
         return tk_lex_keyword(tk,len+1);
     case 'r':
-      if( (len = tk_keyword_check(tk,"ecursive")) == 8 &&
+      if( (len = tk_keyword_check(tk,"ecursive",i+1)) == 8 &&
           tk_not_id_rchar(tk->src[i+9]))
         RETURN(TK_RECURSIVE,9);
       else
         return tk_lex_keyword(tk,len+1);
     case 's':
-      if( (len = tk_keyword_check(tk,"et")) == 2 &&
+      if( (len = tk_keyword_check(tk,"et",i+1)) == 2 &&
           tk_not_id_rchar(tk->src[i+3]))
         RETURN(TK_SET,3);
       else
         return tk_lex_keyword(tk,len+1);
     case 't':
-      if( (len = tk_keyword_check(tk,"rue")) == 3 &&
+      if( (len = tk_keyword_check(tk,"rue",i+1)) == 3 &&
           tk_not_id_rchar(tk->src[i+4]))
         RETURN(TK_TRUE,4);
       else
         return tk_lex_keyword(tk,len+1);
     case 'T':
-      if( (len = tk_keyword_check(tk,"rue")) == 3 &&
+      if( (len = tk_keyword_check(tk,"rue",i+1)) == 3 &&
           tk_not_id_rchar(tk->src[i+4]))
         RETURN(TK_TRUE,4);
       else
         return tk_lex_keyword(tk,len+1);
     case 'w':
-      if( (len = tk_keyword_check(tk,"ith")) == 3 &&
+      if( (len = tk_keyword_check(tk,"ith",i+1)) == 3 &&
           tk_not_id_rchar(tk->src[i+4]))
         RETURN(TK_WITH,4);
       else
@@ -360,7 +360,6 @@ int tk_lex_script( struct tokenizer* tk ) {
       case '\b':case '\n':
         /* allowed whitespaces */
         break;
-      case '\n':
       case '%':
         nc = tk->src[i+1];
         if( nc == '}' ) {
@@ -381,7 +380,7 @@ int tk_lex_script( struct tokenizer* tk ) {
       case '-': /* -%} will be treated same as %} */
         nc = tk->src[i+1];
         if( nc == '%' ) {
-          if( src[i+2] == '}' )
+          if( tk->src[i+2] == '}' )
             /* for compatibility, we accept -%} as end of tag,
              * but we it doesn't support any semantic */
             RETURN(TK_RSTMT,3);
@@ -495,12 +494,12 @@ done:
 }
 
 
-static inline
+static
 int tk_check_raw( struct tokenizer* tk ) {
   return tk_check_single_keyword(tk,"raw",3);
 }
 
-static inline
+static
 int tk_check_endraw( struct tokenizer* tk ) {
   return tk_check_single_keyword(tk,"endraw",6);
 }

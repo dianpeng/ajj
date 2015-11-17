@@ -52,6 +52,9 @@ struct function {
 #define IS_JJMAIN(f) ((f)->tp == JJ_MAIN)
 #define IS_JINJA(f) ((f)->tp == JJ_BLOCK || (f)->tp == JJ_MACRO || (f)->tp == JJ_MAIN)
 #define IS_C(f) (!IS_JINJA(f))
+#define CCLOSURE(F) (&((F)->f.c_fn))
+#define CMETHOD(F) (&((F)->f.c_mt))
+#define JINJAFUNC(F) (&((F)->f.jj_fn))
 
 struct func_table {
   struct function func_buf[ AJJ_FUNC_LOCAL_BUF_SIZE ];
@@ -521,6 +524,7 @@ void ajj_value_destroy( struct ajj* a , struct ajj_value* val ) {
     ajj_object_destroy(a,val->value.object);
 }
 
+
 static inline
 const struct string* ajj_value_to_string( const struct ajj_value* val ) {
   assert(val->type == AJJ_VALUE_STRING);
@@ -528,10 +532,49 @@ const struct string* ajj_value_to_string( const struct ajj_value* val ) {
 }
 
 static inline
+const char* ajj_value_to_cstr( const struct ajj_value* val ) {
+  return ajj_value_to_string()->str;
+}
+
+static inline
+const struct map*
+ajj_value_to_dict( const struct ajj_value* val ) {
+  assert(val->type == AJJ_VALUE_DICT);
+  return &(val->value.object->val.d);
+}
+
+static inline
+const struct list*
+ajj_value_to_list( const struct ajj_value* val ) {
+  assert(val->type == AJJ_VALUE_LIST);
+  return &(val->value.object->val.l);
+}
+
+static inline
+const struct object*
+ajj_value_to_object( const struct ajj_value* val ) {
+  assert(val->type == AJJ_VALUE_OBJECT);
+  return &(val->value.object->val.obj);
+}
+
+static inline
+struct ajj_value
+ajj_value_boolean( int boolean ) {
+  struct ajj_value ret;
+  assert(boolean ==0 || boolean ==1);
+  ret.type = AJJ_VALUE_BOOLEAN;
+  ret.value.boolean = boolean;
+  return ret;
+}
+
+static inline
 struct ajj_value ajj_value_assign( struct ajj_object* obj ) {
   struct ajj_value val;
   assert(obj->tp != AJJ_VALUE_NOT_USE);
   val.type = obj->tp;
+  /* rewrite const string type since it is internally used */
+  if( val.type == AJJ_VALUE_CONST_STRING )
+    val.type == AJJ_VALUE_STRING;
   val.value.object = obj;
   return val;
 }

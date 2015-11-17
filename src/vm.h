@@ -6,6 +6,7 @@
 struct ajj;
 struct ajj_object;
 struct func_table;
+struct gc_scope;
 
 #define MINIMUM_CODE_PAGE_SIZE 256
 
@@ -99,7 +100,7 @@ struct func_table;
                 jump to @1
  *48. jt (1): @1 PC position.
                 jump to @1 only when the top of stack is evaluated to true. Pop T[1].
- *49. jlt(1): @1 PC position @2 
+ *49. jlt(1): @1 PC position @2
                 jump to @1 only when the top of stack is evaluated to true. Pop T[1] only when
                 jump is not performed
  *50. jlf(1): @1 PC position @2
@@ -174,7 +175,8 @@ struct func_table;
   X(VM_NOP0,"nop0") \
   X(VM_NOP1,"nop1") \
   X(VM_NOP2,"nop2") \
-  X(VM_HALT,"halt") 
+  X(VM_HALT,"halt") \
+  X(VM_ERROR,"error") \
 
 enum vm_instructions {
 #define X(A,B) A,
@@ -219,7 +221,7 @@ struct func_frame {
   int ebp; /* EBP register */
   int esp; /* ESP register */
   int pc ; /* Program counter register */
-  const char* name; /* Pointer to function name */
+  struct string name; /* function name */
   int par_cnt : 16 ;
   int method  : 1; /* whether this call is a method call */
 };
@@ -229,6 +231,7 @@ struct runtime {
   struct func_frame call_stk[ AJJ_MAX_CALL_STACK ];
   size_t cur_call_stk; /* Current stk position */
   struct ajj_value val_stk[AJJ_MAX_VALUE_STACK_SIZE]; /* current value stack size */
+  struct gc_scope* cur_gc; /* current gc scope */
 };
 
 /* emitter for byte codes */
@@ -318,45 +321,7 @@ static inline
 void emit_int( struct emitter* em , int arg ) {
   int l;
   assert( em->cd_cap > em->prg->len + 4 ); /* ensure we have enough space to run */
-  l = (em->prg->len) & 4;
-  switch(l) {
-    case 0:
-      *((int*)(em->prg->codes) + em->prg->len) = arg;
-      break;
-    case 1:
-      {
-        int lower = (arg & 0xff000000) >> 24;
-        int higher= (arg & 0x00ffffff);
-        *((unsigned char*)(em->prg->codes) + em->prg->len)
-          = (unsigned char)lower;
-        *((int*)((unsigned char*)(em->prg->codes) + em->prg->len+1))
-          = higher;
-        break;
-      }
-    case 2:
-      {
-        int lower = (arg & 0xffff0000) >> 16;
-        int higher= (arg & 0x0000ffff);
-        *((int*)((unsigned char*)(em->prg->codes) + em->prg->len))
-          = lower;
-        *((int*)((unsigned char*)(em->prg->codes) + em->prg->len+2))
-          = higher;
-        break;
-      }
-    case 3:
-      {
-        int lower = (arg & 0xffffff00) >> 8;
-        int higher= (arg & 0x000000ff);
-        *((int*)((unsigned char*)(em->prg->codes) + em->prg->len))
-          = lower;
-        *((int*)((unsigned char*)(em->prg->codes) + em->prg->len+3))
-          = higher;
-        break;
-      }
-    default:
-      UNREACHABLE();
-      break;
-  }
+  *((int*)((char*)(em->prg->codes)+em->prg->len)) = arg;
   em->prg->len += 4;
 }
 

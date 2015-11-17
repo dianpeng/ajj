@@ -114,7 +114,7 @@ void report_error( struct parser* p , const struct tokenizer* tk ,
 #define PTOP() (p->cur_scp[p->scp_tp])
 
 /* Lexical scope operation for parsing */
-static inline
+static
 struct lex_scope* lex_scope_enter( struct parser* p ) {
   struct lex_scope* scp;
   scp = malloc(sizeof(*scp));
@@ -124,7 +124,7 @@ struct lex_scope* lex_scope_enter( struct parser* p ) {
   return PTOP();
 }
 
-static inline
+static
 struct lex_scope* lex_scope_jump( struct parser* p ) {
   struct lex_scope* scp;
   scp = malloc(sizeof(*scp));
@@ -141,7 +141,7 @@ struct lex_scope* lex_scope_jump( struct parser* p ) {
   }
 }
 
-static inline
+static
 struct lex_scope* lex_scope_exit( struct parser*  p ) {
   struct lex_scope* scp;
   assert( PTOP() != NULL );
@@ -164,7 +164,7 @@ struct lex_scope* lex_scope_exit( struct parser*  p ) {
  * This function returns -2 represent error,
  * returns -1 represent a new symbol is set up
  * and non-negative number represents the name is found */
-static inline
+static
 int lex_scope_set( struct parser* p , const char* name ) {
   int i;
   struct lex_scope* scp = PTOP();
@@ -250,7 +250,7 @@ insert:
   }
 }
 
-static inline
+static
 int const_num( struct parser* p , struct program* prg, double num ) {
   if( prg->str_len == AJJ_LOCAL_CONSTANT_SIZE ) {
     report_error(p,tk,"Too much local number literals!");
@@ -261,7 +261,7 @@ int const_num( struct parser* p , struct program* prg, double num ) {
   }
 }
 /* Parser helpers */
-static inline
+static
 int finish_scope_tag( struct parser* p, struct tokenizer* tk , int token  ) {
   CONSUME(TK_LSTMT);
   CONSUME(token);
@@ -269,7 +269,7 @@ int finish_scope_tag( struct parser* p, struct tokenizer* tk , int token  ) {
   return 0;
 }
 
-static inline
+static
 int symbol( struct parser* p , struct tokenizer* tk , struct string* output ) {
   assert(tk->tk == TK_VARIABLE);
   if( tk->lexeme.len >= AJJ_SYMBOL_NAME_MAX_SIZE ) {
@@ -397,7 +397,7 @@ int parse_dict( struct parser* p , struct emitter* em , struct tokenizer* tk ) {
   return 0;
 }
 
-static inline
+static
 int parse_var_prefix( struct parser* p , struct emitter* em , struct string* val ) {
   /* Check whether the variable is a local variable or
    * at least could be */
@@ -416,7 +416,7 @@ int parse_var_prefix( struct parser* p , struct emitter* em , struct string* val
   return 0;
 }
 
-static inline
+static
 int parse_var( struct parser* p, struct emitter* em , struct tokenizer* tk ) {
   struct string var;
   int idx;
@@ -540,7 +540,7 @@ int parse_attr_or_methodcall( struct parser* p, struct emitter* em , struct toke
  *    numbers. Then follows corresponding number of calling parameters.
  */
 
-static inline
+static
 int parse_funccall_or_pipe( struct parser* p , struct emitter* em ,
     struct tokenizer* tk , struct string* prefix , int pipe ) {
   int idx;
@@ -559,7 +559,7 @@ int parse_funccall_or_pipe( struct parser* p , struct emitter* em ,
 }
 
 /* This function handles the situation that the function is a pipe command shortcut */
-static inline
+static
 int parse_pipecmd( struct parser* p , struct emitter* em ,
     struct tokenizer* tk , struct string* cmd ) {
   CALLE((idx=const_str(p,em->prg,cmd,1))<0);
@@ -802,7 +802,7 @@ done:
  * condition part. Then at the end of this expression, we have another jump to
  * skip the alternative value path. Condition part will follow by a tenary byte
  * code which simply jumps to corresponding position based on the evaluation.
- * The NOP is removed during the peephole optimization phase 
+ * The NOP is removed during the peephole optimization phase
  */
 static
 int parse_expr( struct parser* p, struct emitter* em , struct tokenizer* tk ) {
