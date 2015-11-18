@@ -18,7 +18,7 @@ struct ajj;
 
 struct c_closure {
   void* udata; /* user data */
-  ajj_method func; /* function */
+  ajj_function func; /* function */
 };
 
 static inline
@@ -68,7 +68,7 @@ struct func_table {
 };
 
 struct object {
-  struct dict prop; /* properties of this objects */
+  struct map  prop; /* properties of this objects */
   const struct func_table* fn_tb; /* This function table can be NULL which
                                    * simply represents this object doesn't have
                                    * any defined function related to it */
@@ -148,24 +148,24 @@ void dict_destroy( struct map* d ) {
 static inline
 int dict_insert( struct map* d , const struct string* k,
     int own, const struct ajj_value* val ) {
-  return dict_insert(d,k,own,val);
+  return map_insert(d,k,own,val);
 }
 
 static inline
 int dict_insert_c( struct map* d , const char* k,
     const struct ajj_value* val ) {
-  return dict_insert_c(d,k,val);
+  return map_insert_c(d,k,val);
 }
 
 static inline
 int dict_remove( struct map* d , const struct string* k,
     void* val ) {
-  return dict_remove(d,k,val);
+  return map_remove(d,k,val);
 }
 
 static inline
 int dict_remove_c( struct map* d , const char* k, void* val ) {
-  return dict_remove(d,k,val);
+  return map_remove(d,k,val);
 }
 
 static inline
@@ -213,7 +213,7 @@ struct ajj_object {
   unsigned short tp;
   union {
     struct string str; /* string */
-    struct dict d;     /* dictionary */
+    struct map  d;     /* dictionary */
     struct list l;     /* list */
     struct object obj; /* object */
   } val;
@@ -444,11 +444,13 @@ void ajj_object_destroy( struct ajj* , struct ajj_object* obj );
 
 /* Initialize an created ajj_object to a certain type */
 static inline
-void ajj_object_string( struct ajj_object* obj,
+struct ajj_object*
+ajj_object_string( struct ajj_object* obj,
     const char* str , size_t len , int own ) {
   obj->val.str.str = own ? str : strdup(str);
   obj->val.str.len = len;
   obj->tp = AJJ_VALUE_STRING;
+  return obj;
 }
 
 static inline
@@ -460,24 +462,28 @@ ajj_object_create_string( struct ajj* a, struct gc_scope* scp,
 }
 
 static inline
-void ajj_object_const_string( struct ajj_object* obj,
-    const char* str, size_t len ) {
-  obj->val.str.str = str;
-  obj->val.str.len = len;
+struct ajj_object*
+ajj_object_const_string( struct ajj_object* obj,
+    const struct string* str ) {
+  obj->val.str = *str;
   obj->tp = AJJ_VALUE_CONST_STRING;
+  return obj;
 }
 
 static inline
-void ajj_object_create_const_string( struct ajj_object* obj,
-    const char* str, size_t len ) {
+struct ajj_object*
+ajj_object_create_const_string( struct ajj*a , struct gc_scope* scp,
+    const struct string* str ) {
   return ajj_object_const_string( ajj_object_create(a,scp),
-      str,len);
+      str);
 }
 
 static inline
-void ajj_object_dict( struct ajj_object* obj ) {
+struct ajj_object*
+ajj_object_dict( struct ajj_object* obj ) {
   dict_create(&(obj->val.d));
   obj->tp = AJJ_VALUE_DICT;
+  return obj;
 }
 
 static inline
@@ -487,9 +493,11 @@ ajj_object_create_dict( struct ajj* a, struct gc_scope* scp ) {
 }
 
 static inline
-void ajj_object_list( struct ajj_object* obj ) {
+struct ajj_object*
+ajj_object_list( struct ajj_object* obj ) {
   list_create(&(obj->val.l));
   obj->tp = AJJ_VALUE_LIST;
+  return obj;
 }
 
 static inline
@@ -499,10 +507,12 @@ ajj_object_create_list( struct ajj* a, struct gc_scope* scp ) {
 }
 
 static inline
-void ajj_object_obj( struct ajj_object* obj ,
+struct ajj_object*
+ajj_object_obj( struct ajj_object* obj ,
     const struct func_table* fn_tb, void* data ) {
   object_create(&(obj_val.o),fn_tb,data);
   obj->tp = AJJ_VALUE_OBJECT;
+  return obj;
 }
 
 static inline

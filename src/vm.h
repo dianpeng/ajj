@@ -187,12 +187,12 @@ enum vm_instructions {
 
 const char* vm_get_instr_name( int );
 
-extern struct string THIS = { "__this__",8};
-extern struct string ARGNUM = {"__argnum__",10};
-extern struct string MAIN = { "__main__",8 };
-extern struct string CALLER = {"__caller__",10};
-extern struct string SUPER  = {"super",5};
-extern struct string SELF   = {"self",4};
+extern struct string THIS = CONST_STRUBUF("__this__");
+extern struct string ARGNUM = CONST_STRBUF("__argnum__");
+extern struct string MAIN = CONST_STRBUF("__main__");
+extern struct string CALLER = CONST_STRBUF("__caller__");
+extern struct string SUPER  = CONST_STRBUF("super");
+extern struct string SELF   = CONST_STRBUF("self");
 
 struct program {
   void* codes;
@@ -211,7 +211,7 @@ struct program {
                                * These values are owned by the scope that owns
                                * this template object. It is typically global
                                * scope */
-  } par_list[ AJJ_FUNC_PAR_MAX_SIZE ];
+  } par_list[ AJJ_FUNC_ARG_MAX_SIZE ];
   size_t par_size;
 };
 
@@ -255,7 +255,7 @@ void program_init( struct program* prg ) {
 static inline
 int program_add_par( struct program* prg , struct string name ,
     int own, const struct ajj_value* val ) {
-  if( prg->par_size == AJJ_FUNC_PAR_MAX_SIZE )
+  if( prg->par_size == AJJ_FUNC_ARG_MAX_SIZE )
     return -1;
   else {
     assert(name.len < AJJ_SYMBOL_NAME_MAX_SIZE );
@@ -389,13 +389,13 @@ int emitter_label( struct emitter* em ) {
 int vm_run_func( struct ajj* ,
     struct ajj_object* tp,
     const struct string* name,
-    struct ajj_value par[AJJ_FUNC_PAR_MAX_SIZE],
+    struct ajj_value par[AJJ_FUNC_ARG_MAX_SIZE],
     size_t len,
     ajj_value* output );
 
 int vm_run_jj( struct ajj* a,
     struct ajj_object* tp ,
-    struct ajj_value par[AJJ_FUNC_PAR_MAX_SIZE],
+    struct ajj_value par[AJJ_FUNC_ARG_MAX_SIZE],
     size_t len,
     ajj_value* output );
 

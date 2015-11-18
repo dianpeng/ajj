@@ -20,6 +20,8 @@
 #define DICT_MAX_SIZE (1<<29)
 #define STRBUF_INIT_SIZE 64
 
+#define ARRAY_SIZE(X) (sizeof(X)/sizeof((X)[0]))
+
 /* Helper macro to insert into double linked list */
 #define LINIT(X) \
   do { \
@@ -51,6 +53,11 @@ struct string {
 };
 
 extern struct string NULL_STRING;
+extern struct string TRUE_STRING;
+extern struct string FALSE_STRING;
+extern struct string NONE_STRING;
+
+#define CONST_STRBUF(X) { X , ARRAY_SIZE(X) }
 
 static inline
 struct string string_dup( const struct string* str ) {

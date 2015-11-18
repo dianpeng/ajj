@@ -2,13 +2,12 @@
 #define _AJJ_H_
 #include <stddef.h>
 
-#define AJJ_METHOD_PARAMETER_LIST_MAX_SIZE 12
 #define AJJ_SYMBOL_NAME_MAX_SIZE 32
 #define AJJ_GLOBAL_SYMBOL_MAX_SIZE 256
 #define AJJ_LOCAL_CONSTANT_SIZE 128
 #define AJJ_EXTENDS_MAX_SIZE 8
 #define AJJ_FUNC_LOCAL_BUF_SIZE 16
-#define AJJ_FUNC_PAR_MAX_SIZE 16
+#define AJJ_FUNC_ARG_MAX_SIZE 16
 
 /* Indicate how many functions you could recursively call */
 #define AJJ_MAX_CALL_STACK 128
@@ -18,15 +17,21 @@ struct ajj;
 struct ajj_value;
 struct ajj_object;
 
+typedef int (*ajj_function)( struct ajj* ,
+    void* ,
+    struct ajj_value[AJJ_FUNC_PAR_MAX_SIZE] ,
+    size_t ,
+    struct ajj_value* );
+
 typedef int (*ajj_method)( struct ajj* , /* execution context */
-    void* , /* user data */
-    struct ajj_value[AJJ_METHOD_PARAMETER_LIST_MAX_SIZE] ,
+    struct ajj_object* obj,
+    struct ajj_value[AJJ_FUNC_PAR_MAX_SIZE] ,
     size_t ,
     struct ajj_value* );
 
 typedef void* (*ajj_class_ctor)( struct ajj* ,
     void* ,
-    struct ajj_value[AJJ_METHOD_PARAMETER_LIST_MAX_SIZE] ,
+    struct ajj_value[AJJ_FUNC_PAR_MAX_SIZE] ,
     size_t );
 
 typedef void (*ajj_class_dtor)( struct ajj* ,
@@ -45,11 +50,6 @@ struct ajj_class {
 
   size_t mem_func_len; /* length of member function */
   void* udata; /* user data shared by all the functions */
-};
-
-struct ajj_function {
-  ajj_method entry;
-  void* udata;
 };
 
 struct ajj_value {
