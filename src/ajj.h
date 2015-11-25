@@ -54,7 +54,7 @@ struct ajj_class {
 
 struct ajj_value {
   union {
-    struct ajj_value* object;
+    struct ajj_object* object;
     double number;
     int boolean;
   } value;
@@ -74,12 +74,19 @@ enum {
   AJJ_VALUE_SIZE
 };
 
-extern ajj_value AJJ_TRUE;
-extern ajj_value AJJ_FALSE;
-extern ajj_value AJJ_NONE;
+#define AJJ_IS_PRIMITIVE(V) \
+  ((V)->type==AJJ_VALUE_NUMBER||(V)->type == AJJ_VALUE_NONE|| \
+   (V)->type==AJJ_VALUE_NONE||(V)->type==AJJ_VALUE_BOOLEAN)
+
+#define AJJ_IS_REFERENCE(V) \
+  (!(AJJ_IS_PRIMITIVE(V)))
 
 const char*
 ajj_value_get_type_name( const struct ajj_value* );
+
+extern ajj_value AJJ_TRUE;
+extern ajj_value AJJ_FALSE;
+extern ajj_value AJJ_NONE;
 
 static inline
 struct ajj_value ajj_value_number( double val ) {

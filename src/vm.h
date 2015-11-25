@@ -2,6 +2,7 @@
 #define _VM_H_
 #include "ajj.h"
 #include "util.h"
+#include <stdio.h>
 
 struct ajj;
 struct ajj_object;
@@ -62,7 +63,7 @@ struct gc_scope;
                 push the value on T[@1] at the top of stack.
  *23. bpush(1): @1 address of value on stack(index).
                 push the value on B[@1]
- *26. bb_move(2): @1 address of left operand ; @2 right operand
+ *26. move(2): @1 address of left operand ; @2 right operand
                 move B[@2] to B[@1].
  *29. lstr(1): @1 index in constant string table.
                 load the string onto the stack
@@ -142,7 +143,9 @@ struct gc_scope;
   X(VM_POP,"pop") \
   X(VM_TPUSH,"tpush") \
   X(VM_BPUSH,"bpush") \
-  X(VM_BB_MOVE,"bb_move") \
+  X(VM_MOVE,"move") \
+  X(VM_STORE,"store") \
+  X(VM_LIFT,"lift") \
   X(VM_LSTR,"lstr") \
   X(VM_LTRUE,"ltrue") \
   X(VM_LFALSE,"lfalse") \
@@ -159,13 +162,16 @@ struct gc_scope;
   X(VM_UPVALUE_SET,"upvalueset") \
   X(VM_UPVALUE_GET,"upvalueget") \
   X(VM_UPVALUE_DEL,"upvaluedel") \
-  X(VM_LOOP,"loop") \
-  X(VM_LOOPREC,"looprec") \
   X(VM_JMP,"jmp") \
   X(VM_JT,"jt") \
   X(VM_JLT,"jlt") \
   X(VM_JLF,"jlf") \
+  X(VM_JMPC,"jmpc") \
   X(VM_JEPT,"jept") \
+  X(VM_ITER_START,"iterstart") \
+  X(VM_ITER_HAS,"iterhas") \
+  X(VM_ITER_MOVE,"itermove") \
+  X(VM_ITER_DEREF,"iterderef") \
   X(VM_ENTER,"enter") \
   X(VM_EXIT,"exit") \
   X(VM_INCLUDE,"include") \
@@ -193,6 +199,7 @@ extern struct string MAIN = CONST_STRBUF("__main__");
 extern struct string CALLER = CONST_STRBUF("__caller__");
 extern struct string SUPER  = CONST_STRBUF("super");
 extern struct string SELF   = CONST_STRBUF("self");
+extern struct string ITER   = CONST_STRBUF("__iterator__");
 
 struct program {
   void* codes;
@@ -232,6 +239,7 @@ struct runtime {
   size_t cur_call_stk; /* Current stk position */
   struct ajj_value val_stk[AJJ_MAX_VALUE_STACK_SIZE]; /* current value stack size */
   struct gc_scope* cur_gc; /* current gc scope */
+  FILE* output;
 };
 
 /* emitter for byte codes */
@@ -253,14 +261,14 @@ void program_init( struct program* prg ) {
 }
 
 static inline
-int program_add_par( struct program* prg , struct string name ,
+int program_add_par( struct program* prg , struct string* name ,
     int own, const struct ajj_value* val ) {
   if( prg->par_size == AJJ_FUNC_ARG_MAX_SIZE )
     return -1;
   else {
     assert(name.len < AJJ_SYMBOL_NAME_MAX_SIZE );
     prg->par_list[prg->par_size].def_val = *val; /* owned the value */
-    prg->par_list[prg->par_size].name = own ? name : string_dup(&name);
+    prg->par_list[prg->par_size].name = own ? *name : string_dup(name);
     ++prg->par_size;
     return 0;
   }
@@ -403,3 +411,4 @@ int vm_run_jj( struct ajj* a,
 void vm_dump( const struct program* prg, FILE* output );
 
 #endif /* _VM_H_ */
+

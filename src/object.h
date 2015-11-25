@@ -12,6 +12,20 @@ struct ajj;
  * will never need to release the string memory */
 #define AJJ_VALUE_CONST_STRING (AJJ_VALUE_SIZE+1)
 
+/* Interal representation of iterators */
+#define AJJ_VALUE_ITERATOR     (AJJ_VALUE_SIZE+2)
+
+#define AJJ_IS_PRIMITIVE(V) \
+  ((V)->type==AJJ_VALUE_NUMBER||\
+   (V)->type==AJJ_VALUE_NONE|| \
+   (V)->type==AJJ_VALUE_NONE||\
+   (V)->type==AJJ_VALUE_ITERATOR|| \
+   (V)->type==AJJ_VALUE_BOOLEAN)
+
+#define AJJ_IS_REFERENCE(V) \
+  (!(AJJ_IS_PRIMITIVE(V)))
+
+
 #define LIST_LOCAL_BUF_SIZE 4
 #define DICT_DEFAULT_BUF_SIZE 4
 #define GVAR_DEFAULT_BUF_SIZE 32
@@ -21,7 +35,7 @@ struct c_closure {
   ajj_function func; /* function */
 };
 
-static inline
+static
 void c_closure_init( struct c_closure* cc ) {
   cc->udata = NULL;
   cc->func = NULL;
@@ -52,9 +66,9 @@ struct function {
 #define IS_JJMAIN(f) ((f)->tp == JJ_MAIN)
 #define IS_JINJA(f) ((f)->tp == JJ_BLOCK || (f)->tp == JJ_MACRO || (f)->tp == JJ_MAIN)
 #define IS_C(f) (!IS_JINJA(f))
-#define CCLOSURE(F) (&((F)->f.c_fn))
-#define CMETHOD(F) (&((F)->f.c_mt))
-#define JINJAFUNC(F) (&((F)->f.jj_fn))
+#define GET_CCLOSURE(F) (&((F)->f.c_fn))
+#define GET_CMETHOD(F) (&((F)->f.c_mt))
+#define GET_JINJAFUNC(F) (&((F)->f.jj_fn))
 
 struct func_table {
   struct function func_buf[ AJJ_FUNC_LOCAL_BUF_SIZE ];
@@ -87,7 +101,7 @@ struct list {
   size_t len;
 };
 
-static inline
+static
 void list_create( struct list* l ) {
   l->entry = l->lbuf;
   l->cap = LIST_LOCAL_BUF_SIZE;
@@ -96,11 +110,11 @@ void list_create( struct list* l ) {
 
 void list_destroy(struct list* );
 void list_push( struct list* , const struct ajj_value* val );
-static inline
+static
 size_t list_size( struct list* l ) {
   return l->len;
 }
-static inline
+static
 const struct ajj_value*
 list_index( struct list* l , size_t i ) {
   assert(i < l->len);
@@ -109,20 +123,21 @@ list_index( struct list* l , size_t i ) {
 void list_clear();
 
 /* iterator for list */
-static inline
-int list_iter_begin( const struct list* ) {
+static
+int list_iter_start( const struct list* ) {
   return 0;
 }
-static inline
+static
 int list_iter_has( const struct list* l , int itr ) {
   return itr < l->len;
 }
-static inline
+static
 int list_iter_move( const struct list* l , int itr ) {
   return itr+1;
 }
-static inline
-void* list_iter_deref( const struct list* l , int itr ) {
+static
+struct ajj_value*
+list_iter_deref( const struct list* l , int itr ) {
   return list_index(l,itr);
 }
 
@@ -130,76 +145,76 @@ void* list_iter_deref( const struct list* l , int itr ) {
  * Dict
  * just wrapper around map structure
  * ===================================*/
-static inline
+static
 void dict_create( struct map* d ) {
   map_create(d,sizeof(struct ajj_value),DICT_DEFAULT_BUF_SIZE);
 }
 
-static inline
+static
 void dict_clear( struct map* d ) {
   map_clear(d);
 }
 
-static inline
+static
 void dict_destroy( struct map* d ) {
   map_destroy(d);
 }
 
-static inline
+static
 int dict_insert( struct map* d , const struct string* k,
     int own, const struct ajj_value* val ) {
   return map_insert(d,k,own,val);
 }
 
-static inline
+static
 int dict_insert_c( struct map* d , const char* k,
     const struct ajj_value* val ) {
   return map_insert_c(d,k,val);
 }
 
-static inline
+static
 int dict_remove( struct map* d , const struct string* k,
     void* val ) {
   return map_remove(d,k,val);
 }
 
-static inline
+static
 int dict_remove_c( struct map* d , const char* k, void* val ) {
   return map_remove(d,k,val);
 }
 
-static inline
-const struct ajj_value*
+static
+struct ajj_value*
 dict_find( struct map* d , const struct string* k ) {
   return map_find(d,k);
 }
 
-static inline
-const struct ajj_value*
+static
+struct ajj_value*
 dict_find_c( struct map* d , const char* k ) {
   return map_find(d,k);
 }
 
 /* iterator wrapper */
-static inline
+static
 int dict_iter_start( const struct map* d ) {
   return map_iter_start(d);
 }
 
-static inline
+static
 int dict_iter_move( const struct map* d , int itr ) {
-  return map_itr_move(d,itr);
+  return map_iter_move(d,itr);
 }
 
-static inline
+static
 int dict_iter_has( const struct map* d , int itr ) {
-  return itr < d->cap;
+  return map_iter_has(d,itr);
 }
 
-static inline
+static
 struct map_pair
-dict_itr_deref( struct map* d , int itr ) {
-  return map_itr_deref(d,itr);
+dict_iter_deref( struct map* d , int itr ) {
+  return map_iter_deref(d,itr);
 }
 
 /* ======================================
@@ -220,6 +235,8 @@ struct ajj_object {
   struct gc_scope* scp;
 };
 
+#define IS_OBJECT_OWNED(obj) (((obj)->scp) == NULL)
+#define IS_VALUE_OWNED(val) ((AJJ_IS_PRIMITIVE(val))||((val)->value.object->scp!=NULL))
 
 /* ================================================
  * Global variables
@@ -249,65 +266,58 @@ enum {
 };
 
 struct gvar_table {
-  struct gvar_table_entry* entries;
-  size_t cap;
-  size_t len;
+  struct map d; /* dictionary of the map */
+  struct gvar_table* prev; /* previous table */
 };
 
 /* Global varialbes table. Wrapper around map */
-static inline
-void gvar_table_init( struct map* m ) {
-  map_init(m,GVAR_DEFUALT_BUF_SIZE,sizeof(struct gvar));
+static
+struct gvar_table*
+gvar_table_create( struct gvar_table* p ) {
+  struct gvar_table* ret = malloc(sizeof(*p));
+  map_init(ret->d,GVAR_DEFUALT_BUF_SIZE,sizeof(struct gvar));
+  ret->prev = p;
+  return ret;
 }
 
-static inline
-void gvar_table_clear( struct map* m ) {
-  map_clear(m);
-}
+void
+gvar_table_clear( struct gvar_table* m );
 
-static inline
-void gvar_table_destroy( struct map* m ) {
-  map_destroy(m);
-}
+struct gvar_table*
+gvar_table_destroy( struct gvar_table* m );
 
-static inline
-int gvar_table_insert( struct map* m , const struct string* k,
+static
+int gvar_table_insert( struct gvar_table* m , const struct string* k,
     int own, const struct gvar* val ) {
-  return map_insert(m,k,own,val);
+  return map_insert(m->d,k,own,val);
 }
 
-static inline
-int gvar_table_insert_c( struct map* m , const char* k,
+static
+int gvar_table_insert_c( struct gvar_table* m , const char* k,
     const struct gvar* val ) {
-  return map_insert_c(m,k,val);
+  return map_insert_c(m->d,k,val);
 }
 
-static inline
-int gvar_table_remove( struct map* m , const struct string* k,
+static
+int gvar_table_remove( struct gvar_table* m , const struct string* k,
     struct gvar* val ) {
-  return map_remove(m,k,val);
+  return map_remove(m->d,k,val);
 }
 
-static inline
-int gvar_table_remove_c( struct map* m , const char* k,
+static
+int gvar_table_remove_c( struct gvar_table* m , const char* k,
     struct gvar* val ) {
-  return map_remove(m,k,val);
+  return map_remove(m->d,k,val);
 }
 
-static inline
-const struct gvar*
-gvar_tabel_find( struct map* m , const struct string* k ) {
-  return gvar_table_find(m,k);
-}
+struct gvar*
+gvar_table_find( struct gvar_table* m , const struct string* k );
 
-static inline
-const struct gvar*
-gvar_table_find_c( struct map* m , const char* k ) {
-  return gvar_table_find_c(m,k);
-}
+struct gvar*
+gvar_table_find_c( struct gvar_table* m , const char* k );
 
 /* This function will initialize an existed function table */
-static inline
+static
 void func_table_init( struct func_table* tb ,
     ajj_class_ctor ctor ,
     ajj_class_dtor dtor ,
@@ -321,7 +331,7 @@ void func_table_init( struct func_table* tb ,
 }
 
 /* Clear the GUT of func_table object */
-static inline
+static
 void func_table_clear( struct func_table* tb ) {
   if( tb->func_cap > AJJ_FUNC_LOCAL_BUF_SIZE ) {
     free(tb->func_tb); /* on heap */
@@ -330,7 +340,7 @@ void func_table_clear( struct func_table* tb ) {
 }
 
 /* Add a new function into the func_table */
-static inline
+static
 struct function* func_table_add_func( struct func_table* tb ) {
   if( tb->func_len == tb->func_cap ) {
    void* nf = malloc( sizeof(struct function)*(tb->func_cap)*2 );
@@ -344,7 +354,7 @@ struct function* func_table_add_func( struct func_table* tb ) {
   return tb->func_tb + (tb->func_len++);
 }
 
-static inline
+static
 void func_table_shrink_to_fit( struct func_table* tb ) {
   if( tb->func_cap > AJJ_FUNC_LOCAL_BUF_SIZE ) {
     if( tb->func_len < tb->func_cap ) {
@@ -364,7 +374,7 @@ void func_table_destroy( struct func_table* tb );
 struct function* func_table_find_func( struct func_table* tb,
     const struct string* name );
 
-static inline
+static
 struct c_closure*
 func_table_add_c_clsoure( struct func_table* tb , struct string* name , int own ) {
   struct function* f = func_table_find_func(tb,name);
@@ -377,7 +387,7 @@ func_table_add_c_clsoure( struct func_table* tb , struct string* name , int own 
   return &(f->f.c_fn);
 }
 
-static inline
+static
 ajj_method*
 func_table_add_c_method( struct func_table* tb , struct string* name , int own ) {
   struct function* f = func_table_find_func(tb,name);
@@ -389,7 +399,7 @@ func_table_add_c_method( struct func_table* tb , struct string* name , int own )
   return &(f->f.c_mt);
 }
 
-static inline
+static
 struct program*
 func_table_add_jj_block( struct func_table* tb, struct string* name , int own ) {
   struct function* f = func_table_find_func(tb,name);
@@ -402,7 +412,7 @@ func_table_add_jj_block( struct func_table* tb, struct string* name , int own ) 
   return &(f->f.jj_fn);
 }
 
-static inline
+static
 struct program*
 func_table_add_jj_macro( struct func_table* tb, struct string* name , int own ) {
   struct function* f = func_table_find_func(tb,name);
@@ -415,35 +425,23 @@ func_table_add_jj_macro( struct func_table* tb, struct string* name , int own ) 
   return &(f->f.jj_fn);
 }
 
-/* Create an object object */
-static inline
-void object_create( struct object* obj ,
-    const struct func_table* func_tb, void* data ) {
-  dict_create(&(obj->prop));
-  obj->fn_tb = func_tb;
-  obj->data = data;
-}
-
 /* Create a single ajj_object which is NOT INITIALZIED with any type
  * under the scope object "scope" */
 struct ajj_object*
 ajj_object_create ( struct ajj* , struct gc_scope* scope );
 
-static inline
 struct ajj_object*
-ajj_object_create_child( struct ajj* , struct ajj_object* obj ) {
-  return ajj_object_create(ajj,obj->scp);
-}
+ajj_object_move( struct gc_scope* scp , struct ajj_object* obj );
 
 /* Delete routine. Delete a single object from its GC. This deletion
  * function will only delete the corresponding object , not its children,
  * it is not safe to delete children, since the parent object doesn't
  * really have the ownership */
-static inline
+static
 void ajj_object_destroy( struct ajj* , struct ajj_object* obj );
 
 /* Initialize an created ajj_object to a certain type */
-static inline
+static
 struct ajj_object*
 ajj_object_string( struct ajj_object* obj,
     const char* str , size_t len , int own ) {
@@ -453,7 +451,7 @@ ajj_object_string( struct ajj_object* obj,
   return obj;
 }
 
-static inline
+static
 struct ajj_object*
 ajj_object_create_string( struct ajj* a, struct gc_scope* scp,
     const char* str, size_t len , int own ) {
@@ -461,7 +459,7 @@ ajj_object_create_string( struct ajj* a, struct gc_scope* scp,
       str,len,own);
 }
 
-static inline
+static
 struct ajj_object*
 ajj_object_const_string( struct ajj_object* obj,
     const struct string* str ) {
@@ -470,7 +468,7 @@ ajj_object_const_string( struct ajj_object* obj,
   return obj;
 }
 
-static inline
+static
 struct ajj_object*
 ajj_object_create_const_string( struct ajj*a , struct gc_scope* scp,
     const struct string* str ) {
@@ -478,7 +476,7 @@ ajj_object_create_const_string( struct ajj*a , struct gc_scope* scp,
       str);
 }
 
-static inline
+static
 struct ajj_object*
 ajj_object_dict( struct ajj_object* obj ) {
   dict_create(&(obj->val.d));
@@ -486,13 +484,13 @@ ajj_object_dict( struct ajj_object* obj ) {
   return obj;
 }
 
-static inline
+static
 struct ajj_object*
 ajj_object_create_dict( struct ajj* a, struct gc_scope* scp ) {
   return ajj_object_dict(ajj_object_create(a,scp));
 }
 
-static inline
+static
 struct ajj_object*
 ajj_object_list( struct ajj_object* obj ) {
   list_create(&(obj->val.l));
@@ -500,22 +498,25 @@ ajj_object_list( struct ajj_object* obj ) {
   return obj;
 }
 
-static inline
+static
 struct ajj_object*
 ajj_object_create_list( struct ajj* a, struct gc_scope* scp ) {
   return ajj_object_list(ajj_object_create(a,scp));
 }
 
-static inline
+static
 struct ajj_object*
 ajj_object_obj( struct ajj_object* obj ,
     const struct func_table* fn_tb, void* data ) {
-  object_create(&(obj_val.o),fn_tb,data);
+  struct object* o = &(obj->val.obj);
+  dict_create(&(o->prop));
+  o->fn_tb = func_tb;
+  o->data = data;
   obj->tp = AJJ_VALUE_OBJECT;
   return obj;
 }
 
-static inline
+static
 struct ajj_object*
 ajj_object_create_obj( struct ajj* a, struct gc_scope* scp ) {
   return ajj_object_obj(ajj_object_create(a,scp));
@@ -525,49 +526,55 @@ ajj_object_create_obj( struct ajj* a, struct gc_scope* scp ) {
  * Value wrapper for internal use
  * =================================================*/
 
-static inline
+static
 void ajj_value_destroy( struct ajj* a , struct ajj_value* val ) {
   if( val->type != AJJ_VALUE_NOT_USE &&
       val->type != AJJ_VALUE_BOOLEAN &&
       val->type != AJJ_VALUE_NONE &&
+      val->type != AJJ_VALUE_ITERATOR &&
       val->type != AJJ_VALUE_NUMBER )
     ajj_object_destroy(a,val->value.object);
 }
 
-
-static inline
+static
 const struct string* ajj_value_to_string( const struct ajj_value* val ) {
   assert(val->type == AJJ_VALUE_STRING);
   return &(val->value.object->val.str);
 }
 
-static inline
+static
 const char* ajj_value_to_cstr( const struct ajj_value* val ) {
   return ajj_value_to_string()->str;
 }
 
-static inline
+static
 const struct map*
 ajj_value_to_dict( const struct ajj_value* val ) {
   assert(val->type == AJJ_VALUE_DICT);
   return &(val->value.object->val.d);
 }
 
-static inline
+static
 const struct list*
 ajj_value_to_list( const struct ajj_value* val ) {
   assert(val->type == AJJ_VALUE_LIST);
   return &(val->value.object->val.l);
 }
 
-static inline
+static
 const struct object*
 ajj_value_to_object( const struct ajj_value* val ) {
   assert(val->type == AJJ_VALUE_OBJECT);
   return &(val->value.object->val.obj);
 }
 
-static inline
+static
+int ajj_value_to_iter( const struct ajj_value* val ) {
+  assert(val->type == AJJ_VALUE_ITERATOR);
+  return val->value.boolean;
+}
+
+static
 struct ajj_value
 ajj_value_boolean( int boolean ) {
   struct ajj_value ret;
@@ -577,7 +584,16 @@ ajj_value_boolean( int boolean ) {
   return ret;
 }
 
-static inline
+static
+struct ajj_value
+ajj_value_iter( int itr ) {
+  struct ajj_value ret;
+  ret.type = AJJ_VALUE_ITERATOR;
+  ret.value.boolean = itr; /* Use boolean to store the iterator */
+  return ret;
+}
+
+static
 struct ajj_value ajj_value_assign( struct ajj_object* obj ) {
   struct ajj_value val;
   assert(obj->tp != AJJ_VALUE_NOT_USE);
@@ -588,4 +604,15 @@ struct ajj_value ajj_value_assign( struct ajj_object* obj ) {
   val.value.object = obj;
   return val;
 }
+
+/* This is the only safe way to copy an ajj_value to another value
+ * holder. Internally it will copy the primitive type or MOVE the
+ * none-primitive type to the target gc_scope. If gc_scope is NULL,
+ * then this value is escaped and it means no gc_scope will hold it
+ * The typical usage is for assigning to upvalue */
+static
+struct ajj_value
+ajj_value_copy( struct ajj* a , struct gc_scope* ,
+    const struct ajj_value* src );
+
 #endif /* _OBJECT_H_ */

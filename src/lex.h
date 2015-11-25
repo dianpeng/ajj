@@ -2,18 +2,8 @@
 #define _LEX_H_
 #include "util.h"
 
-#define CODE_SNIPPET_SIZE
+#define CODE_SNIPPET_SIZE 256
 
-struct tokenizer {
-  const char* src;
-  size_t pos;
-  int tk;
-  size_t tk_len; /* This represent the length of the this token's corresponding
-                  * part inside of the jinja template source code */
-  int mode; /* tell me which tokenize mode need to go into */
-  struct strubuf lexeme; /* for lexeme */
-  double num_lexeme; /* only useful when the token is TK_NUMBER */
-};
 
 enum {
   TOKENIZE_JINJA,
@@ -51,17 +41,15 @@ enum {
   X(TK_IMPORT,"import") \
   X(TK_INCLUDE,"include") \
   X(TK_ENDINCLUDE,"endinclude") \
-  X(TK_FROM,"from") \
   X(TK_IN,"in") \
   X(TK_AS,"as") \
-  X(TK_RECURSIVE,"recursive") \
   X(TK_CONTINUE,"continue") \
   X(TK_BREAK,"break") \
   X(TK_UPVALUE,"upvalue") \
   X(TK_ENDUPVALUE,"endupvalue") \
   X(TK_JSON,"json") \
   X(TK_OVERRIDE,"override") \
-  X(TK_FIXED,"fix") \
+  X(TK_FIX,"fix") \
   X(TK_LPAR,"(") \
   X(TK_RPAR,")") \
   X(TK_LSQR,"[") \
@@ -92,34 +80,48 @@ enum {
   X(TK_QUESTION,"?") \
   X(TK_STRING,"<string>") \
   X(TK_NUMBER,"<number>") \
-  X(TK_VARIABLE,"<variable>") \ X(TK_TRUE,"<true>") \
+  X(TK_VARIABLE,"<variable>") \
+  X(TK_TRUE,"<true>") \
   X(TK_FALSE,"<false>") \
   X(TK_NONE,"<none>") \
   X(TK_EOF,"<eof>") \
   X(TK_UNKNOWN,"<unknown>")
 
 #define X(A,B) A,
-enum {
+typedef enum {
   TOKEN_LIST(X)
   SIZE_OF_TOKENS
-};
+} token_id;
 #undef X
+
+struct tokenizer {
+  const char* src;
+  size_t pos;
+  token_id tk;
+  size_t tk_len; /* This represent the length of the this token's corresponding
+                  * part inside of the jinja template source code */
+  int mode; /* tell me which tokenize mode need to go into */
+  struct strbuf lexeme; /* for lexeme */
+  double num_lexeme; /* only useful when the token is TK_NUMBER */
+};
 
 const char* tk_get_name( int );
 
-int tk_lex( struct tokenizer* tk );
-int tk_move( struct tokenizer* tk );
+token_id tk_lex( struct tokenizer* tk );
+token_id tk_move( struct tokenizer* tk );
 
 /* Use to get a human readable code snippet for diagnose information.
  * The snippet is the source line that contains the position "pos".
  * But at most 128 characters is fetched as upper bound for information.
- * The return string is owned by the caller, please free it properly */
-void tk_get_code_snippet( const char* src, int pos , char output[CODE_SNIPPET_SIZE] );
+ * The return string is owned by the caller, please free it properly.
+ * The buffer is always assume has length CODE_SNIPPET_SIZE */
+void tk_get_code_snippet( const char* src, int pos , char* output );
+
 #define tk_get_current_code_snippet(tk,output) \
   tk_get_code_snippet((tk)->src,(tk)->pos,output)
 
 static inline
-int tk_init( struct tokenizer* tk , const char* src ) {
+token_id tk_init( struct tokenizer* tk , const char* src ) {
   tk->src = src;
   tk->pos = 0;
   tk->mode = TOKENIZE_JINJA;
@@ -133,7 +135,7 @@ void tk_destroy( struct tokenizer* tk ) {
 }
 
 static inline
-int tk_expect( struct tokenizer* tk , int t ) {
+int tk_expect( struct tokenizer* tk , token_id t ) {
   if( tk_lex(tk) == t ) {
     tk_move(tk);
     return 0;

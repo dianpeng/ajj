@@ -10,23 +10,6 @@
 
 struct runtime;
 
-/* Any value that resides inside of AJJ environments
- * are called global_var. Each global_var could be
- * any types of value as following:
- * 1. A ajj_value.
- * 2. A function , remember in ajj_value you are not
- * allowed to have a function.
- * 3. A object constructor. */
-
-struct global_var {
-  union {
-    struct ajj_value value;
-    struct c_closure func;
-    struct obj_ctor ctor;
-  } value;
-  int type;
-};
-
 struct ajj {
   struct slab obj_slab; /* object slab */
   struct slab glb_var_slab; /* global var slab */
@@ -40,7 +23,12 @@ struct ajj {
    * currently working at. It will be set when we
    * start executing the code */
   struct runtime* rt;
-  struct map gvar_tb; /* global variable table */
+  struct gvar_table* gvar_tb; /* global variable table */
 };
+
+/* internal utility functions */
+char* ajj_aux_load_file( struct ajj* a, const char* , size_t* );
+
+char* ajj_render( struct ajj* a , const char* , size_t* );
 
 #endif /* _AJJ_PRIV_H_ */

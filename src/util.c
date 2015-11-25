@@ -1,5 +1,10 @@
 #include "util.h"
 
+struct string NULL_STRING = { NULL , 0 };
+struct string TRUE_STRING = CONST_STRING("true");
+struct string FALSE_STRING= CONST_STRING("false");
+struct string NONE_STRING = CONST_STRING("none");
+
 /*
  * Dictionary implementation
  * Our mapionary supports traditional : insert , find and remove. The general
@@ -32,9 +37,7 @@ struct map_entry* map_insert_entry_c( struct map* d ,
   struct map_entry* e;
   e = d->entry + idx;
 
-  assert(d->len < d->cap);
-
-  if( e->empty ) {
+  if( !e->used ) {
     return e;
   } else {
     struct map_entry* ret = e->del ? e : NULL;
@@ -45,12 +48,12 @@ struct map_entry* map_insert_entry_c( struct map* d ,
         if( ret == NULL )
           ret = ne;
       } else {
-        if( ne->hash == fullhash && (strcmp(key,ne->key.str)==0) )
+        if( ne->hash == fullhash && (strcmp(key,ne->key.str)==0) ) {
           /* We found an existed one here */
           return ne;
         }
       }
-      if( ne->end )
+      if( !ne->more )
         break;
       ne = d->entry + ne->next;
     } while(1);
@@ -64,12 +67,12 @@ struct map_entry* map_insert_entry_c( struct map* d ,
       unsigned int h = fullhash;
       while(1) {
         ret = d->entry + (++h &(d->cap-1));
-        if( ret->empty || ret->del )
+        if( !(ret->used) || ret->del )
           break;
       }
-      assert( ne->end );
+      assert( !ne->more );
       ne->next = ret - d->entry;
-      ne->end = 0;
+      ne->more = 1;
     }
     return ret;
   }
@@ -78,7 +81,7 @@ struct map_entry* map_insert_entry_c( struct map* d ,
 #define MAP_VALUE(D,E) (((char*)((D)->value)) + ((E)-((D)->entry))*(D)->obj_sz)
 
 static inline
-void map_value_store( struct map* d, struct map_entry* e , void* val ) {
+void map_value_store( struct map* d, struct map_entry* e , const void* val ) {
   void* pos = MAP_VALUE(d,e);
   memcpy(pos,val,d->obj_sz);
 }
@@ -110,21 +113,22 @@ void map_rehash( struct map* d ) {
   temp_d.entry = new_buf;
   temp_d.cap = new_cap;
   temp_d.len = 0;
+  temp_d.obj_sz = d->obj_sz;
   temp_d.value = (char*)(new_buf) + sizeof(struct map_entry)*new_cap;
 
   for( i = 0 ; i < d->cap ; ++i ) {
     struct map_entry* o = d->entry + i;
     struct map_entry* e;
-    if( o->del || o->empty )
+    if( o->del || !(o->used) )
       continue;
-    e = map_insert_entry(&temp_d,o->key,o->hash,1);
+    e = map_insert_entry(&temp_d,&(o->key),o->hash,1);
     e->key = o->key;
     e->hash = o->hash;
     map_value_store(&temp_d,e,MAP_VALUE(d,o));
     if(e->del) e->del = 0;
-    if(e->empty) {
-      e->empty = 1;
-      e->end = 1;
+    if(!(e->used)) {
+      e->used = 1;
+      e->more = 0;
     }
   }
 
@@ -135,7 +139,6 @@ void map_rehash( struct map* d ) {
   temp_d.len = d->len;
   *d = temp_d;
 }
-
 
 int map_insert( struct map* d, const struct string* key , int own ,
     const void* val ) {
@@ -152,9 +155,9 @@ int map_insert( struct map* d, const struct string* key , int own ,
   e = map_insert_entry(d,key,fh,1);
   e->key = own ? *key : string_dup(key);
   if( e->del ) e->del = 0;
-  if( e->empty ) {
-    e->empty = 0;
-    e->end = 1;
+  if( !(e->used) ) {
+    e->used = 1;
+    e->more = 0;
   }
   ++d->len;
   e->hash = fh;
@@ -162,24 +165,27 @@ int map_insert( struct map* d, const struct string* key , int own ,
   return 0;
 }
 
-int map_insert_c( struct map* , const char* key ,
+int map_insert_c( struct map* d, const char* key ,
     const void* val ) {
   int fh;
   struct map_entry* e;
+  struct string k;
 
   if( d->len == DICT_MAX_SIZE )
     return -1;
 
   if( d->cap == d->len )
     map_rehash(d);
+  k.str = key;
+  k.len = strlen(key);
 
-  fh = map_hash(key);
+  fh = map_hash(&k);
   e = map_insert_entry_c(d,key,fh,1);
-  e->key = string_dupc(key);
+  e->key = string_dup(&k);
   if( e->del ) e->del = 0;
-  if( e->empty ) {
-    e->empty = 0;
-    e->end = 1;
+  if( !(e->used) ) {
+    e->used = 1;
+    e->more = 0;
   }
   ++d->len;
   e->hash = fh;
@@ -192,7 +198,7 @@ int map_remove( struct map* d , const struct string* key , void* output ) {
   if( e == NULL )
     return -1;
   else {
-    assert(!e->empty);
+    assert(e->used);
     assert(!e->del);
     assert(string_eq(&(e->key),key));
     /* destroy the key */
@@ -200,25 +206,29 @@ int map_remove( struct map* d , const struct string* key , void* output ) {
     if( output )
       map_value_load(d,e,output);
     e->del = 1;
-    --d->cap;
+    --d->len;
     return 0;
   }
 }
 
 int map_remove_c( struct map* d , const char* key , void* output ) {
-  struct map_entry* e = map_insert_entry_c(d,key,map_hash(key),0);
+  struct string k;
+  struct map_entry* e;
+  k.str = key;
+  k.len = strlen(key);
+  e = map_insert_entry_c(d,key,map_hash(&k),0);
   if( e == NULL )
     return -1;
   else {
-    assert(!e->empty);
+    assert(e->used);
     assert(!e->del);
-    assert(string_eqc(&(d->key),key));
+    assert(string_eqc(&(e->key),key));
     /* destroy string */
     string_destroy(&(e->key));
     if( output )
       map_value_load(d,e,output);
     e->del = 1;
-    --d->cap;
+    --d->len;
     return 0;
   }
 }
@@ -233,7 +243,11 @@ void* map_find( struct map* d , const struct string* key ) {
 }
 
 void* map_find_c( struct map* d , const char* key ) {
-  struct map_entry* e = map_insert_entry_c(d,key,map_hash(key),0);
+  struct string k;
+  struct map_entry* e;
+  k.str = key;
+  k.len = strlen(key);
+  e = map_insert_entry_c(d,key,map_hash(&k),0);
   if( e ) {
     return MAP_VALUE(d,e);
   } else {
@@ -242,7 +256,7 @@ void* map_find_c( struct map* d , const char* key ) {
 }
 
 void map_create( struct map* d , size_t obj_sz , size_t cap ) {
-  assert( cap >= 2 && (cap&(cap-1)) );
+  assert( cap >= 2 && !((cap&(cap-1))) );
   assert( obj_sz > 0 );
   d->obj_sz = obj_sz;
   d->cap = cap;
@@ -257,7 +271,7 @@ void map_destroy( struct map* d ) {
    * since they all are on the heap */
   for( i = 0 ; i < d->cap ; ++i ) {
     struct map_entry* e = d->entry + i;
-    if( !e->empty && !e->del ) {
+    if( e->used && !e->del ) {
       string_destroy(&(e->key));
     }
   }
@@ -270,9 +284,9 @@ void map_clear( struct map* d ) {
   int i;
   for( i = 0 ; i < d->cap ; ++i ) {
     struct map_entry* e = d->entry + i;
-    if( !e->empty ) {
+    if( e->used ) {
       if( !e->del ) {
-        string_destroy(&(d->value));
+        string_destroy(&(e->key));
       }
       memset(e,0,sizeof(*e));
     }
@@ -284,7 +298,7 @@ int map_iter_start( const struct map* d ) {
   int ret = 0;
   for( ; ret < d->cap ; ++ret ) {
     struct map_entry* e = d->entry + ret;
-    if( !e->empty && !e->del )
+    if( e->used && !e->del )
       return ret;
   }
   return ret;
@@ -293,7 +307,7 @@ int map_iter_start( const struct map* d ) {
 int map_iter_move( const struct map* d , int itr ) {
   for( ++itr ; itr < d->cap ; ++itr ) {
     struct map_entry* e = d->entry + itr;
-    if( !e->empty && !e->del )
+    if( e->used && !e->del )
       return itr;
   }
 }
@@ -309,14 +323,13 @@ void slab_reserve( struct slab* sl ) {
   void* mem = malloc(sizeof(struct chunk) + sl->cur_cap*sl->obj_sz*2);
   void* h;
   size_t i;
-
   ((struct chunk*)mem)->next = sl->ck;
   sl->ck = mem;
   h = mem = (char*)(mem) + sizeof(struct chunk);
 
   for( i = 0 ; i < cap-1 ; ++i ) {
     ((struct freelist*)(mem))->next =
-      ((char*)mem) + sl->obj_sz;
+      (struct freelist*)(((char*)mem) + sl->obj_sz);
     mem = (char*)mem + sl->obj_sz;
   }
   ((struct freelist*)(mem))->next = NULL;
@@ -326,8 +339,10 @@ void slab_reserve( struct slab* sl ) {
 
 void slab_create( struct slab* sl , size_t cap , size_t obj_sz ) {
   cap = cap < 32 ? 16 : cap/2;
-  sl->obj_sz = obj_sz;
-  sl->fi = sl->ck = NULL;
+  sl->obj_sz = obj_sz < sizeof(void*) ?
+    sizeof(void*) : obj_sz;
+  sl->fl = NULL;
+  sl->ck = NULL;
   sl->cur_cap = cap;
   slab_reserve( sl );
 }
@@ -356,6 +371,7 @@ void slab_destroy( struct slab* sl ) {
     free(c);
     c = n;
   }
-  sl->ck = sl->fl = NULL;
+  sl->ck = NULL;
+  sl->fl = NULL;
   sl->cur_cap = sl->obj_sz = 0;
 }

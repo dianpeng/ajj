@@ -3,6 +3,8 @@
 #include "object.h"
 #include "gc.h"
 #include "util.h"
+#include "json.h"
+
 #include <limits.h>
 #include <math.h>
 #include <errno.h>
@@ -27,18 +29,18 @@ stack_value( struct ajj* a , int x ) {
   return x + a->rt->val_stk;
 }
 
-#define BOT(a,A,X) stack_value((A),cur_frame((A))->ebp+(X))
-#define TOP(a,A,X) stack_value((A),cur_frame((A))->esp-(X))
+#define BOT(A,X) stack_value((A),cur_frame((A))->ebp+(X))
+#define TOP(A,X) stack_value((A),cur_frame((A))->esp-(X))
 #else
-#define BOT(a,A,X) ((A)->rt->val_stk[cur_frame((A))->ebp+(X)])
-#define TOP(a,A,X) ((A)->rt->val_stk[cur_frame((A))->esp-(X)])
+#define BOT(A,X) ((A)->rt->val_stk[cur_frame((A))->ebp+(X)])
+#define TOP(A,X) ((A)->rt->val_stk[cur_frame((A))->esp-(X)])
 #endif /* NDEBUG */
 
 #define POP(A,X) \
   do { \
     int val = X; \
     struct func_frame* fr = cur_frame(A); \
-    assert(fr->esp >= val; \
+    assert(fr->esp >= val); \
     fr->esp -= val; \
   } while(0)
 
@@ -55,15 +57,34 @@ stack_value( struct ajj* a , int x ) {
     } \
   } while(0)
 
+static
+const struct string* const_str( struct ajj* a , int idx ) {
+  const struct function* c = cur_function(a);
+  assert( IS_JINJA(c) );
+  assert( idx < c->f.jj_fn.str_len );
+  return &(c->f.jj_fn.str_tbl[idx]);
+}
+
+static
+double const_num( struct ajj* a, int idx ) {
+  const struct function* c = cur_function(a);
+  assert( IS_JINJA(c) );
+  assert( idx < c->f.jj_fn.num_len );
+  return c->f.jj_fn.num_tbl[idx];
+}
+
 /* ============================
  * runtime
  * ==========================*/
 static
-struct runtime* create_runtime( struct ajj_object* tp ) {
+struct runtime* runtime_create( struct ajj_object* tp ) {
   struct runtime* rt = calloc(1,sizeof(*rt));
   rt->cur_tmpl = tp;
   return rt;
 }
+
+static
+void runtime_destroy( struct runtime* rt );
 
 static
 void report_error( struct ajj* a , const char* format , ... );
@@ -79,7 +100,7 @@ int next_instr( struct ajj* a ) {
   const struct program* prg;
 
   assert(IS_JINJA(fr->entry));
-  prg = JINJAFUNC(fr->entry);
+  prg = GET_JINJAFUNC(fr->entry);
   if( prg->len == fr->pc ) {
     return VM_HALT;
   } else {
@@ -92,7 +113,7 @@ int next_instr( struct ajj* a ) {
 static
 int next_arg( struct ajj* a , int* fail ) {
   struct func_frame* fr = cur_frame(a);
-  const struct program* prg = JINJAFUNC(fr->entry);
+  const struct program* prg = GET_JINJAFUNC(fr->entry);
   assert(IS_JINJA(fr->entry));
   if( prg->len < fr->pc+4 ) {
     *fail = 1;
@@ -111,14 +132,74 @@ int next_arg( struct ajj* a , int* fail ) {
 
 static
 void set_upvalue( struct ajj* a, const struct string* name,
-    const struct ajj_value* value , int* fail );
+    const struct ajj_value* value , int own , int* fail ) {
+  struct gvar_table* g = a->gvar_tb;
+  struct gvar* var = gvar_table_find(g,name);
+  if( var == NULL ) {
+    struct gvar new_var;
+    new_var.type = GVAR_VALUE;
+    new_var.gut.value = slab_malloc(&(a->glb_var_slab));
+    new_var.gut.value->prev = NULL;
+    new_var.gut.value->val = own ? ajj_value_copy(a,NULL,value) : *value;
+    gvar_table_insert(g,name,0,&new_var);
+  } else {
+    struct global_var* new_var;
+    if( var->type != GVAR_VALUE ) {
+      *fail = 1;
+      report_error(a,"The global variable:%s is not valid for assignment!",
+          name->str);
+      return;
+    }
+    new_var->prev = var->gut.value;
+    var->gut.value = new_var;
+    new_var->val = ajj_value_copy(a,NULL,value);
+  }
+  *fail = 0;
+}
 
 static
 struct ajj_value
-get_upvalue( struct ajj* a , const struct string* name , int* fail );
+get_upvalue( struct ajj* a , const struct string* name ) {
+  struct gvar_table* g = a->gvar_tb;
+  struct gvar* var = gvar_table_find(g,name);
+  if( var == NULL ) {
+    return AJJ_NONE;
+  } else {
+    if( var->type != GVAR_VALUE ) {
+      /* user reference to a global variable but this variable
+       * is not a value type. For this situations, we still return
+       * a NONE object */
+      return AJJ_NONE;
+    } else {
+      return var->gut.value->val;
+    }
+  }
+}
 
 static
-void del_upvalue( struct ajj* a, const struct string* name , int* fail );
+void del_upvalue( struct ajj* a, const struct string* name ) {
+  struct gvar* v = gvar_table_find(a->gvar_tb,name);
+  if( v != NULL ) {
+    if( v->type == GVAR_VALUE ) {
+      struct global_var* p = v->gut.value->prev;
+      if(IS_VALUE_OWNED(&(v->gut.value->val))) {
+        /* delete this upvalue only when we own it */
+        ajj_value_destroy(a,&(v->gut.value->val));
+      }
+      slab_free(&(a->glb_var_slab),v->gut.value);
+      if(p)
+        v->gut.value = p;
+      else
+        /* remove the value from the table since the parent
+         * field is NULL which means no more value existed */
+        gvar_table_remove(a->gvar_tb,name,NULL);
+    } else {
+      /* We should never be here to manually delete a non-VALUE upvalue.
+       * All the non-VALUE upvalue are assigned by user in C function side */
+      UNREACHABLE();
+    }
+  }
+}
 
 /* =============================
  * Type conversions
@@ -273,30 +354,86 @@ int is_empty( struct ajj* a , const struct ajj_value* val , int* fail ) {
  * ============================*/
 
 /* binary operation handler , saves me some typings */
-#define DEFINE_BIN_HANDLER(N,O,TYPE) \
+#define DEFINE_BIN_HANDLER(N,ON,OS,TYPE) \
   static   \
   struct ajj_value N(struct ajj* a, \
       const struct ajj_value* l, \
       const struct ajj_value* r, \
       int* fail ) { \
-    double ln,rn; \
-    ln = to_number(a,l,fail); \
-    if(*fail) return AJJ_NONE; \
-    rn = to_number(a,r,fail); \
-    if(*fail) return AJJ_NONE; \
-    *fail = 0; \
-    return ajj_value_##TYPE( ln O rn ); \
+    if( l->type == AJJ_VALUE_STRING || \
+        r->type == AJJ_VALUE_STRING ) { \
+      int own_l , own_r; \
+      struct string ls ; \
+      struct string rs ; \
+      ls = to_string(a,l,&own_l,fail); \
+      if( *fail ) return AJJ_NONE; \
+      rs = to_string(a,r,&own_r,fail); \
+      if( *fail ) { \
+        if(own_l) \
+          string_destroy(&ls); \
+        return AJJ_NONE; \
+      } \
+      OS(a,&ls,own_l,&rs,own_r); \
+    } else { \
+      double ln , rn; \
+      ln = to_number(a,l,fail); \
+      if( *fail ) return AJJ_NONE; \
+      rn = to_number(a,r,fail); \
+      if( *fail ) return AJJ_NONE; \
+      return ajj_value_##TYPE( ln ON rn ); \
+    } \
   }
 
-DEFINE_BIN_HANDLER(vm_add,+,number)
-DEFINE_BIN_HANDLER(vm_eq,==,boolean)
-DEFINE_BIN_HANDLER(vm_ne,!=,boolean)
-DEFINE_BIN_HANDLER(vm_le,<=,boolean)
-DEFINE_BIN_HANDLER(vm_lt,<,boolean)
-DEFINE_BIN_HANDLER(vm_ge,>=,boolean)
-DEFINE_BIN_HANDLER(vm_gt,>,boolean)
+#define STRING_ADD(a,L,OL,R,OR) \
+  do { \
+    struct strbuf buf; \
+    struct string str; \
+    strbuf_init(&buf); \
+    strbuf_append(&buf,(L)->str,(L)->len); \
+    strbuf_append(&buf,(R)->str,(R)->len); \
+    if(OL) string_destroy(L); \
+    if(OR) string_destroy(R); \
+    str = strbuf_tostring(&buf); \
+    return ajj_value_assign( \
+        ajj_object_create_string(a,a->rt->cur_gc,\
+          str.str,str.len,1)); \
+  } while(0)
+
+#define STRING_COMP(a,L,OL,R,OR,CMP) \
+  do { \
+    int result = strcmp((L)->str,(R)->str) CMP 0; \
+    return ajj_value_number(result); \
+  } while(0)
+
+DEFINE_BIN_HANDLER(vm_add,+,STRING_ADD,number)
+
+#define STRING_COMP_EQ(A,B,C,D,E) STRING_COMP(A,B,C,D,E,==)
+DEFINE_BIN_HANDLER(vm_eq,==,STRING_COMP_EQ,boolean)
+
+#define STRING_COMP_NE(A,B,C,D,E) STRING_COMP(A,B,C,D,E,!=)
+DEFINE_BIN_HANDLER(vm_ne,!=,STRING_COMP_NE,boolean)
+
+#define STRING_COMP_LE(A,B,C,D,E) STRING_COMP(A,B,C,D,E,<=)
+DEFINE_BIN_HANDLER(vm_le,<=,STRING_COMP_LE,boolean)
+
+#define STRING_COMP_LT(A,B,C,D,E) STRING_COMP(A,B,C,D,E,<)
+DEFINE_BIN_HANDLER(vm_lt,<,STRING_COMP_LT,boolean)
+
+#define STRING_COMP_GE(A,B,C,D,E) STRING_COMP(A,B,C,D,E,>=)
+DEFINE_BIN_HANDLER(vm_ge,>=,STRING_COMP_GE,boolean)
+
+#define STRING_COMP_GT(A,B,C,D,E) STRING_COMP(A,B,C,D,E,>)
+DEFINE_BIN_HANDLER(vm_gt,>,STRING_COMP_GT,boolean)
 
 #undef DEFINE_BIN_HANDLER
+#undef STRING_ADD
+#undef STRING_COMP
+#undef STRING_COMP_EQ
+#undef STRING_COMP_NE
+#undef STRING_COMP_LE
+#undef STRING_COMP_LT
+#undef STRING_COMP_GE
+#undef STRING_COMP_GT
 
 /* unary operation handler */
 static
@@ -326,7 +463,7 @@ vm_call(struct ajj* a, struct ajj_value* obj , int* fail) {
   struct func_frame* fr = cur_frame(a);
   struct ajj_value argnum = ajj_value_number(fr->par_cnt);
   /* setting up the upvalue for argnum ( function parameter count ) */
-  set_upvalue(a,&ARGNUM,&argnum,fail);
+  set_upvalue(a,&ARGNUM,&argnum,1,fail);
   if(*fail) return AJJ_NONE;
 
   if( IS_C(fr->entry) ) {
@@ -429,6 +566,21 @@ struct ajj_value vm_ldict( struct ajj* a ) {
 }
 
 static
+void vm_lift( struct ajj* a , int pos , int level ) {
+  struct ajj_value* val = BOT(a,pos);
+  if( AJJ_IS_PRIMITIVE(val) ) {
+    return;
+  } else {
+    struct gc_scope* scp = val->value.object->scp;
+    for( ; level > 0 ; --level ) {
+      scp = scp->parent;
+      assert( scp != NULL );
+    }
+    ajj_object_move(scp,val->value.object);
+  }
+}
+
+static
 void vm_attrset( struct ajj* a , struct ajj_value* obj,
     const struct ajj_value* key , const struct ajj_value* val ,
     int* fail ) {
@@ -465,6 +617,12 @@ vm_attrget( struct ajj* a , const struct ajj_value* obj,
       struct list* l = &(obj->value.object->val.l);
       int idx = to_integer(a,key,fail);
       if(*fail) return AJJ_NONE;
+      if( idx >= l->len ) {
+        *fail = 1;
+        report_error(a,"The index has size:%zu,but index is :%d." \
+            "Out of boundary of list!",l->len,idx);
+        return AJJ_NONE;
+      }
       return *list_index(l,idx);
     } else {
       struct map* d = &(obj->value.object->val.d);
@@ -489,17 +647,168 @@ vm_attrget( struct ajj* a , const struct ajj_value* obj,
 
 static
 void vm_attrpush( struct ajj* a , struct ajj_value* obj,
-    const struct ajj_value* val , int* fail );
+    const struct ajj_value* val , int* fail ) {
+  if( obj->type != AJJ_VALUE_LIST ) {
+    *fail = 1;
+    report_error(a,"Cannot push a value into a none-list/tuple object." \
+        "The object has type:%s!",ajj_value_get_type_name(val));
+    return;
+  } else {
+    struct list* l = &(obj->value.object->val.l);
+    list_push(l,val);
+    *fail = 0;
+    return;
+  }
+}
 
 static
-void vm_print( struct ajj* , const struct string* , int* );
+void vm_print( struct ajj* a , const struct string* str ) {
+  FILE* f = a->rt->output;
+  assert(f);
+  fwrite(str->str,1,str->len+1,f); /* faster than fprintf */
+}
 
 static
-void vm_enter( struct ajj* , int* );
+void vm_enter( struct ajj* a) {
+  a->rt->cur_gc = gc_scope_create(a,a->rt->cur_gc);
+}
 
 static
-void vm_exit( struct ajj* , int* );
+void vm_exit( struct ajj* a , int loops ) {
+  for( ; loops > 0 ; --loops ) {
+    struct gc_scope* p = a->rt->cur_gc->parent;
+    assert(p != NULL);
+    gc_scope_destroy(a,a->rt->cur_gc);
+    a->rt->cur_gc = p;
+  }
+}
 
+static
+void setup_env( struct ajj* a , int cnt , int* fail ) {
+  struct gvar_table* tb = gvar_table_create(a->gvar_tb);
+  struct gvar_table* ptb = a->gvar_tb; /* parent table */
+  a->gvar_tb = tb; /* change the global table */
+  if( cnt == 0 ) { *fail = 1; return; }
+  for( ; cnt > 0 ; --cnt ) {
+    const int idx = 3*cnt;
+    struct ajj_value* sym = TOP(a,idx);
+    struct ajj_value* val = TOP(a,idx-1);
+    struct ajj_value* opt = TOP(a,idx-2);
+    int iopt = (int)(opt->value.number);
+    int isym = (int)(sym->value.number);
+    assert( sym->type == AJJ_VALUE_NUMBER );
+    assert( opt->type == AJJ_VALUE_NUMBER );
+    /* check the options */
+    if( iopt == INCLUDE_UPVALUE_FIX ) {
+      if(gvar_table_find(ptb,const_str(a,isym))) {
+        continue;
+      }
+    }
+    /* set up the value thing */
+    set_upvalue(a,const_str(a,isym),val,1,fail);
+    if(*fail) { *fail = 1; return; }
+  }
+  *fail = 0;
+}
+
+static
+void setup_json_env( struct ajj* a , int cnt , int* fail );
+
+static
+void remove_env( struct ajj* a ) {
+  struct gvar_table* tb;
+  int itr;
+  assert( a->gvar_tb->prev != NULL );
+  tb = a->gvar_tb;
+  a->gvar_tb = tb->prev;
+  itr = map_iter_start(&(tb->d));
+  while( map_iter_has(&(tb->d),itr) ) {
+    struct map_pair entry = map_iter_deref(&(tb->d),itr);
+    struct gvar* v = (struct gvar*)(entry.val);
+    struct global_var* glb_var;
+    assert(v->type == GVAR_VALUE);
+    while(v->gut.value) {
+      glb_var = v->gut.value->prev;
+      ajj_value_destroy(a,&(v->gut.value->val));
+      slab_free(&(a->glb_var_slab),v->gut.value);
+      v->gut.value = glb_var;
+    }
+    itr = map_iter_next(&(tb->d),itr);
+  }
+  gvar_table_destroy(tb);
+}
+
+static
+char* load_template( struct ajj* a , const struct ajj_value* fn ) {
+  char* fc; /* file content */
+  if( fn->type != AJJ_VALUE_STRING ) {
+    report_error(a,"Include file name is not a string!");
+    return NULL;
+  }
+  if((fc = ajj_aux_load_file(a,ajj_value_to_cstr(fn),NULL))==NULL){
+    return NULL;
+  }
+  return fc;
+}
+
+static
+void vm_include( struct ajj* a , int type, int cnt , int* fail ) {
+  struct ajj_value* fn;
+  char* fc = NULL;
+  char* ro = NULL;
+  size_t ro_len;
+  struct runtime* rt;
+  switch(type) {
+    case INCLUDE_NONE:
+      fn = TOP(a,1); /* filename */
+      break;
+    case INCLUDE_UPVALUE:
+      fn = TOP(a,3*cnt+1); /* filename */
+      break;
+    case INCLUDE_JSON:
+      fn = TOP(a,3*cnt+2); /* filename */
+      break;
+    default:
+      UNREACHABLE();
+      break;
+  }
+  if((fc=load_template(a,fn))==NULL) {
+    *fail = 1;
+    return;
+  }
+  if( type == INCLUDE_UPVALUE ) {
+    setup_env(a,cnt,fail);
+    if(*fail) goto fail;
+  } else if( type == INCLUDE_JSON ) {
+    setup_json_env(a,cnt,fail);
+    if(*fail) goto fail;
+  }
+
+  rt = a->rt;
+  if((ro=ajj_render(a,fc,&ro_len))==NULL)
+    goto fail;
+  a->rt = rt;
+  fwrite(ro,1,ro_len,rt->output);
+  free(fc);free(ro);
+  /* remove the environment if it uses */
+  switch(type) {
+    case INCLUDE_NONE:
+      POP(a,1);break;
+    case INCLUDE_UPVALUE:
+      POP(a,3*cnt+1);remove_env(a);break;
+    case INCLUDE_JSON:
+      POP(a,3*cnt+2);remove_env(a);break;
+    default:
+      UNREACHABLE();
+      break;
+  }
+  *fail = 0; return;
+fail:
+  free(fc);free(ro);
+  if( type != INCLUDE_NONE)
+    remove_env(a);
+  *fail = 1; return;
+}
 
 /* Use to resolve function when you call it globally, VM_CALL */
 static
@@ -524,11 +833,12 @@ void enter_function( struct ajj* a , const struct function* f,
     *fail = 1;
   } else {
     struct func_frame* fr = rt->call_stk+rt->cur_call_stk;
-    int esp = rt->cur_call_stk == 0 ? 0 :
+    int prev_esp = rt->cur_call_stk == 0 ? 0 :
       rt->call_stk[rt->cur_call_stk-1].esp;
 
-    int ebp = rt->cur_call_stk == 0 ? 0 :
-      rt->call_stk[rt->cur_call_stk-1].ebp;
+    int esp = prev_esp;
+
+    int ebp = prev_esp > 0 ? esp - par_cnt : 0;
 
     assert( rt->cur_call_stk >0 );
     fr->entry = f;
@@ -563,20 +873,16 @@ int exit_function( struct ajj* a , const struct ajj_value* ret ,
 }
 
 static
-const struct string* cur_function_const_str( struct ajj* a , int idx ) {
-  const struct function* c = cur_function(a);
-  assert( IS_JINJA(c) );
-  assert( idx < c->f.jj_fn.str_len );
-  return &(c->f.jj_fn.str_tbl[idx]);
+int exit_loop( struct ajj* a ) {
+  struct func_frame* fr = cur_frame(a);
+  struct runtime* rt = a->rt;
+  int par_cnt = fr->par_cnt;
+  assert( rt->cur_call_stk > 0 );
+  --rt->cur_call_stk;
+  fr->esp -= fr->method + par_cnt;
+  assert( fr->esp >= fr->ebp );
 }
 
-static
-double cur_function_const_num( struct ajj* a, int idx ) {
-  const struct function* c = cur_function(a);
-  assert( IS_JINJA(c) );
-  assert( idx < c->f.jj_fn.num_len );
-  return c->f.jj_fn.num_tbl[idx];
-}
 
 #define CHECKN(...) &fail); \
   do { \
@@ -591,8 +897,13 @@ double cur_function_const_num( struct ajj* a, int idx ) {
     if(!fail) goto fail; \
   } while(0
 
+/* We will not do any inline threading or direct threading for GCC.
+ * Because currently I really don't care too much about the performance.
+ * Since if we need to optimize it, lost of other places needs to be
+ * optimized , not only the VM implementation. For simplicity and mostly
+ * portability, I will use very old and traditional dispatching loop */
 static
-int vm_run_func( struct ajj* a, struct ajj_value* output ) {
+int vm_main( struct ajj* a ) {
 
   struct runtime* rt = a->rt;
   int fail;
@@ -610,9 +921,7 @@ int vm_run_func( struct ajj* a, struct ajj_value* output ) {
 
       vm_beg(ADD) {
         struct ajj_value o = vm_add(a,
-          TOP(a,2),
-          TOP(a,1),
-          CHECK);
+          TOP(a,2),TOP(a,1),CHECK);
         POP(a,1);
         PUSH(a,o);
       } vm_end(ADD)
@@ -727,7 +1036,7 @@ int vm_run_func( struct ajj* a, struct ajj_value* output ) {
         int fn_idx= next_arg(a,CHECK);
         int an = next_arg(a,CHECK);
         struct ajj_value argnum = ajj_value_number(an);
-        const struct string* fn = cur_function_const_str(a,fn_idx);
+        const struct string* fn = const_str(a,fn_idx);
         const struct function* f = resolve_free_function(a,fn,CHECK);
         if( f == NULL ) {
           report_error(a,"Cannot find function:%s!",fn->str);
@@ -754,7 +1063,7 @@ int vm_run_func( struct ajj* a, struct ajj_value* output ) {
         int an = next_arg(a,CHECK);
         struct ajj_value obj = TOP(a,an+1);
         struct ajj_value argnum = ajj_value_number(an);
-        const struct string* fn = cur_function_const_str(a,fn_idx);
+        const struct string* fn = const_str(a,fn_idx);
         const struct function* f = resolve_method(a,&obj,fn,CHECK);
         if( f == NULL ) {
           report_error(a,"Cannot find object method:%s!",fn->str);
@@ -788,7 +1097,7 @@ int vm_run_func( struct ajj* a, struct ajj_value* output ) {
 
       vm_beg(PRINT) {
         const struct string* text = to_string(a,TOP(a,1),CHECK);
-        vm_print(a,text,CHECK);
+        vm_print(a,text);
         POP(a,1);
       } vm_end(PRINT)
 
@@ -809,13 +1118,26 @@ int vm_run_func( struct ajj* a, struct ajj_value* output ) {
         PUSH(a,val);
       } vm_end(BPUSH)
 
-      vm_beg(BB_MOVE) {
+      vm_beg(MOVE) {
         int l = next_arg(a,CHECK);
         int r = next_arg(a,CHECK);
-        struct ajj_value lval = *BOT(a,l);
+        struct ajj_value temp = *BOT(a,l);
         *BOT(a,l) = *BOT(a,r);
-        *BOT(a,r) = lval;
-      } vm_end(BT_MOVE)
+        *BOT(a,r) = temp;
+      } vm_end(MOVE)
+
+      vm_beg(LIFT) {
+        int l = next_arg(a,CHECK);
+        int r = next_arg(a,CHECK);
+        vm_lift(a,l,r);
+      } vm_end(LIFT)
+
+      vm_beg(STORE) {
+        int dst = next_arg(a,CHECK);
+        struct ajj_value src = *TOP(a,1);
+        *BOT(a,dst) = src;
+        POP(a,1);
+      } vm_end(STORE)
 
       vm_beg(LSTR) {
         int arg = next_arg(a,CHECK);
@@ -889,16 +1211,17 @@ int vm_run_func( struct ajj* a, struct ajj_value* output ) {
       vm_beg(UPVALUE_SET) {
         int par = next_arg(a,CHECK);
         const struct string* upvalue_name =
-          cur_function_const_str(a,par);
+          const_str(a,par);
         struct ajj_value val = TOP(a,1);
-        set_upvalue(a,upvalue_name,&val,CHECK);
+        /* deteach the value to be owned by upvalue */
+        set_upvalue(a,upvalue_name,&val,1,CHECK);
         POP(a,1);
       } vm_end(UPVALUE_SET)
 
       vm_beg(UPVALUE_GET) {
         int par = next_arg(a,CHECK);
         const struct string* upvalue_name =
-          cur_function_const_str(a,par);
+          const_str(a,par);
         struct ajj_value val = get_upvalue(a,
             upvalue_name,CHECK);
         PUSH(a,val);
@@ -907,7 +1230,7 @@ int vm_run_func( struct ajj* a, struct ajj_value* output ) {
       vm_beg(UPVALUE_DEL) {
         int par = next_arg(a,CHECK);
         const struct string* upvalue_name =
-          cur_function_const_str(a,par);
+          const_str(a,par);
         del_upvalue(a,upvalue_name,CHECK);
       } vm_end(UPVALUE_DEL)
 
@@ -915,6 +1238,14 @@ int vm_run_func( struct ajj* a, struct ajj_value* output ) {
         int pos = next_arg(a,CHECK);
         cur_frame(a)->pc = pos;
       } vm_end(JMP)
+
+      vm_beg(JMPC) {
+        int loops = next_arg(a,CHECK);
+        int pos = next_arg(a,CHECK);
+        assert(loops>0);
+        vm_exit(a,loops);
+        cur_frame(a)->pc = pos;
+      } vm_end(JMPC)
 
       vm_beg(JT) {
         int pos = next_arg(a,CHECK);
@@ -960,7 +1291,125 @@ int vm_run_func( struct ajj* a, struct ajj_value* output ) {
         }
         POP(a,1);
       } vm_end(JEPT)
-    }
+
+      /* ITERATORS ------------------ */
+      vm_beg(ITER_START) {
+        struct ajj_value* obj = TOP(1);
+        if( obj.type == AJJ_VALUE_LIST ) {
+          struct list* l = &(obj->value.object->val.l);
+          struct ajj_value itr = ajj_value_iter(
+              list_iter_start(l));
+          PUSH(itr);
+        } else if( obj.type == AJJ_VALUE_DICT ) {
+          struct map* d = &(obj->value.object->val.d);
+          struct ajj_value itr = ajj_value_iter(
+              dict_iter_start(d));
+          PUSH(itr);
+        } else {
+          report_error(a,"Cannot iterate on object has type:%s!",
+              ajj_value_get_type_name(obj));
+          return -1;
+        }
+      } vm_end(ITER_START)
+
+      vm_beg(ITER_HAS) {
+        struct ajj_value* itr = TOP(1);
+        struct ajj_value* obj = TOP(2);
+        assert( itr->type == AJJ_VALUE_ITERATOR );
+        assert( obj->type == AJJ_VALUE_LIST ||
+                obj->type == AJJ_VALUE_DICT );
+        if( obj->type == AJJ_VALUE_LIST ) {
+          if( list_iter_has(&(obj->value.object->val.l),
+                ajj_value_to_iter(itr)) ) {
+            PUSH(AJJ_TRUE);
+          } else {
+            PUSH(AJJ_FALSE);
+          }
+        } else {
+          if( dict_iter_has(&(obj->value.object->val.d),
+                ajj_value_to_iter(itr)) ) {
+            PUSH(AJJ_TRUE);
+          } else {
+            PUSH(AJJ_FALSE);
+          }
+        }
+      } vm_end(ITER_HAS)
+
+      vm_beg(ITER_DEREF) {
+        int arg = next_arg(a,CHECK);
+        struct ajj_value* obj = TOP(2);
+        struct ajj_value* itr = TOP(1);
+        assert( obj->type == AJJ_VALUE_LIST ||
+                obj->type == AJJ_VALUE_DICT );
+        assert( itr->type == AJJ_VALUE_ITERATOR );
+        if( obj->type == AJJ_VALUE_LIST ) {
+          struct list* l = &(obj->value.object->val.l);
+          struct ajj_value val =
+            *list_iter_deref(l,ajj_value_to_iter(itr));
+          if( arg == 1 ) {
+            PUSH(val);
+          } else {
+            assert( arg == 2 );
+            struct ajj_value idx =
+              ajj_value_number(ajj_value_to_iter(itr));
+            PUSH(idx);
+            PUSH(val);
+          }
+        } else {
+          struct map* d = &(obj->value.object->val.d);
+          struct map_pair entry =
+            dict_iter_deref(d,ajj_value_to_iter(itr));
+          if( arg == 1 ) {
+            struct ajj_value val = *entry.val;
+            PUSH(val);
+          } else {
+            struct ajj_value val = *entry.val;
+            struct ajj_value key = ajj_value_assign(
+                ajj_object_create_const_string(
+                    a,a->rt->cur_gc,entry.val));
+            PUSH(key);
+            PUSH(val);
+          }
+        }
+      }vm_end(ITER_DEREF)
+
+      vm_beg(ITER_MOVE){
+        struct ajj_value* obj = TOP(2);
+        struct ajj_value* itr = TOP(1);
+        assert( obj->type == AJJ_VALUE_LIST ||
+                obj->type == AJJ_VALUE_DICT );
+        assert( itr->type == AJJ_VALUE_ITERATOR );
+        if( obj->type == AJJ_VALUE_LIST ) {
+          struct list* l = &(obj->value.object->val.l);
+          struct ajj_value nitr =
+            ajj_value_iter(list_iter_move(l,ajj_value_to_iter(itr)));
+          POP(1);
+          PUSH(nitr);
+        } else {
+          struct map* d = &(obj->value.object->val.d);
+          struct ajj_value nitr =
+            ajj_value_iter(dict_iter_move(d,ajj_value_to_iter(itr)));
+          POP(1);
+          PUSH(nitr);
+        }
+      } vm_end(ITER_MOVE)
+
+      /* MISC -------------------------------------- */
+      vm_beg(ENTER) {
+        vm_enter(a);
+      } vm_end(ENTER)
+
+      vm_beg(EXIT) {
+        vm_exit(a,1);
+      } vm_end(EXIT)
+
+      vm_beg(INCLUDE) {
+        int a1 = next_arg(a,CHECK);
+        int a2 = next_arg(a,CHECK);
+        vm_include(a,a1,a2,CHECK);
+      } vm_end(INCLUDE)
+
+
   }while(1);
 
 fail:

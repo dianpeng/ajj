@@ -1,9 +1,9 @@
-#include "ajj-priv.h"
 #include "lex.h"
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <stdio.h>
 
 #define RETURN(TK,L) \
   do { \
@@ -31,7 +31,7 @@ int tk_next_skip_cmt( struct tokenizer* tk ) {
 }
 
 static
-int tk_lex_str( struct tokenizer* tk ) {
+token_id tk_lex_str( struct tokenizer* tk ) {
   size_t i = tk->pos+1;
   char c;
   assert(tk->src[tk->pos] == '\'' );
@@ -60,10 +60,10 @@ int tk_lex_str( struct tokenizer* tk ) {
 }
 
 static
-int tk_lex_num( struct tokenizer* tk ) {
+token_id tk_lex_num( struct tokenizer* tk ) {
   size_t i = tk->pos+1;
   char c;
-  char** pend;
+  char* pend;
   errno = 0;
   tk->num_lexeme = strtod(tk->pos+tk->src,&pend);
   if( errno != 0 ) {
@@ -82,32 +82,32 @@ static
 int tk_keyword_check( struct tokenizer* tk , const char* str , int i ) {
   if( str[0] != tk->src[i] )
     return 0;
-  if( str[1] && str[1] != tk->src[i+1] )
+  if( !str[1] || str[1] != tk->src[i+1] )
     return 1;
-  if( str[2] && str[2] != tk->src[i+2] )
+  if( !str[2] || str[2] != tk->src[i+2] )
     return 2;
-  if( str[3] && str[3] != tk->src[i+3] )
+  if( !str[3] ||  str[3] != tk->src[i+3] )
     return 3;
-  if( str[4] && str[4] != tk->src[i+4] )
+  if( !str[4] || str[4] != tk->src[i+4] )
     return 4;
-  if( str[5] && str[5] != tk->src[i+5] )
+  if( !str[5] || str[5] != tk->src[i+5] )
     return 5;
-  if( str[6] && str[6] != tk->src[i+6] )
+  if( !str[6] || str[6] != tk->src[i+6] )
     return 6;
-  if( str[7] && str[7] != tk->src[i+7] )
+  if( !str[7] || str[7] != tk->src[i+7] )
     return 7;
-  if( str[8] && str[8] != tk->src[i+8] )
+  if( !str[8] || str[8] != tk->src[i+8] )
     return 8;
-  if( str[9] && str[9] != tk->src[i+9] )
+  if( !str[9] || str[9] != tk->src[i+9] )
     return 9;
-  if( str[10]&& str[10]!= tk->src[i+10])
+  if( !str[10] || str[10]!= tk->src[i+10])
     return 10;
   assert(0);
   return -1;
 }
 
 static
-int tk_lex_keyword( struct tokenizer* tk , int offset ) {
+token_id tk_lex_keyword( struct tokenizer* tk , int offset ) {
   size_t i;
   char c;
   strbuf_reset(&(tk->lexeme));
@@ -139,8 +139,8 @@ int tk_lex_keyword( struct tokenizer* tk , int offset ) {
  * D: do
  * E: elif,else,endfor,endmacro,endcall,
  *    endfilter,endset,endblock,endwith,
- *    endupvalue,endinclude
- * F: from,filter,false,False,fix
+ *    endupvalue,endinclude,extends
+ * F: filter,false,False,fix
  * G: -
  * H: -
  * I: if,in,include,import
@@ -152,7 +152,7 @@ int tk_lex_keyword( struct tokenizer* tk , int offset ) {
  * O: or,override
  * P: -
  * Q: -
- * R: recursive
+ * R: -
  * S: set
  * T: -
  * U: upvalue
@@ -162,8 +162,8 @@ int tk_lex_keyword( struct tokenizer* tk , int offset ) {
  * Y: -
  * Z: - */
 static
-int tk_lex_keyword_or_id( struct tokenizer* tk ) {
-  size_t i = tk->pos+1;
+token_id tk_lex_keyword_or_id( struct tokenizer* tk ) {
+  size_t i = tk->pos;
   int len;
   int c = tk->src[i];
   switch(c) {
@@ -171,6 +171,9 @@ int tk_lex_keyword_or_id( struct tokenizer* tk ) {
       if( (len=tk_keyword_check(tk,"nd",i+1)) == 2 &&
           tk_not_id_rchar(tk->src[i+3]) )
         RETURN(TK_AND,3);
+      else if( (len=tk_keyword_check(tk,"s",i+1)) == 1 &&
+          tk_not_id_rchar(tk->src[i+2]) )
+        RETURN(TK_AS,2);
       else
         return tk_lex_keyword(tk,len+1);
     case 'b':
@@ -192,42 +195,42 @@ int tk_lex_keyword_or_id( struct tokenizer* tk ) {
       else
         return tk_lex_keyword(tk,len+1);
     case 'd':
-      if( (len = tk_keyword_check(tk,"d",i+1)) == 1 &&
-          tk_not_id_rchar(tk->src[i+1]))
-        RETURN(TK_DO,4);
+      if( (len = tk_keyword_check(tk,"o",i+1)) == 1 &&
+          tk_not_id_rchar(tk->src[i+2]))
+        RETURN(TK_DO,2);
     case 'e':
       if( (len = tk_keyword_check(tk,"nd",i+1)) == 2 ) {
         /* end starts */
         size_t k = i + 3;
-        if( (len=tk_keyword_check(tk,"for",i+1)) == 3 &&
+        if( (len=tk_keyword_check(tk,"for",k)) == 3 &&
             tk_not_id_rchar(tk->src[k+3]) )
           RETURN(TK_ENDFOR,6);
-        else if( (len=tk_keyword_check(tk,"block",i+1)) == 5 &&
+        else if( (len=tk_keyword_check(tk,"block",k)) == 5 &&
             tk_not_id_rchar(tk->src[k+5]))
           RETURN(TK_ENDBLOCK,8);
-        else if( (len=tk_keyword_check(tk,"if",i+1)) == 2 &&
+        else if( (len=tk_keyword_check(tk,"if",k)) == 2 &&
             tk_not_id_rchar(tk->src[k+2]) )
           RETURN(TK_ENDIF,5);
-        else if( (len=tk_keyword_check(tk,"set",i+1)) == 3 &&
+        else if( (len=tk_keyword_check(tk,"set",k)) == 3 &&
             tk_not_id_rchar(tk->src[k+3]) )
           RETURN(TK_ENDSET,6);
-        else if( (len=tk_keyword_check(tk,"filter",i+1)) == 6 &&
+        else if( (len=tk_keyword_check(tk,"filter",k)) == 6 &&
             tk_not_id_rchar(tk->src[k+6]) )
           RETURN(TK_ENDFILTER,9);
-        else if( (len=tk_keyword_check(tk,"macro",i+1)) == 5 &&
+        else if( (len=tk_keyword_check(tk,"macro",k)) == 5 &&
             tk_not_id_rchar(tk->src[k+5]))
           RETURN(TK_ENDMACRO,8);
-        else if( (len=tk_keyword_check(tk,"upvalue",i+1)) == 7 &&
-            tk_not_id_rchar(tk->src[k+8]))
+        else if( (len=tk_keyword_check(tk,"upvalue",k)) == 7 &&
+            tk_not_id_rchar(tk->src[k+7]))
           RETURN(TK_ENDUPVALUE,10);
-        else if( (len=tk_keyword_check(tk,"with",i+1)) == 4 &&
-            tk_not_id_rchar(tk->src[k+5]))
+        else if( (len=tk_keyword_check(tk,"with",k)) == 4 &&
+            tk_not_id_rchar(tk->src[k+4]))
           RETURN(TK_ENDWITH,7);
-        else if( (len=tk_keyword_check(tk,"include",i+1)) == 7 &&
-            tk_not_id_rchar(tk->src[k+8]))
+        else if( (len=tk_keyword_check(tk,"include",k)) == 7 &&
+            tk_not_id_rchar(tk->src[k+7]))
           RETURN(TK_ENDINCLUDE,10);
-        else if( (len=tk_keyword_check(tk,"call",i+1))==4 &&
-            tk_not_id_rchar(tk->src[k+5]))
+        else if( (len=tk_keyword_check(tk,"call",k))==4 &&
+            tk_not_id_rchar(tk->src[k+4]))
           RETURN(TK_ENDCALL,7);
         else
           return tk_lex_keyword(tk,len+3);
@@ -235,24 +238,27 @@ int tk_lex_keyword_or_id( struct tokenizer* tk ) {
           tk_not_id_rchar(tk->src[i+4]) ) {
         RETURN(TK_ELIF,4);
       } else if( (len=tk_keyword_check(tk,"lse",i+1)) == 3 &&
-            tk_not_id_rchar(tk->src[k+3])) {
+            tk_not_id_rchar(tk->src[i+4])) {
           RETURN(TK_ELSE,4);
+      } else if( (len=tk_keyword_check(tk,"xtends",i+1))==6 &&
+           tk_not_id_rchar(tk->src[i+7])) {
+          RETURN(TK_EXTENDS,7);
       } else {
         return tk_lex_keyword(tk,len+1);
       }
     case 'f':
       if( (len = tk_keyword_check(tk,"ilter",i+1)) ==5 &&
-          tk_not_id_rchar(tk->src[i+6]) )
+          tk_not_id_rchar(tk->src[i+6]))
         RETURN(TK_FILTER,6);
       else if( (len = tk_keyword_check(tk,"alse",i+1)) == 4 &&
-          tk_not_id_rchar(tk->src[i+5]) )
+          tk_not_id_rchar(tk->src[i+5]))
         RETURN(TK_FALSE,5);
-      else if( (len = tk_lex_keyword(tk,"ix",i+1)) == 2 &&
+      else if( (len = tk_keyword_check(tk,"ix",i+1)) == 2 &&
           tk_not_id_rchar(tk->src[i+3]))
         RETURN(TK_FIX,3);
-      else if( (len=tk_keyword_check(tk,"rom",i+1)) == 3&&
-          tk_not_id_rchar(tk->src[i+4]))
-        RETURN(TK_FROM,4);
+      else if( (len = tk_keyword_check(tk,"or",i+1)) == 2 &&
+          tk_not_id_rchar(tk->src[i+3]))
+        RETURN(TK_FOR,3);
       else
         return tk_lex_keyword(tk,len+1);
     case 'F':
@@ -310,12 +316,6 @@ int tk_lex_keyword_or_id( struct tokenizer* tk ) {
         RETURN(TK_OVERRIDE,8);
       else
         return tk_lex_keyword(tk,len+1);
-    case 'r':
-      if( (len = tk_keyword_check(tk,"ecursive",i+1)) == 8 &&
-          tk_not_id_rchar(tk->src[i+9]))
-        RETURN(TK_RECURSIVE,9);
-      else
-        return tk_lex_keyword(tk,len+1);
     case 's':
       if( (len = tk_keyword_check(tk,"et",i+1)) == 2 &&
           tk_not_id_rchar(tk->src[i+3]))
@@ -334,6 +334,12 @@ int tk_lex_keyword_or_id( struct tokenizer* tk ) {
         RETURN(TK_TRUE,4);
       else
         return tk_lex_keyword(tk,len+1);
+    case 'u':
+      if( (len = tk_keyword_check(tk,"pvalue",i+1)) == 6 &&
+          tk_not_id_rchar(tk->src[i+7]))
+        RETURN(TK_UPVALUE,7);
+      else
+        return tk_lex_keyword(tk,len+1);
     case 'w':
       if( (len = tk_keyword_check(tk,"ith",i+1)) == 3 &&
           tk_not_id_rchar(tk->src[i+4]))
@@ -341,7 +347,10 @@ int tk_lex_keyword_or_id( struct tokenizer* tk ) {
       else
         return tk_lex_keyword(tk,len+1);
     default:
-      return tk_lex_keyword(tk,0);
+      if( tk_id_ichar(c) )
+        return tk_lex_keyword(tk,1);
+      else
+        RETURN(TK_UNKNOWN,0);
   }
 }
 
@@ -359,6 +368,7 @@ int tk_lex_script( struct tokenizer* tk ) {
       case ' ':case '\t':
       case '\b':case '\n':
         /* allowed whitespaces */
+        ++tk->pos;
         break;
       case '%':
         nc = tk->src[i+1];
@@ -458,19 +468,18 @@ int tk_lex_script( struct tokenizer* tk ) {
 static
 int tk_check_single_keyword( struct tokenizer* tk , const char* str , size_t len ) {
   size_t i = tk->pos + 2; /* skip the {% */
+  int c;
   do {
-    int c = tk->src[i];
-    switch(c) {
-      case ' ':case '\t':
-        continue;
-      case str[0]:
-        if( tk_lex_keyword( tk , str+1 , i+1 ) == len-1 &&
-            tk_not_id_rchar(tk->src[len+i]) ) {
-          i += len;
-          goto done;
-        }
-        return 0;
-      default:
+    c = tk->src[i];
+    if( c == str[0] ) {
+      if( tk_keyword_check( tk , str+1 , i+1 ) == len-1 &&
+          tk_not_id_rchar(tk->src[len+i]) ) {
+        i += len;
+        goto done;
+      }
+      return 0;
+    } else {
+      if( c != ' ' && c != '\t' )
         return 0;
     }
     ++i;
@@ -507,11 +516,10 @@ int tk_check_endraw( struct tokenizer* tk ) {
 /* This function will get all the text data inside of the raw scope
  * and then finish its raw tag. */
 static
-int tk_lex_raw( struct tokenizer* tk ) {
+token_id tk_lex_raw( struct tokenizer* tk ) {
   size_t i = tk->pos;
   char nc;
   char c;
-  assert( tk->mode = TOKENIZE_RAW );
 
   strbuf_reset(&(tk->lexeme));
   for( ; (c = tk->src[i]) ; ++i ) {
@@ -533,14 +541,14 @@ int tk_lex_raw( struct tokenizer* tk ) {
         }
       }
     }
-    strbuf_push(c);
+    strbuf_push(&(tk->lexeme),c);
   }
   /* EOF meet, which is unexpected */
   RETURN(TK_UNKNOWN,tk->lexeme.len);
 }
 
 static
-int tk_lex_jinja( struct tokenizer* tk ) {
+token_id tk_lex_jinja( struct tokenizer* tk ) {
   int i = tk->pos;
 
   assert( tk->mode == TOKENIZE_JINJA );
@@ -607,7 +615,7 @@ done:
 }
 
 /* public interfaces */
-int tk_lex( struct tokenizer* tk ) {
+token_id tk_lex( struct tokenizer* tk ) {
   switch(tk->mode){
     case TOKENIZE_JINJA:
       return tk_lex_jinja(tk);
@@ -619,7 +627,7 @@ int tk_lex( struct tokenizer* tk ) {
   }
 }
 
-int tk_move( struct tokenizer* tk ) {
+token_id tk_move( struct tokenizer* tk ) {
   assert( tk->tk != TK_UNKNOWN && tk->tk != TK_EOF );
   assert( tk->tk_len > 0 );
 
