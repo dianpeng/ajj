@@ -195,6 +195,7 @@ char strbuf_index( const struct strbuf* buf , int idx ){
 static
 void strbuf_reset( struct strbuf* buf ) {
   buf->len = 0;
+  if(buf->str) buf->str[0] == 0;
 }
 
 #define strbuf_clear strbuf_reset

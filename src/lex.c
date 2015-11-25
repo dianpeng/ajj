@@ -46,11 +46,12 @@ token_id tk_lex_str( struct tokenizer* tk ) {
         case '\\':
         case '\'':
           ++i;
+          c = nc;
           break;
         default:
           break;
       }
-    } else if( '\'' ) {
+    } else if( c == '\'' ) {
       break;
     }
     strbuf_push(&(tk->lexeme),c);
@@ -299,6 +300,9 @@ token_id tk_lex_keyword_or_id( struct tokenizer* tk ) {
       if( (len = tk_keyword_check(tk,"one",i+1)) == 3 &&
           tk_not_id_rchar(tk->src[i+4]))
         RETURN(TK_NONE,4);
+      else if( (len=tk_keyword_check(tk,"ot",i+1))==2 &&
+          tk_not_id_rchar(tk->src[i+3]))
+        RETURN(TK_NOT,3);
       else
         return tk_lex_keyword(tk,len+1);
     case 'N':
@@ -378,14 +382,6 @@ int tk_lex_script( struct tokenizer* tk ) {
           RETURN(TK_MOD,1);
         }
         break;
-      case '}':
-        nc = tk->src[i+1];
-        if( nc == '}' ) {
-          RETURN(TK_REXP,2);
-        } else {
-          RETURN(TK_UNKNOWN,1);
-        }
-        break;
       case '+': RETURN(TK_ADD,1);
       case '-': /* -%} will be treated same as %} */
         nc = tk->src[i+1];
@@ -442,6 +438,15 @@ int tk_lex_script( struct tokenizer* tk ) {
         RETURN(TK_LSQR,1);
       case ']':
         RETURN(TK_RSQR,1);
+      case '}':
+        nc = tk->src[i+1];
+        if( nc == '}' ) {
+          RETURN(TK_REXP,2);
+        } else {
+          RETURN(TK_RBRA,1);
+        }
+      case '{':
+        RETURN(TK_LBRA,1);
       case '.':
         RETURN(TK_DOT,1);
       case ',':
@@ -466,8 +471,9 @@ int tk_lex_script( struct tokenizer* tk ) {
  * We silently filter out raw/endraw tags and then returns the included
  * text as a text to the upper caller as if no such token there */
 static
-int tk_check_single_keyword( struct tokenizer* tk , const char* str , size_t len ) {
-  size_t i = tk->pos + 2; /* skip the {% */
+int tk_check_single_keyword( struct tokenizer* tk , size_t pos ,
+    const char* str , size_t len ) {
+  size_t i = pos;
   int c;
   do {
     c = tk->src[i];
@@ -479,8 +485,9 @@ int tk_check_single_keyword( struct tokenizer* tk , const char* str , size_t len
       }
       return 0;
     } else {
-      if( c != ' ' && c != '\t' )
+      if( c != ' ' && c != '\t' ) {
         return 0;
+      }
     }
     ++i;
   } while(1);
@@ -492,7 +499,7 @@ done:
         continue;
       case '%':
         if( tk->src[i+1] == '}' ) {
-          return (i-tk->pos+2);
+          return (i+2-pos);
         }
         return -1;
       default:
@@ -504,13 +511,13 @@ done:
 
 
 static
-int tk_check_raw( struct tokenizer* tk ) {
-  return tk_check_single_keyword(tk,"raw",3);
+int tk_check_raw( struct tokenizer* tk , size_t pos ) {
+  return tk_check_single_keyword(tk,pos,"raw",3);
 }
 
 static
-int tk_check_endraw( struct tokenizer* tk ) {
-  return tk_check_single_keyword(tk,"endraw",6);
+int tk_check_endraw( struct tokenizer* tk ,size_t pos ) {
+  return tk_check_single_keyword(tk,pos,"endraw",6);
 }
 
 /* This function will get all the text data inside of the raw scope
@@ -518,6 +525,7 @@ int tk_check_endraw( struct tokenizer* tk ) {
 static
 token_id tk_lex_raw( struct tokenizer* tk ) {
   size_t i = tk->pos;
+  size_t s = tk->pos;
   char nc;
   char c;
 
@@ -527,16 +535,15 @@ token_id tk_lex_raw( struct tokenizer* tk ) {
       if( tk->src[i+1] == '%' ) {
         /* check whether it is a endraw tag or not */
         int offset;
-        if( (offset=tk_check_endraw(tk)) >0 ) {
+        if( (offset=tk_check_endraw(tk,i+2)) >0 ) {
           /* checking if we have some data in the buffer or not */
           if( tk->lexeme.len == 0 ) {
             /* we don't have any data, it is an empty raw/endraw.
              * so we just move the parser forward */
-            tk->pos += offset;
+            tk->pos = i+2+offset;
             return tk_lex(tk);
           } else {
-            tk->pos += offset;
-            RETURN(TK_TEXT,tk->lexeme.len+offset);
+            RETURN(TK_TEXT,offset+i+2-s);
           }
         }
       }
@@ -571,7 +578,7 @@ token_id tk_lex_jinja( struct tokenizer* tk ) {
               RETURN(TK_TEXT,(i-tk->pos));
             } else {
               int offset;
-              if( (offset = tk_check_raw(tk)) == 0 ) {
+              if( (offset = tk_check_raw(tk,i+2)) == 0 ) {
                 RETURN(TK_LSTMT,2);
               } else {
                 if( offset < 0 )
