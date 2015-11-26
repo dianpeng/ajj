@@ -337,7 +337,7 @@ void slab_reserve( struct slab* sl ) {
   sl->cur_cap = cap;
 }
 
-void slab_create( struct slab* sl , size_t cap , size_t obj_sz ) {
+void slab_init( struct slab* sl , size_t cap , size_t obj_sz ) {
   cap = cap < 32 ? 16 : cap/2;
   sl->obj_sz = obj_sz < sizeof(void*) ?
     sizeof(void*) : obj_sz;

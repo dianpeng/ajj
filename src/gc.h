@@ -1,7 +1,5 @@
 #ifndef _GC_H_
 #define _GC_H_
-#include "ajj.h"
-#include "util.h"
 #include "object.h"
 
 struct ajj;
@@ -12,14 +10,14 @@ struct gc_scope {
   unsigned int scp_id;       /* scope id */
 };
 
-static inline
-struct gc_scope* gc_scope_create( struct ajj* a, struct gc_scope* scp ) {
-  struct gc_scope* new_scp = slab_malloc(&(a->gc_slb));
-  new_scp->parent = scp;
-  new_scp->scp_id = scp->scp_id+1;
-  LINIT(&(new_scp->gc_tail));
-  return new_scope;
+static
+void gc_init( struct gc_scope* scp ) {
+  LINIT(&(scp->gc_tail));
+  scp->parent = NULL;
+  scp->scp_id = 0;
 }
+
+struct gc_scope* gc_scope_create( struct ajj* a, struct gc_scope* scp );
 
 /* This function will destroy all the gc scope allocated memory and also
  * the gc_scope object itself */

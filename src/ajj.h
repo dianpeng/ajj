@@ -19,19 +19,19 @@ struct ajj_object;
 
 typedef int (*ajj_function)( struct ajj* ,
     void* ,
-    struct ajj_value[AJJ_FUNC_PAR_MAX_SIZE] ,
+    struct ajj_value*, 
     size_t ,
     struct ajj_value* );
 
 typedef int (*ajj_method)( struct ajj* , /* execution context */
     struct ajj_object* obj,
-    struct ajj_value[AJJ_FUNC_PAR_MAX_SIZE] ,
+    struct ajj_value*,
     size_t ,
     struct ajj_value* );
 
 typedef void* (*ajj_class_ctor)( struct ajj* ,
     void* ,
-    struct ajj_value[AJJ_FUNC_PAR_MAX_SIZE] ,
+    struct ajj_value*,
     size_t );
 
 typedef void (*ajj_class_dtor)( struct ajj* ,
@@ -54,9 +54,11 @@ struct ajj_class {
 
 struct ajj_value {
   union {
-    struct ajj_object* object;
+    int boolean; /* This one must be first to make C89 initializer
+                  * happy since a union can only be initialized with
+                  * its first field/entry. */
     double number;
-    int boolean;
+    struct ajj_object* object;
   } value;
   int type;
 };
@@ -74,25 +76,18 @@ enum {
   AJJ_VALUE_SIZE
 };
 
-#define AJJ_IS_PRIMITIVE(V) \
-  ((V)->type==AJJ_VALUE_NUMBER||(V)->type == AJJ_VALUE_NONE|| \
-   (V)->type==AJJ_VALUE_NONE||(V)->type==AJJ_VALUE_BOOLEAN)
-
-#define AJJ_IS_REFERENCE(V) \
-  (!(AJJ_IS_PRIMITIVE(V)))
-
 const char*
 ajj_value_get_type_name( const struct ajj_value* );
 
-extern ajj_value AJJ_TRUE;
-extern ajj_value AJJ_FALSE;
-extern ajj_value AJJ_NONE;
+extern struct ajj_value AJJ_TRUE;
+extern struct ajj_value AJJ_FALSE;
+extern struct ajj_value AJJ_NONE;
 
 static inline
 struct ajj_value ajj_value_number( double val ) {
   struct ajj_value value;
-  value->type = AJJ_VALUE_NUMBER;
-  value->value.number = val;
+  value.type = AJJ_VALUE_NUMBER;
+  value.value.number = val;
   return value;
 }
 
@@ -108,7 +103,6 @@ double ajj_value_to_number( const struct ajj_value* val ) {
   return val->value.number;
 }
 
-static
 const char* ajj_value_to_str( const struct ajj_value* val );
 
 /* List API =============================== */
@@ -124,4 +118,7 @@ const struct ajj_value*
 ajj_dict_find( const struct ajj_value* , const char* key );
 int ajj_dict_delete( const struct ajj_value* , const char* key );
 
+/* AJJ ============================= */
+struct ajj* ajj_create();
+void ajj_destroy( struct ajj* );
 #endif /* _AJJ_H_ */

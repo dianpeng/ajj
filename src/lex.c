@@ -584,7 +584,7 @@ token_id tk_lex_jinja( struct tokenizer* tk ) {
                 if( offset < 0 )
                   RETURN(TK_UNKNOWN,0);
                 else {
-                  tk->pos += offset;
+                  tk->pos += offset+2;
                   return tk_lex_raw(tk);
                 }
               }
@@ -656,4 +656,19 @@ const char* tk_get_name( int tk ) {
       UNREACHABLE();
       return NULL;
   }
+}
+
+void tk_get_code_snippet( const char* src , int pos , char* output ) {
+  /* Fitting a CODE_SNIPPET_SIZE chunk of source code characters into
+   * the buffer to make caller happy. This function is mostly used for
+   * providing diagnostic information. */
+  int start ; /* Start of the code snippet, we cannot decide the end here,
+               * so we just loop forward */
+  int i;
+  int c;
+  start = pos - CODE_SNIPPET_SIZE/2 > 0 ? pos-CODE_SNIPPET_SIZE : 0;
+  for( i = start ; i < CODE_SNIPPET_SIZE-1 && (c=src[i]) ; ++i ) {
+    *output++ = c;
+  }
+  *output = 0;
 }

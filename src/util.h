@@ -22,6 +22,18 @@
 
 #define ARRAY_SIZE(X) (sizeof(X)/sizeof((X)[0]))
 
+#ifndef NDEBUG
+#define CHECK assert
+#else
+#define CHECK(X) \
+  do { \
+    if( !(X) ) { \
+      fprintf(stderr,"assertion failed:"#X); \
+      abort(); \
+    } \
+  } while(0)
+#endif /* NDEBUG */
+
 /* Helper macro to insert into double linked list */
 #define LINIT(X) \
   do { \
@@ -324,7 +336,7 @@ struct slab {
   size_t obj_sz;
 };
 
-void slab_create( struct slab* , size_t cap , size_t obj_sz );
+void slab_init( struct slab* , size_t cap , size_t obj_sz );
 void slab_destroy(struct slab* );
 void* slab_malloc( struct slab* );
 void slab_free( struct slab* , void* );

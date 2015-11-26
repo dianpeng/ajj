@@ -3,8 +3,12 @@
 #include "ajj.h"
 #include "util.h"
 
-int parse( struct ajj* , struct gc_scope* ,
-    const char* src, const char* key, ajj_value* output );
+/* Parse the source from src into an compiled object stored inside of
+ * output. The compiled object's memory is owned by the correpsonding
+ * garbage collector scope */
+struct ajj_object;
 
+struct ajj_object*
+parse( struct ajj* ,const char* , const char* );
 
 #endif /* _PARSE_H_ */

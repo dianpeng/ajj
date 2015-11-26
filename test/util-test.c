@@ -310,7 +310,7 @@ void test_slab() {
     struct map m;
     int i;
 
-    slab_create(&slb,128,sizeof(int));
+    slab_init(&slb,128,sizeof(int));
     map_create(&m,sizeof(int*),4);
 
     for( i = 0 ; i < 1024 ; ++i ) {

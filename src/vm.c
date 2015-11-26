@@ -4,12 +4,14 @@
 #include "gc.h"
 #include "util.h"
 #include "json.h"
+#include "bc.h"
 
 #include <limits.h>
 #include <math.h>
 #include <errno.h>
 #include <string.h>
 #include <stdio.h>
+
 
 #ifndef NDEBUG
 #define ALWAYS(X) assert(!(X))
@@ -115,7 +117,7 @@ int next_arg( struct ajj* a , int* fail ) {
   struct func_frame* fr = cur_frame(a);
   const struct program* prg = GET_JINJAFUNC(fr->entry);
   assert(IS_JINJA(fr->entry));
-  if( prg->len < fr->pc+4 ) {
+  if( prg->len <= fr->pc+4 ) {
     *fail = 1;
     return -1;
   } else {

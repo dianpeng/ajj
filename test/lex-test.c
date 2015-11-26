@@ -187,12 +187,73 @@ void test_basic() {
     }
     tk_destroy(&tk);
   }
+  {
+    struct tokenizer tk;
+    const char* source = \
+      "{% 1.2345 123 \'HelloWorld\' True true false False None none %}";
+
+    tk_init(&tk,source);
+    assert(tk.tk == TK_LSTMT);
+    tk_move(&tk);
+
+    assert(tk.tk == TK_NUMBER);
+    assert(tk.num_lexeme == 1.2345);
+    tk_move(&tk);
+
+    assert(tk.tk == TK_NUMBER);
+    assert(tk.num_lexeme == 123);
+    tk_move(&tk);
+
+    assert(tk.tk == TK_STRING);
+    assert(strcmp(tk.lexeme.str,"HelloWorld")==0);
+    tk_move(&tk);
+
+    assert(tk.tk == TK_TRUE);
+    tk_move(&tk);
+
+    assert(tk.tk == TK_TRUE);
+    tk_move(&tk);
+
+    assert(tk.tk == TK_FALSE);
+    tk_move(&tk);
+
+    assert(tk.tk == TK_FALSE);
+    tk_move(&tk);
+
+    assert(tk.tk == TK_NONE);
+    tk_move(&tk);
+    
+    assert(tk.tk == TK_NONE);
+    tk_move(&tk);
+
+    assert(tk.tk == TK_RSTMT);
+    tk_move(&tk);
+
+    assert(tk.tk == TK_EOF);
+
+    tk_destroy(&tk);
+  }
+  {
+    const char* source = \
+      "{% 1.2345 123 \'HelloWorld\' True true FFFFF %}";
+    char buf[CODE_SNIPPET_SIZE];
+    tk_get_code_snippet(source,4,buf);
+    printf("%s\n",buf);
+    tk_get_code_snippet(source,22,buf);
+    printf("%s\n",buf);
+  }
+  {
+    struct tokenizer tk;
+    const char* source = \
+      "{% raw %} {% Hello World %} {% for } foreachshit {%} %} }%{% {% endraw %}";
+    tk_init(&tk,source);
+    assert(tk.tk == TK_TEXT);
+    assert(strcmp(tk.lexeme.str,
+          " {% Hello World %} {% for } foreachshit {%} %} }%{% ")==0);
+    tk_destroy(&tk);
+  }
 }
 
 int main() {
   test_basic();
 }
-
-
-
-

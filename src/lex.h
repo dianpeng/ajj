@@ -4,7 +4,6 @@
 
 #define CODE_SNIPPET_SIZE 256
 
-
 enum {
   TOKENIZE_JINJA,
   TOKENIZE_SCRIPT

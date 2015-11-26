@@ -7,13 +7,18 @@
 struct gc_scope;
 struct ajj;
 
+extern struct string MAIN; /* For __main__ */
+
 /* Internally we separete a const string or a heap based string by
  * using this tag. Since if it is a AJJ_VALUE_CONST_STRING, then we
  * will never need to release the string memory */
 #define AJJ_VALUE_CONST_STRING (AJJ_VALUE_SIZE+1)
 
-/* Interal representation of iterators */
+/* Internal representation of iterators */
 #define AJJ_VALUE_ITERATOR     (AJJ_VALUE_SIZE+2)
+
+/* Internal representation of JINJA template */
+#define AJJ_VALUE_JINJA  (AJJ_VALUE_SIZE+3)
 
 #define AJJ_IS_PRIMITIVE(V) \
   ((V)->type==AJJ_VALUE_NUMBER||\
@@ -76,16 +81,16 @@ struct func_table {
   size_t func_len;
   size_t func_cap;
   ajj_class_dtor dtor;
-  ajj_class ctor ctor;
+  ajj_class_ctor ctor;
   void* udata;
   struct string name; /* object's name */
 };
 
 struct object {
   struct map  prop; /* properties of this objects */
-  const struct func_table* fn_tb; /* This function table can be NULL which
-                                   * simply represents this object doesn't have
-                                   * any defined function related to it */
+  struct func_table* fn_tb; /* This function table can be NULL which
+                             * simply represents this object doesn't have
+                             * any defined function related to it */
   void* data; /* object's data */
 };
 
@@ -115,16 +120,17 @@ size_t list_size( struct list* l ) {
   return l->len;
 }
 static
-const struct ajj_value*
-list_index( struct list* l , size_t i ) {
+struct ajj_value*
+list_index( const struct list* l , size_t i ) {
   assert(i < l->len);
-  return l->entry[i];
+  return l->entry + i;
 }
 void list_clear();
 
 /* iterator for list */
 static
-int list_iter_start( const struct list* ) {
+int list_iter_start( const struct list* l ) {
+  UNUSE_ARG(l);
   return 0;
 }
 static
@@ -180,7 +186,7 @@ int dict_remove( struct map* d , const struct string* k,
 
 static
 int dict_remove_c( struct map* d , const char* k, void* val ) {
-  return map_remove(d,k,val);
+  return map_remove_c(d,k,val);
 }
 
 static
@@ -192,7 +198,7 @@ dict_find( struct map* d , const struct string* k ) {
 static
 struct ajj_value*
 dict_find_c( struct map* d , const char* k ) {
-  return map_find(d,k);
+  return map_find_c(d,k);
 }
 
 /* iterator wrapper */
@@ -225,7 +231,12 @@ struct ajj_object {
   struct ajj_object* next;
   struct ajj_object* parent[AJJ_EXTENDS_MAX_SIZE]; /* for extends */
   unsigned short parent_len;
-  unsigned short tp;
+  unsigned short tp; /* Type for this object. This type CAN be different
+                      * with the type in its holder ajj_value. A AJJ_VALUE_STRING
+                      * could internally represent as 1. AJJ_VALUE_STRING (heap)
+                      * 2. AJJ_VALUE_CONST_STRING (reference).
+                      * Also this tp can be AJJ_VALUE_JINJA, which represents a
+                      * jinja template, but its holder's type is AJJ_VALUE_OBJECT. */
   union {
     struct string str; /* string */
     struct map  d;     /* dictionary */
@@ -275,7 +286,7 @@ static
 struct gvar_table*
 gvar_table_create( struct gvar_table* p ) {
   struct gvar_table* ret = malloc(sizeof(*p));
-  map_init(ret->d,GVAR_DEFUALT_BUF_SIZE,sizeof(struct gvar));
+  map_create(&(ret->d),sizeof(struct gvar),GVAR_DEFAULT_BUF_SIZE);
   ret->prev = p;
   return ret;
 }
@@ -289,25 +300,25 @@ gvar_table_destroy( struct gvar_table* m );
 static
 int gvar_table_insert( struct gvar_table* m , const struct string* k,
     int own, const struct gvar* val ) {
-  return map_insert(m->d,k,own,val);
+  return map_insert(&(m->d),k,own,val);
 }
 
 static
 int gvar_table_insert_c( struct gvar_table* m , const char* k,
     const struct gvar* val ) {
-  return map_insert_c(m->d,k,val);
+  return map_insert_c(&(m->d),k,val);
 }
 
 static
 int gvar_table_remove( struct gvar_table* m , const struct string* k,
     struct gvar* val ) {
-  return map_remove(m->d,k,val);
+  return map_remove(&(m->d),k,val);
 }
 
 static
 int gvar_table_remove_c( struct gvar_table* m , const char* k,
     struct gvar* val ) {
-  return map_remove(m->d,k,val);
+  return map_remove_c(&(m->d),k,val);
 }
 
 struct gvar*
@@ -331,13 +342,7 @@ void func_table_init( struct func_table* tb ,
 }
 
 /* Clear the GUT of func_table object */
-static
-void func_table_clear( struct func_table* tb ) {
-  if( tb->func_cap > AJJ_FUNC_LOCAL_BUF_SIZE ) {
-    free(tb->func_tb); /* on heap */
-  }
-  string_destroy(&(tb->name));
-}
+void func_table_clear( struct ajj* a , struct func_table* tb );
 
 /* Add a new function into the func_table */
 static
@@ -354,21 +359,7 @@ struct function* func_table_add_func( struct func_table* tb ) {
   return tb->func_tb + (tb->func_len++);
 }
 
-static
-void func_table_shrink_to_fit( struct func_table* tb ) {
-  if( tb->func_cap > AJJ_FUNC_LOCAL_BUF_SIZE ) {
-    if( tb->func_len < tb->func_cap ) {
-      struct function* f = malloc(tb->func_len*sizeof(struct function));
-      memcpy(f,tb->func_tb,sizeof(struct function)*tb->func_len);
-      free(tb->func_tb);
-      tb->func_tb = f;
-      tb->func_cap = func_len;
-    }
-  }
-}
-
-static
-void func_table_destroy( struct func_table* tb );
+void func_table_destroy( struct ajj* a , struct func_table* tb );
 
 /* Find a new function in func_table */
 struct function* func_table_find_func( struct func_table* tb,
@@ -383,7 +374,7 @@ func_table_add_c_clsoure( struct func_table* tb , struct string* name , int own 
   f = func_table_add_func(tb);
   f->name = own ? *name : string_dup(name);
   f->tp = C_FUNCTION;
-  c_closure_init(&(f->f,c_fn));
+  c_closure_init(&(f->f.c_fn));
   return &(f->f.c_fn);
 }
 
@@ -400,28 +391,41 @@ func_table_add_c_method( struct func_table* tb , struct string* name , int own )
 }
 
 static
-struct program*
-func_table_add_jj_block( struct func_table* tb, struct string* name , int own ) {
+struct function*
+func_table_add_jinja_func( struct func_table* tb, struct string* name, int own ) {
   struct function* f = func_table_find_func(tb,name);
   if( f != NULL )
     return NULL;
   f = func_table_add_func(tb);
   f->name = own ? *name : string_dup(name);
-  f->tp = JJ_BLOCK;
   program_init(&(f->f.jj_fn));
+  return f;
+}
+
+static
+struct program*
+func_table_add_jj_block( struct func_table* tb, struct string* name , int own ) {
+  struct function* f = func_table_add_jinja_func(tb,name,own);
+  if(f) f->tp = JJ_BLOCK;
+  else return NULL;
   return &(f->f.jj_fn);
 }
 
 static
 struct program*
 func_table_add_jj_macro( struct func_table* tb, struct string* name , int own ) {
-  struct function* f = func_table_find_func(tb,name);
-  if( f != NULL )
-    return NULL;
-  f = func_table_add_func(tb);
-  f->name = own ? *name : string_dup(name);
-  f->tp = JJ_MACRO;
-  program_init(&(f->f.jj_fn));
+  struct function* f = func_table_add_jinja_func(tb,name,own);
+  if(f) f->tp = JJ_MACRO;
+  else return NULL;
+  return &(f->f.jj_fn);
+}
+
+static
+struct program*
+func_table_add_jj_main( struct func_table* tb, struct string* name , int own ) {
+  struct function* f = func_table_add_jinja_func(tb,name,own);
+  if(f) f->tp = JJ_MAIN;
+  else return NULL;
   return &(f->f.jj_fn);
 }
 
@@ -432,13 +436,6 @@ ajj_object_create ( struct ajj* , struct gc_scope* scope );
 
 struct ajj_object*
 ajj_object_move( struct gc_scope* scp , struct ajj_object* obj );
-
-/* Delete routine. Delete a single object from its GC. This deletion
- * function will only delete the corresponding object , not its children,
- * it is not safe to delete children, since the parent object doesn't
- * really have the ownership */
-static
-void ajj_object_destroy( struct ajj* , struct ajj_object* obj );
 
 /* Initialize an created ajj_object to a certain type */
 static
@@ -506,11 +503,10 @@ ajj_object_create_list( struct ajj* a, struct gc_scope* scp ) {
 
 static
 struct ajj_object*
-ajj_object_obj( struct ajj_object* obj ,
-    const struct func_table* fn_tb, void* data ) {
+ajj_object_obj( struct ajj_object* obj , struct func_table* fn_tb, void* data ) {
   struct object* o = &(obj->val.obj);
   dict_create(&(o->prop));
-  o->fn_tb = func_tb;
+  o->fn_tb = fn_tb;
   o->data = data;
   obj->tp = AJJ_VALUE_OBJECT;
   return obj;
@@ -518,23 +514,36 @@ ajj_object_obj( struct ajj_object* obj ,
 
 static
 struct ajj_object*
-ajj_object_create_obj( struct ajj* a, struct gc_scope* scp ) {
-  return ajj_object_obj(ajj_object_create(a,scp));
+ajj_object_create_obj( struct ajj* a, struct gc_scope* scp,
+    struct func_table* fn_tb, void* data ) {
+  return ajj_object_obj(ajj_object_create(a,scp),fn_tb,data);
+}
+
+/* Creating a jinja object. A jinja object is an object represents a
+ * compiled jinja source file. It is only used internally by the parser
+ */
+struct ajj_object*
+ajj_object_jinja( struct ajj* , struct ajj_object* obj ,
+    const char* name );
+
+struct ajj_object*
+ajj_object_create_jinja( struct ajj* a , const char* name );
+
+static
+const struct program*
+ajj_object_jinja_main( const struct ajj_object* obj ) {
+  struct function* f;
+  assert(obj->tp == AJJ_VALUE_JINJA);
+  if( (f=func_table_find_func(obj->val.obj.fn_tb,&MAIN)) ) {
+    assert(IS_JINJA(f));
+    return &(f->f.jj_fn);
+  }
+  return NULL;
 }
 
 /* ===================================================
  * Value wrapper for internal use
  * =================================================*/
-
-static
-void ajj_value_destroy( struct ajj* a , struct ajj_value* val ) {
-  if( val->type != AJJ_VALUE_NOT_USE &&
-      val->type != AJJ_VALUE_BOOLEAN &&
-      val->type != AJJ_VALUE_NONE &&
-      val->type != AJJ_VALUE_ITERATOR &&
-      val->type != AJJ_VALUE_NUMBER )
-    ajj_object_destroy(a,val->value.object);
-}
 
 static
 const struct string* ajj_value_to_string( const struct ajj_value* val ) {
@@ -544,7 +553,7 @@ const struct string* ajj_value_to_string( const struct ajj_value* val ) {
 
 static
 const char* ajj_value_to_cstr( const struct ajj_value* val ) {
-  return ajj_value_to_string()->str;
+  return ajj_value_to_string(val)->str;
 }
 
 static
@@ -598,9 +607,13 @@ struct ajj_value ajj_value_assign( struct ajj_object* obj ) {
   struct ajj_value val;
   assert(obj->tp != AJJ_VALUE_NOT_USE);
   val.type = obj->tp;
-  /* rewrite const string type since it is internally used */
+
+  /* rewrite the internal object type into public type */
   if( val.type == AJJ_VALUE_CONST_STRING )
-    val.type == AJJ_VALUE_STRING;
+    val.type = AJJ_VALUE_STRING;
+  else if( val.type == AJJ_VALUE_JINJA )
+    val.type = AJJ_VALUE_OBJECT;
+
   val.value.object = obj;
   return val;
 }
@@ -610,9 +623,13 @@ struct ajj_value ajj_value_assign( struct ajj_object* obj ) {
  * none-primitive type to the target gc_scope. If gc_scope is NULL,
  * then this value is escaped and it means no gc_scope will hold it
  * The typical usage is for assigning to upvalue */
-static
 struct ajj_value
 ajj_value_copy( struct ajj* a , struct gc_scope* ,
     const struct ajj_value* src );
+
+/* This allow user to delete a string promptly without waiting for the
+ * corresponding gc scope exit */
+void
+ajj_value_delete_string( struct ajj* a, struct ajj_value* str);
 
 #endif /* _OBJECT_H_ */
