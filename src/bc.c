@@ -36,20 +36,20 @@ void dump_program_ctable( const struct program* prg , FILE* output ) {
 
 #define DO0(N) \
   do { \
-    fprintf(output,"%zu:%d %s\n",i,prg->spos[i],N); \
+    fprintf(output,"%zu:%d %s\n",i-1,prg->spos[i],N); \
   } while(0); break
 
 #define DO1(N) \
   do { \
-    a1 = instru_next_arg(prg,&i); \
-    fprintf(output,"%zu:%d %s %d\n",i,prg->spos[i],N,a1); \
+    a1 = bc_next_arg(prg,&i); \
+    fprintf(output,"%zu:%d %s %d\n",i-5,prg->spos[i],N,a1); \
   } while(0); break
 
 #define DO2(N) \
  do { \
-   a1 = instru_next_arg(prg,&i); \
-   a2 = instru_next_arg(prg,&i); \
-   fprintf(output,"%zu:%d %s %d %d\n",i,prg->spos[i],N,a1,a2); \
+   a1 = bc_next_arg(prg,&i); \
+   a2 = bc_next_arg(prg,&i); \
+   fprintf(output,"%zu:%d %s %d %d\n",i-9,prg->spos[i],N,a1,a2); \
  } while(0); break
 
 #define DO(A,B,C) case A: DO##B(C);
@@ -58,14 +58,13 @@ void dump_program( const struct program* prg , FILE* output ) {
   size_t i = 0;
   int a1,a2;
   dump_program_ctable(prg,output);
-  fprintf(output,"-----Code------------------------\n");
+  fprintf(output,"-----------Code-------------------------\n");
   while(1) {
-    instructions instr = instru_next(prg,&i);
+    instructions instr = bc_next(prg,&i);
     if( instr == VM_HALT ) break;
     switch(instr) {
       VM_INSTRUCTIONS(DO)
       default:
-        printf("%d\n",instr);
         UNREACHABLE();
         return;
     }

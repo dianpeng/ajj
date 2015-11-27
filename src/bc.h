@@ -4,7 +4,9 @@
 #include "vm.h"
 #include <stdio.h>
 
+#ifndef MINIMUM_CODE_PAGE_SIZE
 #define MINIMUM_CODE_PAGE_SIZE 256
+#endif /* MINIMUM_CODE_PAGE_SIZE */
 
 /* parametr for looping */
 #define LOOP_CONTINUE 0
@@ -18,6 +20,11 @@
 /* upvalue modifier */
 #define INCLUDE_UPVALUE_FIX 0
 #define INCLUDE_UPVALUE_OVERRIDE 1
+
+/* iterator */
+#define ITERATOR_KEY 0
+#define ITERATOR_VAL 1
+#define ITERATOR_KEYVAL 2
 
 extern struct string THIS;
 extern struct string ARGNUM;
@@ -167,13 +174,14 @@ extern struct string ITER;
   X(VM_UPVALUE_DEL,1,"upvaluedel") \
   X(VM_JMP,1,"jmp") \
   X(VM_JT,1,"jt") \
+  X(VM_JF,1,"jf") \
   X(VM_JLT,1,"jlt") \
   X(VM_JLF,1,"jlf") \
   X(VM_JMPC,1,"jmpc") \
   X(VM_JEPT,1,"jept") \
-  X(VM_ITER_START,1,"iterstart") \
-  X(VM_ITER_HAS,1,"iterhas") \
-  X(VM_ITER_MOVE,1,"itermove") \
+  X(VM_ITER_START,0,"iterstart") \
+  X(VM_ITER_HAS,0,"iterhas") \
+  X(VM_ITER_MOVE,0,"itermove") \
   X(VM_ITER_DEREF,1,"iterderef") \
   X(VM_ENTER,0,"enter") \
   X(VM_EXIT,0,"exit") \
@@ -207,7 +215,7 @@ struct emitter {
     void* nc; \
     assert( em->C < (cap) ); \
     nc = malloc((cap)*(PS)); \
-    if( em->prg->PTR ) { \
+    if( em->prg->PTR && em->prg->len != 0 ) { \
       memcpy(nc,em->prg->PTR,em->prg->L); \
       free(em->prg->PTR); \
     } \
@@ -229,7 +237,7 @@ static
 void emitter_emit0( struct emitter* em , int spos , int bc ) {
   /* reserve size for 2 arrays */
   if( em->cd_cap <= em->prg->len + 9 ) {
-    emitter_reserve_code_page(em,2*em->cd_cap);
+    emitter_reserve_code_page(em,2*em->cd_cap+9);
   }
   if( em->spos_cap == em->prg->spos_len ) {
     emitter_reserve_spos(em,em->spos_cap*2);
@@ -251,8 +259,8 @@ void emitter_init( struct emitter* em , struct program* prg ) {
   em->prg = prg;
   em->cd_cap = 0;
   em->spos_cap= 0;
-  emitter_reserve_spos(em,MINIMUM_CODE_PAGE_SIZE/2);
-  emitter_reserve_code_page(em,MINIMUM_CODE_PAGE_SIZE/2);
+  emitter_reserve_spos(em,MINIMUM_CODE_PAGE_SIZE);
+  emitter_reserve_code_page(em,MINIMUM_CODE_PAGE_SIZE);
 }
 
 static  
@@ -285,7 +293,6 @@ int emitter_put( struct emitter* em , int arg_sz ) {
     emitter_reserve_code_page(em,em->cd_cap * 2 );
   }
   em->prg->len += add;
-  printf("PUT:%d\n",ret);
   return ret;
 }
 
@@ -321,7 +328,7 @@ int emitter_label( struct emitter* em ) {
 }
 
 static  
-instructions instru_next( const struct program* prg , size_t* pos ) {
+instructions bc_next( const struct program* prg , size_t* pos ) {
   if( prg->len == *pos ) {
     return VM_HALT;
   } else {
@@ -332,7 +339,7 @@ instructions instru_next( const struct program* prg , size_t* pos ) {
 }
 
 static  
-int instru_next_arg( const struct program* prg , size_t* pos ) {
+int bc_next_arg( const struct program* prg , size_t* pos ) {
   assert(*pos <= prg->len+4);
   int arg = *((int*)((char*)(prg->codes)+*pos));
   *pos += 4;
