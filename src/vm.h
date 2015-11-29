@@ -15,10 +15,16 @@ struct program {
   size_t len;
   int* spos;
   size_t spos_len;
-  struct string str_tbl[ AJJ_LOCAL_CONSTANT_SIZE ];
+
+  struct string* str_tbl;
   size_t str_len;
-  double num_tbl[AJJ_LOCAL_CONSTANT_SIZE];
+  size_t str_cap;
+
+  double num_tbl_lbuf[AJJ_LOCAL_CONSTANT_SIZE];
+  double*num_tbl;
   size_t num_len;
+  size_t num_cap;
+
   /* parameter prototypes. Program is actually a script based
    * function routine. Each program will have a prototypes */
   struct {
@@ -55,8 +61,15 @@ static inline
 void program_init( struct program* prg ) {
   prg->codes = NULL;
   prg->len = 0;
+
   prg->str_len = 0;
+  prg->str_cap = AJJ_LOCAL_CONSTANT_SIZE;
+  prg->str_tbl = malloc(sizeof(struct string)*AJJ_LOCAL_CONSTANT_SIZE);
+
   prg->num_len = 0;
+  prg->num_cap = AJJ_LOCAL_CONSTANT_SIZE;
+  prg->num_tbl = malloc(sizeof(double)*AJJ_LOCAL_CONSTANT_SIZE);
+
   prg->par_size =0;
   prg->spos = NULL;
   prg->spos_len = 0;

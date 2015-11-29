@@ -74,7 +74,7 @@ ajj_object_create( struct ajj* a , struct gc_scope* scope ) {
 
 struct ajj_object*
 ajj_object_jinja( struct ajj* a , struct ajj_object* obj ,
-    const char* name ) {
+    const char* name , const char* src , int own ) {
   struct func_table* ft = slab_malloc(&(a->ft_slab));
   struct string fn = string_dupc(name);
   func_table_init(ft,
@@ -85,13 +85,17 @@ ajj_object_jinja( struct ajj* a , struct ajj_object* obj ,
   obj->tp = AJJ_VALUE_JINJA;
   obj->val.obj.data = NULL;
   obj->val.obj.fn_tb = ft;
+  obj->val.obj.src = own ? src : strdup(src);
+  obj->val.obj.src_key = fn.str; /* pointed to the internal key for
+                                  * this object */
   return obj;
 }
 
 struct ajj_object*
-ajj_object_create_jinja( struct ajj* a , const char* name ) {
+ajj_object_create_jinja( struct ajj* a , const char* name ,
+    const char* src , int own ) {
   struct ajj_object* obj = ajj_object_create(a,&(a->gc_root));
-  return ajj_object_jinja(a,obj,name);
+  return ajj_object_jinja(a,obj,name,src,own);
 }
 
 /* Value */

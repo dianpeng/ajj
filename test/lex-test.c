@@ -237,9 +237,9 @@ void test_basic() {
     const char* source = \
       "{% 1.2345 123 \'HelloWorld\' True true FFFFF %}";
     char buf[CODE_SNIPPET_SIZE];
-    tk_get_code_snippet(source,4,buf);
+    tk_get_code_snippet(source,4,buf,256);
     printf("%s\n",buf);
-    tk_get_code_snippet(source,22,buf);
+    tk_get_code_snippet(source,22,buf,256);
     printf("%s\n",buf);
   }
   {

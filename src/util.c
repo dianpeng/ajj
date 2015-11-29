@@ -375,3 +375,15 @@ void slab_destroy( struct slab* sl ) {
   sl->fl = NULL;
   sl->cur_cap = sl->obj_sz = 0;
 }
+
+/* ===============================
+ * Other
+ * =============================*/
+void* mem_grow( void* ptr , size_t obj_sz,
+    size_t* old_cap ) {
+  /* We an use realloc safe even if the input ptr is not
+   * filled up with data. We just copy garbage bytes and
+   * it is no harm */
+  *old_cap *= 2;
+  return realloc(ptr,obj_sz*(*old_cap));
+}

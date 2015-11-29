@@ -1,4 +1,5 @@
 #include "bc.h"
+#include "lex.h"
 
 struct string THIS = CONST_STRING("__this__");
 struct string ARGNUM = CONST_STRING("__argnum__");
@@ -24,41 +25,53 @@ bc_get_instruction_name( int bc ) {
 static
 void dump_program_ctable( const struct program* prg , FILE* output ) {
   size_t i;
-  fprintf(output,"-----Constant String Table--------------\n");
+  fprintf(output,"Constant String Table======================\n\n");
   for( i = 0 ; i < prg->str_len ; ++i ) {
     fprintf(output,"%zu: %s\n",i,prg->str_tbl[i].str);
   }
-  fprintf(output,"-----Constant Number Table--------------\n");
+  fprintf(output,"\nConstant Number Table======================\n\n");
   for( i = 0 ; i < prg->num_len ; ++i ) {
     fprintf(output,"%zu: %f\n",i,prg->num_tbl[i]);
   }
+  fprintf(output,"\nFunction Argument Table====================\n\n");
+  for( i = 0 ; i < prg->par_size ; ++i ) {
+    fprintf(output,"%zu:%s\n",i,prg->par_list[i].name.str);
+  }
+  fprintf(output,"\n");
 }
 
 #define DO0(N) \
   do { \
-    fprintf(output,"%zu:%d %s\n",i-1,prg->spos[i],N); \
+    char buf[32]; \
+    tk_get_code_snippet(src,prg->spos[cnt],buf,32); \
+    fprintf(output,"%d %zu:%d(... %s ...) %s\n",cnt+1,i-1,prg->spos[cnt],buf,N); \
   } while(0); break
 
 #define DO1(N) \
   do { \
+    char buf[32]; \
+    tk_get_code_snippet(src,prg->spos[cnt],buf,32); \
     a1 = bc_next_arg(prg,&i); \
-    fprintf(output,"%zu:%d %s %d\n",i-5,prg->spos[i],N,a1); \
+    fprintf(output,"%d %zu:%d(... %s ...) %s %d\n",cnt+1,i-5,prg->spos[cnt],buf,N,a1); \
   } while(0); break
 
 #define DO2(N) \
  do { \
+   char buf[32]; \
+   tk_get_code_snippet(src,prg->spos[cnt],buf,32); \
    a1 = bc_next_arg(prg,&i); \
    a2 = bc_next_arg(prg,&i); \
-   fprintf(output,"%zu:%d %s %d %d\n",i-9,prg->spos[i],N,a1,a2); \
+   fprintf(output,"%d %zu:%d(... %s ...) %s %d %d\n",cnt+1,i-9,prg->spos[cnt],buf,N,a1,a2); \
  } while(0); break
 
 #define DO(A,B,C) case A: DO##B(C);
 
-void dump_program( const struct program* prg , FILE* output ) {
+void dump_program( const char* src , const struct program* prg , FILE* output ) {
   size_t i = 0;
   int a1,a2;
+  int cnt = 0;
   dump_program_ctable(prg,output);
-  fprintf(output,"-----------Code-------------------------\n");
+  fprintf(output,"Code=======================================\n\n");
   while(1) {
     instructions instr = bc_next(prg,&i);
     if( instr == VM_HALT ) break;
@@ -68,5 +81,6 @@ void dump_program( const struct program* prg , FILE* output ) {
         UNREACHABLE();
         return;
     }
+    ++cnt;
   }
 }

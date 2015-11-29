@@ -114,10 +114,11 @@ token_id tk_move( struct tokenizer* tk );
  * But at most 128 characters is fetched as upper bound for information.
  * The return string is owned by the caller, please free it properly.
  * The buffer is always assume has length CODE_SNIPPET_SIZE */
-void tk_get_code_snippet( const char* src, int pos , char* output );
+void tk_get_code_snippet( const char* src, size_t pos ,
+    char* output , size_t length );
 
-#define tk_get_current_code_snippet(tk,output) \
-  tk_get_code_snippet((tk)->src,(tk)->pos,output)
+#define tk_get_current_code_snippet(tk,output,l) \
+  tk_get_code_snippet((tk)->src,(tk)->pos,output,l)
 
 static inline
 token_id tk_init( struct tokenizer* tk , const char* src ) {

@@ -341,4 +341,17 @@ void slab_destroy(struct slab* );
 void* slab_malloc( struct slab* );
 void slab_free( struct slab* , void* );
 
+/* =========================================
+ * Other helper functions
+ * =======================================*/
+
+/* grow a piece of memory to a new memory. The size_t obj_sz is used represent
+ * the length for each elements and the length is the size of the current array,
+ * the new_cap is used to indicate the target capacity of the memory.
+ * assert new_cap > len
+ * and the size for the new memory is obj_sz * length
+ * After calling this function, the input mem will be freeed */
+
+void* mem_grow( void* , size_t obj_sz , size_t* old_cap );
+
 #endif /* _UTIL_H_ */

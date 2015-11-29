@@ -1,3 +1,4 @@
+#define MINIMUM_CODE_PAGE_SIZE 12
 #include "ajj-priv.h"
 #include "util.h"
 #include "parse.h"
@@ -13,6 +14,7 @@
 #define EXPECT(TK) \
   do { \
     if( p->tk.tk != (TK) ) { \
+      assert(0); \
       report_error(p,"Unexpected token :%s expect :%s", \
           tk_get_name(p->tk.tk), \
           tk_get_name((TK))); \
@@ -36,9 +38,9 @@
 #define emit0(em,BC) emitter_emit0(em,p->tk.pos,BC)
 #define emit1(em,BC,A1) emitter_emit1(em,p->tk.pos,BC,A1)
 #define emit2(em,BC,A1,A2) emitter_emit2(em,p->tk.pos,BC,A1,A2)
-#define emit0_at(em,P,BC) emitter_emit0_at(em,P,p->tk.pos,BC)
-#define emit1_at(em,P,BC,A1) emitter_emit1_at(em,P,p->tk.pos,BC,A1)
-#define emit2_at(em,P,BC,A1,A2) emitter_emit2_at(em,P,p->tk.pos,BC,A1,A2)
+#define emit0_at(em,P,BC) emitter_emit0_at(em,P,BC)
+#define emit1_at(em,P,BC,A1) emitter_emit1_at(em,P,BC,A1)
+#define emit2_at(em,P,BC,A1,A2) emitter_emit2_at(em,P,BC,A1,A2)
 
 /* Lexical Scope
  * Lexical scope cannot cross function boundary. Once a new function
@@ -79,6 +81,7 @@ struct lex_scope {
 
 struct parser {
   struct tokenizer tk;
+  const char* src_key; /* source file key */
   struct ajj* a;
   struct ajj_object* tpl;
   unsigned short unname_cnt;
@@ -101,10 +104,11 @@ struct parser {
 };
 
 static
-void parser_init( struct parser* p , const char* src,
-    struct ajj* a, struct ajj_object* tp ) {
+void parser_init( struct parser* p , const char* src_key,
+    const char* src, struct ajj* a, struct ajj_object* tp ) {
   tk_init(&(p->tk),src);
   p->a = a;
+  p->src_key = src_key;
   p->tpl = tp;
   p->unname_cnt = 0;
   memset(p->cur_scp,0,sizeof(p->cur_scp));
@@ -149,7 +153,7 @@ void report_error( struct parser* p , const char* format, ... ) {
   int len;
   int pos,ln;
   size_t i;
-  char cs[CODE_SNIPPET_SIZE];
+  char cs[32];
   struct tokenizer* tk = &(p->tk);
 
   /* get the position and line number of tokenizer */
@@ -162,11 +166,13 @@ void report_error( struct parser* p , const char* format, ... ) {
     }
   }
 
-  tk_get_current_code_snippet(tk,cs);
+  tk_get_current_code_snippet(tk,cs,32);
 
   /* output the prefix message */
   len = snprintf(p->a->err,1024,
-      "[Parser:(%d,%d)] at:%s!\nMessage:",pos,ln,cs);
+      "[Parser:(%s:%d,%d)] at:... %s ...!\nMessage:",
+      p->src_key,pos,ln,cs);
+
   assert( len >0 && len < ERROR_BUFFER_SIZE );
 
   /* output the rest messge even it is truncated */
@@ -318,22 +324,20 @@ random_name( struct parser* p , char l ) {
 }
 
 static
-int const_str( struct parser* p , struct program* prg,
+int const_str( struct program* prg,
     struct string* str , int own ) {
   if( str->len > 128 ) {
 insert:
-    if( prg->str_len == AJJ_LOCAL_CONSTANT_SIZE ) {
-      report_error(p,"Too much local string literals!");
-      if( own ) string_destroy(str);
-      return -1;
-    } else {
-      if(own) {
-        prg->str_tbl[prg->str_len] = *str;
-      } else {
-        prg->str_tbl[prg->str_len] = string_dup(str);
-      }
-      return prg->str_len++;
+    if( prg->str_len == prg->str_cap ) {
+      prg->str_tbl = mem_grow(prg->str_tbl, sizeof(struct string),
+          &(prg->str_cap));
     }
+    if(own) {
+      prg->str_tbl[prg->str_len] = *str;
+    } else {
+      prg->str_tbl[prg->str_len] = string_dup(str);
+    }
+    return prg->str_len++;
   } else {
     /* do a linear search here */
     size_t i = 0 ;
@@ -348,14 +352,13 @@ insert:
 }
 
 static
-int const_num( struct parser* p , struct program* prg, double num ) {
-  if( prg->num_len== AJJ_LOCAL_CONSTANT_SIZE ) {
-    report_error(p,"Too much local number literals!");
-    return -1;
-  } else {
-    prg->num_tbl[prg->num_len] = num;
-    return prg->num_len++;
+int const_num( struct program* prg, double num ) {
+  if( prg->num_len== prg->num_cap ) {
+    prg->num_tbl = mem_grow(prg->num_tbl,sizeof(double),
+        &(prg->num_cap));
   }
+  prg->num_tbl[prg->num_len] = num;
+  return prg->num_len++;
 }
 /* Parser helpers */
 static
@@ -508,7 +511,7 @@ int parse_var_prefix( struct parser* p , struct emitter* em ,
   if((idx=lex_scope_get(p,var->str,NULL))<0) {
     /* Not a local variable, must be an upvalue */
     int const_idx;
-    CALLE((const_idx=const_str(p,em->prg,var,1))<0);
+    const_idx=const_str(em->prg,var,1);
     /* Now emit a UPVALUE instructions */
     emit1(em,VM_UPVALUE_GET,const_idx);
   } else {
@@ -609,7 +612,7 @@ int parse_attr_or_methodcall( struct parser* p, struct emitter* em ,
 
     EXPECT(TK_VARIABLE);
     CALLE(symbol(p,&comp));
-    CALLE((idx=const_str(p,em->prg,&comp,1))<0);
+    idx=const_str(em->prg,&comp,1);
     tk_move(tk);
     /* Until now, we still don't know we are calling a member function or
      * reference an object on to the stack.We need to lookahead one more
@@ -641,16 +644,13 @@ static
 int parse_funccall_or_pipe( struct parser* p , struct emitter* em ,
     struct string* prefix , int pipe ) {
   int idx;
-  int num = pipe; /* If this function call is a pipe call, then pipe will set to 1.
-                   * which makes our function has one more parameters comes from
-                   * pipe. But the caller of this function must set up the code
-                   * correctly. [ object , pipe_data ]. This typically involes prolog
-                   * for moving data around */
+  int num ; 
   struct tokenizer* tk = &(p->tk);
   assert(tk->tk == TK_LPAR);
 
-  CALLE((idx=const_str(p,em->prg,prefix,1))<0);
-  num += parse_invoke_par(p,em); /* generate call parameter for function */
+  idx=const_str(em->prg,prefix,1);
+  CALLE((num=parse_invoke_par(p,em))<0); /* generate call parameter for function */
+  num += pipe;
   emit2(em,VM_CALL,idx,num); /* call the function based on current object */
   return 0;
 }
@@ -660,7 +660,7 @@ static
 int parse_pipecmd( struct parser* p , struct emitter* em ,
     struct string* cmd ) {
   int idx;
-  CALLE((idx=const_str(p,em->prg,cmd,1))<0);
+  idx=const_str(em->prg,cmd,1);
   emit2(em,VM_CALL,idx,1);
   return 0;
 }
@@ -672,7 +672,7 @@ int parse_prefix( struct parser* p, struct emitter* em ) {
   assert(tk->tk == TK_VARIABLE);
   CALLE(symbol(p,&prefix));
   tk_move(tk);
-  if( tk->tk == TK_RPAR ) {
+  if( tk->tk == TK_LPAR ) {
     CALLE(parse_funccall_or_pipe(p,em,&prefix,0));
   } else {
     if( tk->tk == TK_DOT || tk->tk == TK_LSQR ) {
@@ -713,7 +713,7 @@ int parse_atomic( struct parser* p, struct emitter* em ) {
       return parse_prefix(p,em);
     case TK_STRING:
       strbuf_move(&(tk->lexeme),&str);
-      CALLE((idx=const_str(p,em->prg,&str,1))<0);
+      idx=const_str(em->prg,&str,1);
       emit1(em,VM_LSTR,idx);
       break;
     case TK_TRUE:
@@ -726,7 +726,7 @@ int parse_atomic( struct parser* p, struct emitter* em ) {
       emit0(em,VM_LNONE);
       break;
     case TK_NUMBER:
-      CALLE((idx=const_num(p,em->prg,tk->num_lexeme))<0);
+      idx=const_num(em->prg,tk->num_lexeme);
       emit1(em,VM_LNUM,idx);
       break;
     case TK_LPAR:
@@ -1070,7 +1070,7 @@ parse_constexpr( struct parser* p , struct ajj_value* output ) {
   switch(tk->tk) {
     case TK_NUMBER:
       *output = ajj_value_number( neg ? -tk->num_lexeme : tk->num_lexeme);
-      return 0;
+      break;
     case TK_STRING:
       if( neg ) {
         report_error(p,"constexpr: string literal cannot work with unary "
@@ -1080,8 +1080,8 @@ parse_constexpr( struct parser* p , struct ajj_value* output ) {
         *output = ajj_value_assign(
             ajj_object_create_string(p->a,p->root_gc,
               tk->lexeme.str,tk->lexeme.len,0));
-        return 0;
       }
+      break;
     case TK_NONE:
       if( neg ) {
         report_error(p,"constexpr: none cannot work with unary "
@@ -1089,22 +1089,22 @@ parse_constexpr( struct parser* p , struct ajj_value* output ) {
         return -1;
       } else {
         *output = AJJ_NONE;
-        return 0;
       }
+      break;
     case TK_TRUE:
       if( neg ) {
         *output = AJJ_FALSE;
       } else {
         *output = AJJ_TRUE;
       }
-      return 0;
+      break;
     case TK_FALSE:
       if( neg ) {
         *output = AJJ_FALSE;
       } else {
         *output = AJJ_TRUE;
       }
-      return 0;
+      break;
     case TK_LSQR:
       if( neg ) {
         report_error(p,"constexpr: list literal cannot work with unary "
@@ -1131,6 +1131,7 @@ parse_constexpr( struct parser* p , struct ajj_value* output ) {
           tk_get_name(tk->tk));
       return -1;
   }
+  tk_move(tk);
   return 0;
 }
 
@@ -1225,14 +1226,18 @@ int parse_branch ( struct parser* p, struct emitter* em ) {
         return -1;
     }
     CALLE(parse_scope(p,em,1,1));
-    if( !has_else )
-      PUSH_JMP(emitter_put(em,1));
+    PUSH_JMP(emitter_put(em,1));
   } while(1);
 done:
-  /* patch all rest of the cool things */
-  for( i = 0 ; i < jmp_sz ; ++i ) {
+  assert(jmp_sz >= 1);
+  /* patch all rest of the cool things. We DON"T patch the last
+   * PUSH_JMP since the following block is naturally followed by
+   * this branch , no jmp really needed */
+  for( i = 0 ; i < jmp_sz-1 ; ++i ) {
     emit1_at(em,end_jmp[i],VM_JMP,emitter_label(em));
   }
+  /* patch the last one as a NOP1 */
+  emit1_at(em,end_jmp[jmp_sz-1],VM_NOP1,0);
   return 0;
 }
 #undef PUSH_JMP
@@ -1262,23 +1267,24 @@ done:
  * function.
  */
 
-static int
-parse_func_prolog( struct parser* p , struct emitter* em ) {
+static
+int parse_func_prolog( struct parser* p , struct emitter* em ) {
   size_t i;
   for( i = 0 ; i < em->prg->par_size ; ++i ) {
     /* Generate rest of named parameters */
     CALLE(lex_scope_set(p,em->prg->par_list[i].name.str)==-2);
   }
+  return 0;
 }
 
 static int
 parse_func_body( struct parser* p , struct emitter* em ) {
   struct lex_scope* scp = PTOP();
+
+  CALLE(lex_scope_jump(p) == NULL);
   assert( PTOP()->parent == NULL );
   assert( PTOP()->len == 0 );
   assert( PTOP()->end == 0 );
-
-  CALLE(lex_scope_jump(p) == NULL);
 
   CALLE(parse_func_prolog(p,em)); /* Parsing the prolog */
   /* start to parse the function body ,which is just
@@ -1313,7 +1319,7 @@ parse_func_prototype( struct parser* p , struct program* prg ) {
       EXPECT(TK_VARIABLE);
       CALLE(symbol(p,&par_name));
       tk_move(tk);
-      if( tk->tk == TK_EQ ) {
+      if( tk->tk == TK_ASSIGN ) {
         tk_move(tk);
         /* We have a default value , parse it through constexpr */
         CALLE(parse_constexpr(p,&def_val));
@@ -1352,6 +1358,7 @@ parse_macro( struct parser* p , struct emitter* em ) {
   /* Add a new function into the table */
   new_prg = func_table_add_jj_macro(
       p->tpl->val.obj.fn_tb,&name,1);
+  tk_move(tk); /* eat function name */
   emitter_init(&new_em,new_prg);
 
   /* Parsing the prototype */
@@ -1381,7 +1388,7 @@ parse_block( struct parser* p , struct emitter* em ) {
   CALLE(symbol(p,&name));
   if( p->extends == 0 ) {
     int idx;
-    CALLE((idx=const_str(p,em->prg,&name,0))<0);
+    idx=const_str(em->prg,&name,0);
     emit2(em,VM_CALL,idx,0);
   }
   assert(p->tpl->val.obj.fn_tb);
@@ -1679,9 +1686,9 @@ parse_call( struct parser* p , struct emitter* em ) {
   /* Get text index in string pool */
   strbuf_move(&(tk->lexeme),&text);
   tk_move(tk);
-  CALLE((text_idx=const_str(p,em->prg,&text,1))<0);
+  text_idx=const_str(em->prg,&text,1);
   /* Get caller index in string pool */
-  CALLE((caller_idx=const_str(p,em->prg,&CALLER,0))<0);
+  caller_idx=const_str(em->prg,&CALLER,0);
   emit1_at(em,vm_lstr,VM_LSTR,text_idx);
   /* Set the caller intenral string , this string will be
    * exposed by a builtin wrapper function called caller,
@@ -1716,7 +1723,7 @@ parse_filter( struct parser* p , struct emitter* em ) {
   }
   CONSUME(TK_RSTMT);
   strbuf_move(&(tk->lexeme),&text);
-  CALLE((text_idx=const_str(p,em->prg,&text,1))<0);
+  text_idx=const_str(em->prg,&text,1);
   emit1_at(em,vm_lstr,VM_LSTR,text_idx);
   CALLE(finish_scope_tag(p,TK_ENDFILTER));
 }
@@ -1755,7 +1762,7 @@ int parse_set( struct parser* p, struct emitter* em ) {
     tk_move(tk);
     EXPECT(TK_TEXT);
     strbuf_move(&(tk->lexeme),&str);
-    CALLE((txt_idx=const_str(p,em->prg,&str,1))<0);
+    txt_idx=const_str(em->prg,&str,1);
     tk_move(tk);
     /* load the text on to stack */
     emit1(em,VM_LSTR,txt_idx);
@@ -1863,7 +1870,7 @@ parse_upvalue( struct parser* p , struct emitter* em ) {
   tk_move(tk);
   EXPECT(TK_VARIABLE);
   strbuf_move(&(tk->lexeme),&str);
-  CALLE((var_idx=const_str(p,em->prg,&str,1))<0);
+  var_idx=const_str(em->prg,&str,1);
   tk_move(tk);
   CALLE(parse_expr(p,em));
   emit1(em,VM_UPVALUE_SET,var_idx);
@@ -1978,7 +1985,7 @@ parse_include_body( struct parser* p , struct emitter* em ) {
       struct string str;
       tk_move(tk);
       strbuf_move(&(tk->lexeme),&str);
-      CALLE((var_idx=const_str(p,em->prg,&str,1))<0);
+      var_idx=const_str(em->prg,&str,1);
       tk_move(tk); /* move the symbol name */
       emit1(em,VM_LIMM,var_idx); /* symbol name index */
       CALLE(parse_expr(p,em));
@@ -2057,7 +2064,7 @@ parse_import( struct parser* p , struct emitter* em ) {
   CALLE(symbol(p,&name));
   tk_move(tk);
   /* Get the index */
-  CALLE((name_idx=const_str(p,em->prg,&name,1))<0);
+  name_idx=const_str(em->prg,&name,1);
   emit1(em,VM_IMPORT,name_idx);
 
   CONSUME(TK_RSTMT);
@@ -2139,7 +2146,7 @@ parse_scope( struct parser* p , struct emitter* em ,
       struct string text;
       int text_id;
       strbuf_move(&(tk->lexeme),&text);
-      CALLE((text_id = const_str(p,em->prg,&text,1))<0);
+      text_id = const_str(em->prg,&text,1);
       emit1(em,VM_LSTR,text_id);
       emit0(em,VM_PRINT);
       tk_move(tk);
@@ -2168,25 +2175,31 @@ parse_scope( struct parser* p , struct emitter* em ,
               CALLE(parse_include(p,em));
             else
               goto fail;
+            break;
           case TK_IMPORT:
             if( is_in_main(p) )
               CALLE(parse_import(p,em));
             else
               goto fail;
+            break;
           case TK_EXTENDS:
             if( is_in_main(p) )
               CALLE(parse_extends(p,em));
             else
               goto fail;
+            break;
           case TK_ELIF:
           case TK_ELSE:
             goto done;
           case TK_DO:
             CALLE(parse_do(p,em));
+            break;
           case TK_WITH:
             CALLE(parse_with(p,em));
+            break;
           case TK_MOVE:
             CALLE(parse_move(p,em));
+            break;
           case TK_BREAK:
             if( PTOP()->in_loop ) {
               parse_break(p,em);
@@ -2194,12 +2207,14 @@ parse_scope( struct parser* p , struct emitter* em ,
             } else {
               goto fail;
             }
+            break;
           case TK_CONTINUE:
             if( PTOP()->in_loop ) {
               CALLE(parse_break(p,em));
             } else {
               goto fail;
             }
+            break;
           default:
               goto fail;
         }
@@ -2241,19 +2256,19 @@ fail:
  * Public Interface
  * ======================================*/
 struct ajj_object*
-parse( struct ajj* a, const char* src, const char* key ) {
+parse( struct ajj* a, const char* key, const char* src, int own ) {
   struct ajj_object* tmpl;
   struct parser p;
   struct emitter em;
   struct program* prg;
 
-  if((tmpl = ajj_new_template(a,key)) == NULL) {
+  if((tmpl = ajj_new_template(a,key,src,own)) == NULL) {
     snprintf(a->err,ERROR_BUFFER_SIZE,
         "Cannot new template with key:%s,possibly existed!",
         key);
     return NULL;
   }
-  parser_init(&p,src,a,tmpl);
+  parser_init(&p,key,src,a,tmpl);
   CHECK(lex_scope_jump(&p)!=NULL);
   /* STARTS for parsing main --------------------- */
   CHECK((prg = func_table_add_jj_main(tmpl->val.obj.fn_tb,&MAIN,0)));

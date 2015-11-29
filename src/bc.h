@@ -168,7 +168,7 @@ extern struct string ITER;
   X(VM_ATTR_SET,0,"attrset") \
   X(VM_ATTR_PUSH,0,"attrpush") \
   X(VM_ATTR_GET,0,"attrget") \
-  X(VM_ATTR_CALL,1,"attrcall") \
+  X(VM_ATTR_CALL,2,"attrcall") \
   X(VM_UPVALUE_SET,1,"upvalueset") \
   X(VM_UPVALUE_GET,1,"upvalueget") \
   X(VM_UPVALUE_DEL,1,"upvaluedel") \
@@ -224,13 +224,25 @@ struct emitter {
   } while(0)
 
 static  
-void emitter_reserve_code_page( struct emitter* em , int cap ) {
-  EMIT_RESERVE(em,cap,cd_cap,1,codes,len);
+void emitter_reserve_code_page( struct emitter* em , size_t cap ) {
+  if( em->prg->codes && em->prg->len != 0 ) {
+    em->prg->codes = mem_grow(em->prg->codes,sizeof(char),&cap);
+    em->cd_cap = cap;
+  } else {
+    em->prg->codes = malloc(cap);
+    em->cd_cap = cap;
+  }
 }
 
 static  
-void emitter_reserve_spos( struct emitter* em , int cap ) {
-  EMIT_RESERVE(em,cap,spos_cap,sizeof(int),spos,spos_len);
+void emitter_reserve_spos( struct emitter* em , size_t cap ) {
+  if( em->prg->spos && em->prg->spos_len != 0 ) {
+    em->prg->spos = mem_grow(em->prg->spos,sizeof(int),&cap);
+    em->spos_cap = cap;
+  } else {
+    em->prg->spos = malloc(cap*sizeof(int));
+    em->spos_cap = cap;
+  }
 }
 
 static  
@@ -297,28 +309,28 @@ int emitter_put( struct emitter* em , int arg_sz ) {
 }
 
 static  
-void emitter_emit0_at( struct emitter* em , int pos , int spos , int bc ) {
+void emitter_emit0_at( struct emitter* em , int pos , int bc ) {
   int save = em->prg->len;
   em->prg->len = pos;
-  emitter_emit0(em,spos,bc);
+  emitter_emit0(em,pos,bc);
   em->prg->len = save;
 }
 
 static  
-void emitter_emit1_at( struct emitter* em , int pos , int spos ,
+void emitter_emit1_at( struct emitter* em , int pos ,
     int bc , int a1 ) {
   int save = em->prg->len;
   em->prg->len = pos;
-  emitter_emit1(em,spos,bc,a1);
+  emitter_emit1(em,pos,bc,a1);
   em->prg->len = save;
 }
 
 static  
 void emitter_emit2_at( struct emitter* em , int pos , int bc ,
-    int spos , int a1 , int a2 ) {
+    int a1 , int a2 ) {
   int save = em->prg->len;
   em->prg->len = pos;
-  emitter_emit2(em,spos,bc,a1,a2);
+  emitter_emit2(em,pos,bc,a1,a2);
   em->prg->len = save;
 }
 
@@ -347,6 +359,6 @@ int bc_next_arg( const struct program* prg , size_t* pos ) {
 }
 
 /* dump program into human readable format */
-void dump_program( const struct program* , FILE* output );
+void dump_program( const char* src , const struct program* , FILE* output );
 
 #endif /* _BC_H_ */

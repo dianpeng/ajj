@@ -47,11 +47,12 @@ ajj_find_template( struct ajj* a , const char* name ) {
 
 static
 struct ajj_object*
-ajj_new_template( struct ajj* a , const char* name ) {
+ajj_new_template( struct ajj* a ,const char* name ,
+    const char* src , int own ) {
   struct ajj_object* obj;
   if( ajj_find_template(a,name) != NULL )
     return NULL; /* We already get one */
-  obj = ajj_object_create_jinja(a,name);
+  obj = ajj_object_create_jinja(a,name,src,own);
   CHECK(!map_insert_c(&(a->tmpl_tbl),name,&obj));
   return obj;
 }
@@ -68,6 +69,7 @@ int ajj_delete_template( struct ajj* a, const char* name ) {
   LREMOVE(obj); /* remove it from gc scope */
   assert(obj->tp == AJJ_VALUE_JINJA);
   func_table_destroy(a,obj->val.obj.fn_tb);
+  free((void*)obj->val.obj.src); /* always owned by us */
   slab_free(&(a->obj_slab),obj);
   return 0;
 }

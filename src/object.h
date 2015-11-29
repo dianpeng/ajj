@@ -92,6 +92,10 @@ struct object {
                              * simply represents this object doesn't have
                              * any defined function related to it */
   void* data; /* object's data */
+
+  /* Field only used when the object is a JINJA object */
+  const char* src_key; /* Key/path for source file */
+  const char* src;     /* source file */
 };
 
 
@@ -508,6 +512,8 @@ ajj_object_obj( struct ajj_object* obj , struct func_table* fn_tb, void* data ) 
   dict_create(&(o->prop));
   o->fn_tb = fn_tb;
   o->data = data;
+  o->src = NULL;
+  o->src_key = NULL;
   obj->tp = AJJ_VALUE_OBJECT;
   return obj;
 }
@@ -524,10 +530,11 @@ ajj_object_create_obj( struct ajj* a, struct gc_scope* scp,
  */
 struct ajj_object*
 ajj_object_jinja( struct ajj* , struct ajj_object* obj ,
-    const char* name );
+    const char* name , const char* src , int own );
 
 struct ajj_object*
-ajj_object_create_jinja( struct ajj* a , const char* name );
+ajj_object_create_jinja( struct ajj* a , const char* name ,
+    const char* src , int own );
 
 static
 const struct program*
@@ -537,6 +544,62 @@ ajj_object_jinja_main( const struct ajj_object* obj ) {
   if( (f=func_table_find_func(obj->val.obj.fn_tb,&MAIN)) ) {
     assert(IS_JINJA(f));
     return &(f->f.jj_fn);
+  }
+  return NULL;
+}
+
+static
+const struct program*
+ajj_object_get_jinja_macro( const struct ajj_object* obj ,
+    const struct string* name ) {
+  struct function* f;
+  assert(obj->tp == AJJ_VALUE_JINJA);
+  if( (f=func_table_find_func(obj->val.obj.fn_tb,name)) ) {
+    if( IS_JJMACRO(f) ) {
+      return &(f->f.jj_fn);
+    }
+  }
+  return NULL;
+}
+
+static
+const struct program*
+ajj_object_get_jinja_block( const struct ajj_object* obj ,
+    const struct string* name ) {
+  struct function* f;
+  assert(obj->tp == AJJ_VALUE_JINJA);
+  if( (f=func_table_find_func(obj->val.obj.fn_tb,name)) ) {
+    if( IS_JJBLOCK(f) ) {
+      return &(f->f.jj_fn);
+    }
+  }
+  return NULL;
+}
+
+static
+const struct c_closure*
+ajj_object_get_c_closure( const struct ajj_object* obj ,
+    const struct string* name ) {
+  struct function* f;
+  assert(obj->tp == AJJ_VALUE_OBJECT);
+  if( (f=func_table_find_func(obj->val.obj.fn_tb,name)) ) {
+    if( IS_CFUNCTION(f) ) {
+      return &(f->f.c_fn);
+    }
+  }
+  return NULL;
+}
+
+static
+const ajj_method*
+ajj_object_get_c_method( const struct ajj_object* obj ,
+    const struct string* name ) {
+  struct function* f;
+  assert(obj->tp == AJJ_VALUE_OBJECT);
+  if( (f=func_table_find_func(obj->val.obj.fn_tb,name)) ) {
+    if( IS_CFUNCTION(f) ) {
+      return &(f->f.c_mt);
+    }
   }
   return NULL;
 }

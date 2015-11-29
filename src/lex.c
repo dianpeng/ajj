@@ -658,16 +658,23 @@ const char* tk_get_name( int tk ) {
   }
 }
 
-void tk_get_code_snippet( const char* src , int pos , char* output ) {
+void tk_get_code_snippet( const char* src , size_t pos ,
+    char* output , size_t length ) {
   /* Fitting a CODE_SNIPPET_SIZE chunk of source code characters into
    * the buffer to make caller happy. This function is mostly used for
    * providing diagnostic information. */
   int start ; /* Start of the code snippet, we cannot decide the end here,
                * so we just loop forward */
-  int i;
+  size_t i;
   int c;
-  start = pos - CODE_SNIPPET_SIZE/2 > 0 ? pos-CODE_SNIPPET_SIZE : 0;
-  for( i = start ; i < CODE_SNIPPET_SIZE-1 && (c=src[i]) ; ++i ) {
+  if( length == 0 )
+    length = CODE_SNIPPET_SIZE;
+  else
+    length = CODE_SNIPPET_SIZE >= length ? length : CODE_SNIPPET_SIZE;
+  start = pos > length/2 ? pos-length/2: 0;
+  for( i = start ; i < pos + length/2 -1 && (c=src[i]) ; ++i ) {
+    if( c == '\n' ) c = ' '; /* rewrite the line break to space */
+    if( c == '\r' ) continue;
     *output++ = c;
   }
   *output = 0;

@@ -9,6 +9,6 @@
 struct ajj_object;
 
 struct ajj_object*
-parse( struct ajj* ,const char* , const char* );
+parse( struct ajj* , const char* , const char* , int );
 
 #endif /* _PARSE_H_ */
