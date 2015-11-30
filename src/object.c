@@ -8,8 +8,15 @@ static
 void list_reserve( struct list* l ) {
   void* mem;
   assert( l->cap >= LIST_LOCAL_BUF_SIZE );
-  mem = malloc(sizeof(struct ajj_value)*2*l->cap);
-  memcpy(mem,l->entry,l->len*sizeof(struct ajj_value));
+  if( l->lbuf == l->entry ) {
+    mem = malloc(sizeof(struct ajj_value)*2*l->cap);
+    memcpy(mem,l->entry,l->len*sizeof(struct ajj_value));
+  } else {
+    /* use realloc */
+    mem = realloc(l->entry,
+        sizeof(struct ajj_value)*2*l->cap);
+  }
+
   if( l->lbuf != l->entry )
     free(l->entry);
   l->entry = mem;

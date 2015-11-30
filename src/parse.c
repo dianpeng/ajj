@@ -14,7 +14,6 @@
 #define EXPECT(TK) \
   do { \
     if( p->tk.tk != (TK) ) { \
-      assert(0); \
       report_error(p,"Unexpected token :%s expect :%s", \
           tk_get_name(p->tk.tk), \
           tk_get_name((TK))); \
@@ -1309,7 +1308,7 @@ parse_func_prototype( struct parser* p , struct program* prg ) {
   assert( tk->tk == TK_LPAR );
   tk_move(tk);
   if( tk->tk == TK_RPAR ) {
-    tk_move(0);
+    tk_move(tk);
     return 0;
   } else {
     do {
@@ -1386,6 +1385,9 @@ parse_block( struct parser* p , struct emitter* em ) {
   tk_move(tk);
   EXPECT(TK_VARIABLE);
   CALLE(symbol(p,&name));
+  tk_move(tk);
+  CONSUME(TK_RSTMT); /* eat }% */
+
   if( p->extends == 0 ) {
     int idx;
     idx=const_str(em->prg,&name,0);
@@ -1401,6 +1403,48 @@ parse_block( struct parser* p , struct emitter* em ) {
   /* Parsing the rest of the body */
   CONSUME(TK_ENDBLOCK);
   CONSUME(TK_RSTMT);
+  return 0;
+}
+
+/* Call block.
+ * Each call block will be compiled into a anonymous macro. The id
+ * of this anonymous macro is passed by setting up the __caller__
+ * upvalue and then invoke the corresponding macro. Inside of the
+ * macro , it will call this function by using caller directory */
+static int
+parse_call( struct parser* p , struct emitter* em ) {
+  struct tokenizer* tk = &(p->tk);
+  struct program* new_prg;
+  struct emitter new_em;
+  struct string name = random_name(p,'c');
+  int name_idx;
+  int caller_idx;
+  struct string macro_name;
+
+  assert(tk->tk == TK_CALL);
+  tk_move(tk);
+  
+  /* compile the parse_call as an anonymous macro */
+  new_prg = func_table_add_jj_macro(
+      p->tpl->val.obj.fn_tb,&name,1);
+  emitter_init(&new_em,new_prg);
+  CALLE(parse_func_body(p,&new_em));
+
+  /* now generate the code for setting it up as a upvalue */
+  name_idx = const_str(em->prg,&name,0);
+  caller_idx = const_str(em->prg,&CALLER,0);
+  emit1(em,VM_LSTR,name_idx); /* load the name onto stack */
+  emit1(em,VM_UPVALUE_SET,caller_idx); /* set the value into caller_idx */
+
+  /* generate call stub here  */
+  EXPECT(TK_VARIABLE);
+  strbuf_move(&(tk->lexeme),&macro_name);
+  tk_move(tk);
+  EXPECT(TK_LPAR); /* must be a function call */
+  CALLE(parse_funccall_or_pipe(p,em,&macro_name,0)); /* generate call */
+
+  /* remove upvalue */
+  emit1(em,VM_UPVALUE_DEL,caller_idx);
   return 0;
 }
 
@@ -1649,56 +1693,6 @@ int parse_for( struct parser* p , struct emitter* em ) {
     val = NULL_STRING;
   }
   return parse_for_body(p,em,&key,&val);
-}
-
-/* Call
- * We don't support passing function from MACRO to CALL, since this looks wired
- * and also makes implementation complicated because it introduces some specific
- * situations.
- */
-static int
-parse_call( struct parser* p , struct emitter* em ) {
-  struct string name;
-  struct string text;
-  int text_idx;
-  int caller_idx;
-  int vm_lstr = -1;
-  int vm_upvalue_set = -1;
-  struct tokenizer* tk = &(p->tk);
-
-  assert(tk->tk == TK_CALL);
-  tk_move(tk);
-  EXPECT(TK_VARIABLE);
-  CALLE(symbol(p,&name));
-  tk_move(tk);
-
-  /* Because we cannot know the text we want to insert as an upvalue
-   * before parsing the function call. We need to reserve instructions
-   * spaces in current code page.
-   * VM_LSTR(idx);
-   * VM_UPVALUE_SET(idx); */
-  vm_lstr = emitter_put(em,1);
-  vm_upvalue_set = emitter_put(em,1);
-  /* Now we start to parse the func call */
-  CALLE(parse_funccall_or_pipe(p,em,&name,0));
-  CONSUME(TK_RSTMT);
-  EXPECT(TK_TEXT);
-  /* Get text index in string pool */
-  strbuf_move(&(tk->lexeme),&text);
-  tk_move(tk);
-  text_idx=const_str(em->prg,&text,1);
-  /* Get caller index in string pool */
-  caller_idx=const_str(em->prg,&CALLER,0);
-  emit1_at(em,vm_lstr,VM_LSTR,text_idx);
-  /* Set the caller intenral string , this string will be
-   * exposed by a builtin wrapper function called caller,
-   * then user could use caller() to get the content of this
-   * upvalue */
-  emit1_at(em,vm_upvalue_set,VM_UPVALUE_SET,caller_idx);
-  /* Clear the upvalue */
-  emit1(em,VM_UPVALUE_DEL,caller_idx);
-  CALLE(finish_scope_tag(p,TK_ENDCALL));
-  return 0;
 }
 
 /* Filter Scope */

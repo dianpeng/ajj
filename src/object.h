@@ -118,7 +118,9 @@ void list_create( struct list* l ) {
 }
 
 void list_destroy(struct list* );
+
 void list_push( struct list* , const struct ajj_value* val );
+
 static
 size_t list_size( struct list* l ) {
   return l->len;
@@ -352,10 +354,12 @@ void func_table_clear( struct ajj* a , struct func_table* tb );
 static
 struct function* func_table_add_func( struct func_table* tb ) {
   if( tb->func_len == tb->func_cap ) {
-   void* nf = malloc( sizeof(struct function)*(tb->func_cap)*2 );
-   memcpy(nf,tb->func_tb,tb->func_len*sizeof(struct function));
-   if( tb->func_tb != tb->func_buf ) {
-     free(tb->func_tb);
+   void* nf;
+   if( tb->func_tb == tb->func_buf ) {
+     nf = malloc( sizeof(struct function)*(tb->func_cap)*2 );
+     memcpy(nf,tb->func_tb,tb->func_len*sizeof(struct function));
+   } else {
+     nf = realloc(tb->func_tb,sizeof(struct function)*(tb->func_cap)*2);
    }
    tb->func_tb = nf;
    tb->func_cap *= 2;
