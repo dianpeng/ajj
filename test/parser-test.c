@@ -378,9 +378,7 @@ void test_macro() {
     assert(prg);
 
   }
-
-
-
+#if 0
   { /* MACRO */
     const char* src = "{% macro input() %}\n" \
                       "type={{U}} {{V}} {{W}} {{X}} {{Y}} {{Z}}\n" \
@@ -417,6 +415,7 @@ void test_macro() {
     assert(prg);
 
   }
+#endif
 }
 
 static
@@ -732,7 +731,7 @@ int main() {
   test_import();
   test_extends();
 #else
-  test_expr();
+  test_macro();
 #endif
   return 0;
 }

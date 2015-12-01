@@ -53,6 +53,18 @@ enum {
   JJ_MAIN
 };
 
+static
+const char* function_get_type_name( int tp ) {
+  switch(tp) {
+    case C_FUNCTION: return "c-function";
+    case C_METHOD: return "c-method";
+    case JJ_BLOCK: return "jinja-block";
+    case JJ_MACRO: return "jinja-macro";
+    case JJ_MAIN: return "jinja-main";
+    default: UNREACHABLE(); return NULL;
+  }
+}
+
 struct function {
   union {
     struct c_closure c_fn; /* C function */
@@ -559,7 +571,7 @@ ajj_value_to_list( const struct ajj_value* val ) {
 
 static
 const struct object*
-ajj_value_to_object( const struct ajj_value* val ) {
+ajj_value_to_obj( const struct ajj_value* val ) {
   assert(val->type == AJJ_VALUE_OBJECT);
   return &(val->value.object->val.obj);
 }

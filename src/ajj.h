@@ -1,6 +1,7 @@
 #ifndef _AJJ_H_
 #define _AJJ_H_
 #include <stddef.h>
+#include <stdio.h>
 
 #define AJJ_SYMBOL_NAME_MAX_SIZE 32
 #define AJJ_GLOBAL_SYMBOL_MAX_SIZE 256
@@ -121,4 +122,12 @@ int ajj_dict_delete( const struct ajj_value* , const char* key );
 /* AJJ ============================= */
 struct ajj* ajj_create();
 void ajj_destroy( struct ajj* );
+
+/* MISC ============================= */
+enum {
+  AJJ_VALUE_PRETTY,
+  AJJ_VALUE_COMPACT
+};
+void ajj_value_print( const struct ajj_value* , FILE* , int );
+
 #endif /* _AJJ_H_ */

@@ -35,7 +35,10 @@ void dump_program_ctable( const struct program* prg , FILE* output ) {
   }
   fprintf(output,"\nFunction Argument Table====================\n\n");
   for( i = 0 ; i < prg->par_size ; ++i ) {
-    fprintf(output,"%zu:%s\n",i,prg->par_list[i].name.str);
+    fprintf(output,"%zu:%s:",i,prg->par_list[i].name.str);
+    ajj_value_print(&(prg->par_list[i].def_val),
+        stdout,AJJ_VALUE_COMPACT);
+    fprintf(output,"\n");
   }
   fprintf(output,"\n");
 }

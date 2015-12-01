@@ -304,7 +304,7 @@ void map_clear( struct map* );
 int map_iter_start( const struct map* );
 static
 int map_iter_has  ( const struct map* d, int itr ) {
-  return itr < d->cap;
+  return (size_t)itr < d->cap;
 }
 int map_iter_move ( const struct map* , int itr );
 

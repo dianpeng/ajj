@@ -171,4 +171,30 @@ int tk_body_escape( char c ) {
   return c == '{';
 }
 
+static inline
+int tk_string_escape_char( char c ) {
+  switch(c) {
+    case 'n': return '\n';
+    case 't': return '\t';
+    case 'b': return '\b';
+    case 'r': return '\r';
+    case '\'':return '\'';
+    case '\\':return '\\';
+    default: return 0;
+  }
+}
+
+static inline
+int tk_string_reescape_char( char c ) {
+  switch(c) {
+    case '\n': return 'n';
+    case '\t': return 't';
+    case '\b': return 'b';
+    case '\r': return 'r';
+    case '\'': return '\'';
+    case '\\': return '\\';
+    default: return 0;
+  }
+}
+
 #endif /* _LEX_H_ */

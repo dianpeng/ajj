@@ -40,16 +40,9 @@ token_id tk_lex_str( struct tokenizer* tk ) {
   for( ; (c=tk->src[i]) ;++i ){
     if( c == '\\' ) {
       int nc = tk->src[i+1];
-      switch(nc){
-        case 'n':
-        case 't':
-        case '\\':
-        case '\'':
-          ++i;
-          c = nc;
-          break;
-        default:
-          break;
+      if( (nc=tk_string_escape_char(nc)) ) {
+        c = nc;
+        ++i;
       }
     } else if( c == '\'' ) {
       break;
@@ -62,8 +55,6 @@ token_id tk_lex_str( struct tokenizer* tk ) {
 
 static
 token_id tk_lex_num( struct tokenizer* tk ) {
-  size_t i = tk->pos+1;
-  char c;
   char* pend;
   errno = 0;
   tk->num_lexeme = strtod(tk->pos+tk->src,&pend);

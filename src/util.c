@@ -300,6 +300,7 @@ int map_iter_move( const struct map* d , int itr ) {
     if( e->used && !e->del )
       return itr;
   }
+  return itr;
 }
 
 

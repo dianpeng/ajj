@@ -246,7 +246,7 @@ void test_branch() {
 
 static
 void test_expr() {
-#if 0
+ 
   { /* simple expression 1 */
     const char* src = " {% do users+3+4+foo(1,2,3)|user_end + 78-2 %} ";
     struct ajj* a = ajj_create();
@@ -379,9 +379,8 @@ void test_expr() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
-    dump_program(src,prg,stdout);
   }
-#endif
+ 
 
   { /* component */
     const char* src = "{% do a.p.u[\'v\'][myname+1+'string'].push(U) %}";
@@ -391,7 +390,6 @@ void test_expr() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
-    dump_program(src,prg,stdout);
   }
 }
 
@@ -768,7 +766,6 @@ void test_move() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
-    dump_program(src,prg,stdout);
   }
   { /* different scope */
     const char* src = "{% set U = 1 %}\n" \
@@ -781,7 +778,6 @@ void test_move() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
-    dump_program(src,prg,stdout);
   }
   { /* different scope */
     const char* src = "{% set U = 1 %}\n" \
@@ -794,7 +790,6 @@ void test_move() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
-    dump_program(src,prg,stdout);
   }
 }
 
@@ -810,12 +805,38 @@ void test_upvalue() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
-    dump_program(src,prg,stdout);
+  }
+}
+
+static
+void test_constexpr() {
+ 
+  {
+    const char* src = "{% macro input1(arg1=[],arg2={},arg3='UV',arg4=44,arg5=True,arg6=False,arg7=None) %}" \
+                      "{% endmacro %}";
+    struct ajj* a = ajj_create();
+    struct ajj_object* obj = parse(a,"Whoha",src,0);
+    struct string input1 = CONST_STRING("input1");
+    const struct program* prg;
+    assert(obj);
+    prg = ajj_object_get_jinja_macro(obj,&input1);
+    assert(prg);
+  }
+ 
+  {
+    const char* src = "{% macro input1(arg1=[1,2,3],arg2={'U':'V','Q':123,'P':()},arg3='UV',arg4=44,arg5=True,arg6=False,arg7=None) %}" \
+                      "{% endmacro %}";
+    struct ajj* a = ajj_create();
+    struct ajj_object* obj = parse(a,"Whoha",src,0);
+    struct string input1 = CONST_STRING("input1");
+    const struct program* prg;
+    assert(obj);
+    prg = ajj_object_get_jinja_macro(obj,&input1);
+    assert(prg);
   }
 }
 
 int main() {
-#if 0
   test0();
   test_set();
   test_for();
@@ -830,7 +851,6 @@ int main() {
   test_include();
   test_import();
   test_extends();
-#endif
-  test_upvalue();
+  test_constexpr();
   return 0;
 }
