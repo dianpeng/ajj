@@ -19,7 +19,7 @@ struct ajj_object;
 
 typedef int (*ajj_function)( struct ajj* ,
     void* ,
-    struct ajj_value*, 
+    struct ajj_value*,
     size_t ,
     struct ajj_value* );
 

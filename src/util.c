@@ -5,17 +5,7 @@ struct string TRUE_STRING = CONST_STRING("true");
 struct string FALSE_STRING= CONST_STRING("false");
 struct string NONE_STRING = CONST_STRING("none");
 
-/*
- * Dictionary implementation
- * Our mapionary supports traditional : insert , find and remove. The general
- * implementation for this is using a chain resolution hash table. Recently I
- * saw Hotspot VM uses such way , for cache coherence , they uses an dynamic
- * array instead of a linked list to solve the collision. We gonna use the method
- * in LUA, open addressing, unlike the implement, we don't do main position swapping.
- * For deletion, we will just mark it as deleted. We assume deletion is not happened
- * frequently.
- */
-
+/* Yet another open addressing hash table */
 static
 unsigned int map_hash( const struct string* key ) {
   /* This hash function implementation is taken from LUA */

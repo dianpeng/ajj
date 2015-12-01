@@ -5,18 +5,19 @@
 #include "gc.h"
 #include "vm.h"
 #include "object.h"
+#include "upvalue.h"
 
 #define ERROR_BUFFER_SIZE 1024
-#define GLOBAL_VARIABLE_SIZE 32
-#define FUNCTION_TABLE_SIZE 32
-#define OBJECT_SIZE 128
-#define GC_SIZE 32
+#define UPVALUE_SLAB_SIZE 32
+#define FUNCTION_SLAB_TABLE_SIZE 32
+#define OBJECT_SLAB_SIZE 128
+#define GC_SLAB_SIZE 32
 
 struct runtime;
 
 struct ajj {
   struct slab obj_slab; /* object slab */
-  struct slab glb_var_slab; /* global var slab */
+  struct slab upval_slab; /* global var slab */
   struct slab ft_slab;  /* function table slab */
   struct slab gc_slab;  /* garbage collector slab */
 
@@ -35,7 +36,7 @@ struct ajj {
    * currently working at. It will be set when we
    * start executing the code */
   struct runtime* rt;
-  struct gvar_table* gvar_tb; /* global variable table */
+  struct upvalue_table* upval_tb; /* upvalue table */
 };
 
 static

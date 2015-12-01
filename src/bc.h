@@ -13,13 +13,12 @@
 #define LOOP_BREAK 1
 
 /* parameter for include instruction */
-#define INCLUDE_NONE 0
-#define INCLUDE_UPVALUE 1
-#define INCLUDE_JSON 2
+#define INCLUDE_UPVALUE 0
+#define INCLUDE_JSON 1
 
 /* upvalue modifier */
-#define INCLUDE_UPVALUE_FIX 0
-#define INCLUDE_UPVALUE_OVERRIDE 1
+#define UPVALUE_FIX 0
+#define UPVALUE_OVERRIDE 1
 
 /* iterator */
 #define ITERATOR_KEY 0
@@ -138,6 +137,7 @@ extern struct string ITER;
   X(VM_MUL,0,"mul") \
   X(VM_MOD,0,"mod") \
   X(VM_POW,0,"pow") \
+  X(VM_IN,0,"in") \
   X(VM_EQ,0,"eq") \
   X(VM_NE,0,"ne") \
   X(VM_LT,0,"lt") \
@@ -177,7 +177,7 @@ extern struct string ITER;
   X(VM_JF,1,"jf") \
   X(VM_JLT,1,"jlt") \
   X(VM_JLF,1,"jlf") \
-  X(VM_JMPC,1,"jmpc") \
+  X(VM_JMPC,2,"jmpc") \
   X(VM_JEPT,1,"jept") \
   X(VM_ITER_START,0,"iterstart") \
   X(VM_ITER_HAS,0,"iterhas") \
@@ -187,7 +187,7 @@ extern struct string ITER;
   X(VM_EXIT,0,"exit") \
   X(VM_INCLUDE,2,"include") \
   X(VM_IMPORT,2,"import") \
-  X(VM_EXTENDS,1,"extends") \
+  X(VM_EXTENDS,0,"extends") \
   X(VM_NOP0,0,"nop0") \
   X(VM_NOP1,1,"nop1") \
   X(VM_NOP2,2,"nop2") \
@@ -223,7 +223,7 @@ struct emitter {
     em->C = cap; \
   } while(0)
 
-static  
+static
 void emitter_reserve_code_page( struct emitter* em , size_t cap ) {
   if( em->prg->codes && em->prg->len != 0 ) {
     em->prg->codes = mem_grow(em->prg->codes,sizeof(char),&cap);
@@ -234,7 +234,7 @@ void emitter_reserve_code_page( struct emitter* em , size_t cap ) {
   }
 }
 
-static  
+static
 void emitter_reserve_spos( struct emitter* em , size_t cap ) {
   if( em->prg->spos && em->prg->spos_len != 0 ) {
     em->prg->spos = mem_grow(em->prg->spos,sizeof(int),&cap);
@@ -245,7 +245,7 @@ void emitter_reserve_spos( struct emitter* em , size_t cap ) {
   }
 }
 
-static  
+static
 void emitter_emit0( struct emitter* em , int spos , int bc ) {
   /* reserve size for 2 arrays */
   if( em->cd_cap <= em->prg->len + 9 ) {
@@ -266,7 +266,7 @@ void emitter_emit0( struct emitter* em , int spos , int bc ) {
   ++(em->prg->len);
 }
 
-static  
+static
 void emitter_init( struct emitter* em , struct program* prg ) {
   em->prg = prg;
   em->cd_cap = 0;
@@ -275,26 +275,26 @@ void emitter_init( struct emitter* em , struct program* prg ) {
   emitter_reserve_code_page(em,MINIMUM_CODE_PAGE_SIZE);
 }
 
-static  
+static
 void emitter_emit_int( struct emitter* em , int arg ) {
   assert( em->cd_cap >= em->prg->len + 4 ); /* ensure we have enough space to run */
   *((int*)((char*)(em->prg->codes)+em->prg->len)) = arg;
   em->prg->len += 4;
 }
 
-static  
+static
 void emitter_emit1( struct emitter* em , int spos , int bc , int a1 ) {
   emitter_emit0(em,spos,bc);
   emitter_emit_int(em,a1);
 }
 
-static  
+static
 void emitter_emit2( struct emitter* em , int spos , int bc , int a1 , int a2 ) {
   emitter_emit1(em,spos,bc,a1);
   emitter_emit_int(em,a2);
 }
 
-static  
+static
 int emitter_put( struct emitter* em , int arg_sz ) {
   int ret;
   size_t add;
@@ -308,7 +308,7 @@ int emitter_put( struct emitter* em , int arg_sz ) {
   return ret;
 }
 
-static  
+static
 void emitter_emit0_at( struct emitter* em , int pos , int bc ) {
   int save = em->prg->len;
   em->prg->len = pos;
@@ -316,7 +316,7 @@ void emitter_emit0_at( struct emitter* em , int pos , int bc ) {
   em->prg->len = save;
 }
 
-static  
+static
 void emitter_emit1_at( struct emitter* em , int pos ,
     int bc , int a1 ) {
   int save = em->prg->len;
@@ -325,7 +325,7 @@ void emitter_emit1_at( struct emitter* em , int pos ,
   em->prg->len = save;
 }
 
-static  
+static
 void emitter_emit2_at( struct emitter* em , int pos , int bc ,
     int a1 , int a2 ) {
   int save = em->prg->len;
@@ -334,12 +334,12 @@ void emitter_emit2_at( struct emitter* em , int pos , int bc ,
   em->prg->len = save;
 }
 
-static  
+static
 int emitter_label( struct emitter* em ) {
   return (int)(em->prg->len);
 }
 
-static  
+static
 instructions bc_next( const struct program* prg , size_t* pos ) {
   if( prg->len == *pos ) {
     return VM_HALT;
@@ -350,7 +350,7 @@ instructions bc_next( const struct program* prg , size_t* pos ) {
   }
 }
 
-static  
+static
 int bc_next_arg( const struct program* prg , size_t* pos ) {
   assert(*pos <= prg->len+4);
   int arg = *((int*)((char*)(prg->codes)+*pos));

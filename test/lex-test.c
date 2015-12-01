@@ -11,7 +11,7 @@ void test_basic() {
       "{{ new.object }} " \
       "{% for endfor variable else elif endif macro endmacro macroX %}" \
       "{% call endcall filter endfilter do set endset with endwith "\
-      "move block endblock extends import include endinclude in as " \
+      "move block endblock extends import endimport include endinclude in as " \
       "continue break upvalue endupvalue json override fix %}";
 
     int i;
@@ -49,6 +49,7 @@ void test_basic() {
       TK_ENDBLOCK,
       TK_EXTENDS,
       TK_IMPORT,
+      TK_ENDIMPORT,
       TK_INCLUDE,
       TK_ENDINCLUDE,
       TK_IN,

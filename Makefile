@@ -1,10 +1,14 @@
-test:
-	gcc -g src/util.c src/lex.c test/lex-test.c -o lex-test
-	gcc -g src/util.c test/util-test.c -o util-test
-	gcc -g src/ajj.c src/util.c src/bc.c src/lex.c src/parse.c src/object.c test/parser-test.c -o parser-test
-	gcc -g src/bc.c src/util.c src/lex.c test/bc-test.c -o bc-test
+GCC_PROFILE_FLAGS := -fprofile-arcs -ftest-coverage
+parser-test:
+	cd src; \
+	gcc $(GCC_PROFILE_FLAGS) -g ajj.c util.c bc.c lex.c parse.c object.c parser-test.c -o parser-test; \
+	./parser-test; \
+	gcov ajj.c util.c bc.c lex.c parse.c object.c parser-test.c
 
 clean:
-	rm lex-test util-test parser-test bc-test
+	rm src/parser-test
+	rm src/*.gcno
+	rm src/*.gcda
+	rm src/*.gcov
 
 .PHONY: test clean

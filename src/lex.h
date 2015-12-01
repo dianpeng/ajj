@@ -38,6 +38,7 @@ enum {
   X(TK_ENDBLOCK,"endblock") \
   X(TK_EXTENDS,"extends") \
   X(TK_IMPORT,"import") \
+  X(TK_ENDIMPORT,"endimport") \
   X(TK_INCLUDE,"include") \
   X(TK_ENDINCLUDE,"endinclude") \
   X(TK_IN,"in") \
@@ -75,6 +76,7 @@ enum {
   X(TK_PIPE,"|") \
   X(TK_DOT,".") \
   X(TK_COMMA,",") \
+  X(TK_SEMICOLON,";") \
   X(TK_COLON,":") \
   X(TK_QUESTION,"?") \
   X(TK_STRING,"<string>") \

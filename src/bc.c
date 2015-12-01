@@ -42,23 +42,23 @@ void dump_program_ctable( const struct program* prg , FILE* output ) {
 
 #define DO0(N) \
   do { \
-    char buf[32]; \
-    tk_get_code_snippet(src,prg->spos[cnt],buf,32); \
+    char buf[64]; \
+    tk_get_code_snippet(src,prg->spos[cnt],buf,64); \
     fprintf(output,"%d %zu:%d(... %s ...) %s\n",cnt+1,i-1,prg->spos[cnt],buf,N); \
   } while(0); break
 
 #define DO1(N) \
   do { \
-    char buf[32]; \
-    tk_get_code_snippet(src,prg->spos[cnt],buf,32); \
+    char buf[64]; \
+    tk_get_code_snippet(src,prg->spos[cnt],buf,64); \
     a1 = bc_next_arg(prg,&i); \
     fprintf(output,"%d %zu:%d(... %s ...) %s %d\n",cnt+1,i-5,prg->spos[cnt],buf,N,a1); \
   } while(0); break
 
 #define DO2(N) \
  do { \
-   char buf[32]; \
-   tk_get_code_snippet(src,prg->spos[cnt],buf,32); \
+   char buf[64]; \
+   tk_get_code_snippet(src,prg->spos[cnt],buf,64); \
    a1 = bc_next_arg(prg,&i); \
    a2 = bc_next_arg(prg,&i); \
    fprintf(output,"%d %zu:%d(... %s ...) %s %d %d\n",cnt+1,i-9,prg->spos[cnt],buf,N,a1,a2); \

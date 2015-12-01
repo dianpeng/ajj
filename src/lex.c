@@ -144,7 +144,7 @@ token_id tk_lex_keyword( struct tokenizer* tk , int offset ) {
  * F: filter,false,False,fix
  * G: -
  * H: -
- * I: if,in,include,import
+ * I: if,in,is,include,import
  * J: json
  * K: -
  * L: -
@@ -233,6 +233,9 @@ token_id tk_lex_keyword_or_id( struct tokenizer* tk ) {
         else if( (len=tk_keyword_check(tk,"call",k))==4 &&
             tk_not_id_rchar(tk->src[k+4]))
           RETURN(TK_ENDCALL,7);
+        else if( (len=tk_keyword_check(tk,"import",k))==6 &&
+            tk_not_id_rchar(tk->src[k+6]))
+          RETURN(TK_ENDIMPORT,9);
         else
           return tk_lex_keyword(tk,len+3);
       } else if ((len = tk_keyword_check(tk,"lif",i+1)) == 3 &&
@@ -273,6 +276,9 @@ token_id tk_lex_keyword_or_id( struct tokenizer* tk ) {
       else if( (len = tk_keyword_check(tk,"f",i+1)) == 1 &&
           tk_not_id_rchar(tk->src[i+2]) )
         RETURN(TK_IF,2);
+      else if( (len = tk_keyword_check(tk,"s",i+1)) == 1 &&
+          tk_not_id_rchar(tk->src[i+2]))
+        RETURN(TK_EQ,2); /* "is" is just alias of == */
       else if( (len = tk_keyword_check(tk,"nclude",i+1)) == 6 &&
           tk_not_id_rchar(tk->src[i+7]))
         RETURN(TK_INCLUDE,7);
@@ -453,6 +459,8 @@ int tk_lex_script( struct tokenizer* tk ) {
         RETURN(TK_COMMA,1);
       case ':':
         RETURN(TK_COLON,1);
+      case ';':
+        RETURN(TK_SEMICOLON,1);
       case '?':
         RETURN(TK_QUESTION,1);
       case '\'':

@@ -9,7 +9,6 @@ struct ajj_object;
 struct func_table;
 struct gc_scope;
 
-
 struct program {
   void* codes;
   size_t len;
@@ -20,7 +19,6 @@ struct program {
   size_t str_len;
   size_t str_cap;
 
-  double num_tbl_lbuf[AJJ_LOCAL_CONSTANT_SIZE];
   double*num_tbl;
   size_t num_len;
   size_t num_cap;
@@ -45,7 +43,7 @@ struct func_frame {
   size_t pc ; /* Program counter register */
   struct string name; /* function name */
   int par_cnt : 16 ;
-  int method  : 1; /* whether this call is a method call */
+  int method  : 1;    /* whether this call is a method call */
 };
 
 struct runtime {

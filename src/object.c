@@ -93,8 +93,6 @@ ajj_object_jinja( struct ajj* a , struct ajj_object* obj ,
   obj->val.obj.data = NULL;
   obj->val.obj.fn_tb = ft;
   obj->val.obj.src = own ? src : strdup(src);
-  obj->val.obj.src_key = fn.str; /* pointed to the internal key for
-                                  * this object */
   return obj;
 }
 

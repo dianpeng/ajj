@@ -33,7 +33,6 @@ extern struct string MAIN; /* For __main__ */
 
 #define LIST_LOCAL_BUF_SIZE 4
 #define DICT_DEFAULT_BUF_SIZE 4
-#define GVAR_DEFAULT_BUF_SIZE 32
 
 struct c_closure {
   void* udata; /* user data */
@@ -94,7 +93,6 @@ struct object {
   void* data; /* object's data */
 
   /* Field only used when the object is a JINJA object */
-  const char* src_key; /* Key/path for source file */
   const char* src;     /* source file */
 };
 
@@ -255,83 +253,6 @@ struct ajj_object {
 #define IS_OBJECT_OWNED(obj) (((obj)->scp) == NULL)
 #define IS_VALUE_OWNED(val) ((AJJ_IS_PRIMITIVE(val))||((val)->value.object->scp!=NULL))
 
-/* ================================================
- * Global variables
- * only used in environment settings and upvalue
- * ================================================*/
-
-struct global_var {
-  struct global_var* prev; /* linked back to its parent */
-  struct ajj_value val;
-};
-
-struct gvar {
-  union {
-    struct global_var* value; /* This value is actually pointed to the
-                               * end of the upvalue chain. If value == NULL,
-                               * just means this value is not set yet */
-    struct c_closure func;    /* registered c functions */
-    struct func_table* obj;   /* object prototype */
-  } gut;
-  int type;
-};
-
-enum {
-  GVAR_VALUE,
-  GVAR_FUNCTION,
-  GVAR_OBJECT
-};
-
-struct gvar_table {
-  struct map d; /* dictionary of the map */
-  struct gvar_table* prev; /* previous table */
-};
-
-/* Global varialbes table. Wrapper around map */
-static
-struct gvar_table*
-gvar_table_create( struct gvar_table* p ) {
-  struct gvar_table* ret = malloc(sizeof(*p));
-  map_create(&(ret->d),sizeof(struct gvar),GVAR_DEFAULT_BUF_SIZE);
-  ret->prev = p;
-  return ret;
-}
-
-void
-gvar_table_clear( struct gvar_table* m );
-
-struct gvar_table*
-gvar_table_destroy( struct gvar_table* m );
-
-static
-int gvar_table_insert( struct gvar_table* m , const struct string* k,
-    int own, const struct gvar* val ) {
-  return map_insert(&(m->d),k,own,val);
-}
-
-static
-int gvar_table_insert_c( struct gvar_table* m , const char* k,
-    const struct gvar* val ) {
-  return map_insert_c(&(m->d),k,val);
-}
-
-static
-int gvar_table_remove( struct gvar_table* m , const struct string* k,
-    struct gvar* val ) {
-  return map_remove(&(m->d),k,val);
-}
-
-static
-int gvar_table_remove_c( struct gvar_table* m , const char* k,
-    struct gvar* val ) {
-  return map_remove_c(&(m->d),k,val);
-}
-
-struct gvar*
-gvar_table_find( struct gvar_table* m , const struct string* k );
-
-struct gvar*
-gvar_table_find_c( struct gvar_table* m , const char* k );
 
 /* This function will initialize an existed function table */
 static
@@ -517,7 +438,6 @@ ajj_object_obj( struct ajj_object* obj , struct func_table* fn_tb, void* data ) 
   o->fn_tb = fn_tb;
   o->data = data;
   o->src = NULL;
-  o->src_key = NULL;
   obj->tp = AJJ_VALUE_OBJECT;
   return obj;
 }
