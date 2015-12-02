@@ -327,49 +327,6 @@ random_name( struct parser* p , char l ) {
   ++p->unname_cnt;
   return string_dupc(name);
 }
-
-static
-int const_str( struct program* prg,
-    struct string* str , int own ) {
-  if( str->len > 128 ) {
-insert:
-    if( prg->str_len == prg->str_cap ) {
-      prg->str_tbl = mem_grow(prg->str_tbl, sizeof(struct string),
-          &(prg->str_cap));
-    }
-    if(own) {
-      prg->str_tbl[prg->str_len] = *str;
-    } else {
-      prg->str_tbl[prg->str_len] = string_dup(str);
-    }
-    return prg->str_len++;
-  } else {
-    /* do a linear search here */
-    size_t i = 0 ;
-    for( ; i < prg->str_len ; ++i ) {
-      if( string_eq(prg->str_tbl+i,str) ) {
-        if(own) string_destroy(str);
-        return i;
-      }
-    }
-    goto insert;
-  }
-}
-
-static
-int const_num( struct program* prg, double num ) {
-  int i;
-  if( prg->num_len== prg->num_cap ) {
-    prg->num_tbl = mem_grow(prg->num_tbl,sizeof(double),
-        &(prg->num_cap));
-  }
-  for( i = 0 ; i < prg->num_len ; ++i ) {
-    if( num == prg->num_tbl[i] )
-      return i;
-  }
-  prg->num_tbl[prg->num_len] = num;
-  return prg->num_len++;
-}
 /* Parser helpers */
 static
 int finish_scope_tag( struct parser* p, int token  ) {
@@ -529,7 +486,7 @@ int parse_var_prefix( struct parser* p , struct emitter* em ,
   if((idx=lex_scope_get(p,var->str,NULL))<0) {
     /* Not a local variable, must be an upvalue */
     int const_idx;
-    const_idx=const_str(em->prg,var,1);
+    const_idx=program_const_str(em->prg,var,1);
     /* Now emit a UPVALUE instructions */
     emit1(em,VM_UPVALUE_GET,const_idx);
   } else {
@@ -630,7 +587,7 @@ int parse_attr_or_methodcall( struct parser* p, struct emitter* em ,
 
     EXPECT(TK_VARIABLE);
     CALLE(symbol(p,&comp));
-    idx=const_str(em->prg,&comp,1);
+    idx=program_const_str(em->prg,&comp,1);
     tk_move(tk);
     /* Until now, we still don't know we are calling a member function or
      * reference an object on to the stack.We need to lookahead one more
@@ -666,7 +623,7 @@ int parse_funccall_or_pipe( struct parser* p , struct emitter* em ,
   struct tokenizer* tk = &(p->tk);
   assert(tk->tk == TK_LPAR);
 
-  idx=const_str(em->prg,prefix,1);
+  idx=program_const_str(em->prg,prefix,1);
   CALLE((num=parse_invoke_par(p,em))<0); /* generate call parameter for function */
   num += pipe;
   emit2(em,VM_CALL,idx,num); /* call the function based on current object */
@@ -678,7 +635,7 @@ static
 int parse_pipecmd( struct parser* p , struct emitter* em ,
     struct string* cmd ) {
   int idx;
-  idx=const_str(em->prg,cmd,1);
+  idx=program_const_str(em->prg,cmd,1);
   emit2(em,VM_CALL,idx,1);
   return 0;
 }
@@ -731,7 +688,7 @@ int parse_atomic( struct parser* p, struct emitter* em ) {
       return parse_prefix(p,em);
     case TK_STRING:
       strbuf_move(&(tk->lexeme),&str);
-      idx=const_str(em->prg,&str,1);
+      idx=program_const_str(em->prg,&str,1);
       emit1(em,VM_LSTR,idx);
       break;
     case TK_TRUE:
@@ -744,7 +701,7 @@ int parse_atomic( struct parser* p, struct emitter* em ) {
       emit0(em,VM_LNONE);
       break;
     case TK_NUMBER:
-      idx=const_num(em->prg,tk->num_lexeme);
+      idx=program_const_num(em->prg,tk->num_lexeme);
       emit1(em,VM_LNUM,idx);
       break;
     case TK_LPAR:
@@ -1425,7 +1382,7 @@ parse_block( struct parser* p , struct emitter* em ) {
 
   if( p->extends == 0 ) {
     int idx;
-    idx=const_str(em->prg,&name,0);
+    idx=program_const_str(em->prg,&name,0);
     emit2(em,VM_CALL,idx,0);
   }
   assert(p->tpl->val.obj.fn_tb);
@@ -1468,8 +1425,8 @@ parse_call( struct parser* p , struct emitter* em ) {
   }
 
   /* now generate the code for setting it up as a upvalue */
-  name_idx = const_str(em->prg,&name,0);
-  caller_idx = const_str(em->prg,&CALLER,0);
+  name_idx = program_const_str(em->prg,&name,0);
+  caller_idx = program_const_str(em->prg,&CALLER,0);
   emit1(em,VM_LSTR,name_idx); /* load the name onto stack */
   emit1(em,VM_UPVALUE_SET,caller_idx); /* set the value into caller_idx */
 
@@ -1792,7 +1749,7 @@ parse_filter( struct parser* p , struct emitter* em ) {
   }
   CONSUME(TK_RSTMT);
   strbuf_move(&(tk->lexeme),&text);
-  text_idx=const_str(em->prg,&text,1);
+  text_idx=program_const_str(em->prg,&text,1);
   emit1_at(em,vm_lstr,VM_LSTR,text_idx);
   tk_move(tk);
   CALLE(finish_scope_tag(p,TK_ENDFILTER));
@@ -1833,7 +1790,7 @@ int parse_set( struct parser* p, struct emitter* em ) {
     tk_move(tk);
     EXPECT(TK_TEXT);
     strbuf_move(&(tk->lexeme),&str);
-    txt_idx=const_str(em->prg,&str,1);
+    txt_idx=program_const_str(em->prg,&str,1);
     tk_move(tk);
     /* load the text on to stack */
     emit1(em,VM_LSTR,txt_idx);
@@ -1931,7 +1888,7 @@ parse_upvalue( struct parser* p , struct emitter* em ) {
   tk_move(tk);
   EXPECT(TK_VARIABLE);
   strbuf_move(&(tk->lexeme),&str);
-  var_idx=const_str(em->prg,&str,1);
+  var_idx=program_const_str(em->prg,&str,1);
   tk_move(tk);
   CALLE(parse_expr(p,em));
   emit1(em,VM_UPVALUE_SET,var_idx);
@@ -2053,7 +2010,7 @@ parse_context_body( struct parser* p , struct emitter* em ) {
       /* this is a context statment */
       strbuf_move(&(tk->lexeme),&str);
       tk_move(tk); /* move the variable name */
-      var_idx = const_str(em->prg,&str,1);
+      var_idx = program_const_str(em->prg,&str,1);
       /* for each context value, 3 corresponding attributes will
        * be pushed onto the stack. They are:
        * 1. variable name index in constant string table
@@ -2177,7 +2134,7 @@ parse_import( struct parser* p , struct emitter* em ) {
   tk_move(tk);
 
   /* Get the index */
-  name_idx=const_str(em->prg,&name,1);
+  name_idx=program_const_str(em->prg,&name,1);
 
   /* get the context body */
   if( tk->tk == TK_UPVALUE ) {
@@ -2265,7 +2222,7 @@ parse_scope( struct parser* p , struct emitter* em ,
         struct string text;
         int text_id;
         strbuf_move(&(tk->lexeme),&text);
-        text_id = const_str(em->prg,&text,1);
+        text_id = program_const_str(em->prg,&text,1);
         emit1(em,VM_LSTR,text_id);
         emit0(em,VM_PRINT);
         tk_move(tk);

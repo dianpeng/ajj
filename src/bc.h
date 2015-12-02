@@ -126,6 +126,8 @@ typedef enum {
 
 #define BC_INSTRUCTION(C) ((instructions)((C)>>24))
 #define BC_1ARG(C) ((C)&BC_1ST_MASK)
+#define BC_WRAP_INSTRUCTION0(C) ((C)<<24)
+#define BC_WRAP_INSTRUCTION1(C,A) (((C)<<24) | (A&BC_1ST_MASK))
 
 const char* bc_get_instruction_name( int );
 

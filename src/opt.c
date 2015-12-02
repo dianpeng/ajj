@@ -5,6 +5,8 @@
 #include "vm.h"
 #include "object.h"
 #include <math.h>
+#include <errno.h>
+#include <limits.h>
 
 /* A peephole optimizer
  * This optimizer basically helps to remove those unused NOP
@@ -55,6 +57,8 @@ struct offset_buffer {
   int shrink;
 };
 
+/* A internal string wrapper which contains information
+ * whether this string is OWNED by this object or not. */
 struct str {
   const char* s;
   int own;
@@ -116,29 +120,135 @@ void str_destroy( struct str* l ) {
 
 static
 struct string str_concate( const struct str* l ,
-    const struct str* r );
+    const struct str* r ) {
+  struct strbuf sbuf;
+  strbuf_init(&sbuf);
+  strbuf_append(&sbuf,l->s,strlen(l->s));
+  strbuf_append(&sbuf,r->s,strlen(r->s));
+  return strbuf_tostring(&sbuf);
+}
 
 static
-struct string str_mul( const struct str* l , int );
+struct string str_mul( const struct str* l , int times ) {
+  struct strbuf sbuf;
+  size_t len = strlen(l->s);
+  strbuf_init(&sbuf);
+  while( --times ) {
+    strbuf_append(&sbuf,l->s,len);
+  }
+  return strbuf_tostring(&sbuf);
+}
+
+/* help re-emit those instructions internally */
+static
+void emit0( struct opt* o , int pos , int bc ) {
+  reserve_buf(o,o_rlink,0,int);
+  o->o_rlink[o->o_rlink_len++] = o->o_buf_len;
+  o->o_buf[o->o_buf_len++] = BC_WRAP_INSTRUCTION0(bc);
+  reserve_buf(o,o_sref,0,int);
+  o->o_sref[o->o_sref_len++] = pos;
+}
 
 static
-void emit0( struct opt* o , int pos , int bc );
-
-static
-void emit1( struct opt* o , int pos , int bc , int a1 );
-
-static
-void emit2( struct opt* o , int pos , int bc , int a2 );
-
-static
-int const_str( struct program* prg , struct string* str ,
-    int own );
-
-static
-int const_num( struct program* prg , double val );
+void emit1( struct opt* o , int pos , int bc , int a1 ) {
+  reserve_buf(o,o_rlink,0,int);
+  o->o_rlink[o->o_rlink_len++] = o->o_buf_len;
+  o->o_buf[o->o_buf_len++] = BC_WRAP_INSTRUCTION1(bc,a1);
+  reserve_buf(o,o_sref,0,int);
+  o->o_sref[o->o_sref_len++] = pos;
+}
 
 static
 void report_error( struct opt* o ,const char* fmt , ... );
+
+static
+int to_number( struct opt* o , const struct ajj_value* v,
+    double* val ) {
+  switch(v->type) {
+    case AJJ_VALUE_BOOLEAN:
+      *val = ajj_value_to_boolean(v);
+      return 0;
+    case AJJ_VALUE_NUMBER:
+      *val = ajj_value_to_number(v);
+      return 0;
+    case AJJ_VALUE_STRING:
+      {
+        double d;
+        errno = 0;
+        d = strtod(((struct string*)(v->value.priv))->str,NULL);
+        if( errno ) {
+          report_error(o,"Cannot convert str:%s to number because:%s",
+              ((struct string*)(v->value.priv))->str,
+              strerror(errno));
+          return -1;
+        }
+        *val = d;
+        return 0;
+      }
+    default:
+      report_error(o,"Cannot convert type:%s to number!",
+          ajj_value_get_type_name(v));
+      return -1;
+  }
+}
+
+static
+int to_integer( struct opt* o , const struct ajj_value* v,
+    int* val ) {
+  switch( v->type ) {
+    case AJJ_VALUE_BOOLEAN:
+      *val = ajj_value_to_boolean(v);
+      return 0;
+    case AJJ_VALUE_NUMBER:
+      {
+        double ip;
+        double re = modf(v->value.number,&ip);
+        if( re > INT_MAX || re < INT_MIN ) {
+          report_error(o,"Cannot convert number:%d to integer,overflow!",
+              re);
+          return -1;
+        }
+        *val = (int)(ip);
+        return 0;
+      }
+    default:
+      report_error(o,"Cannot convert type:%s to integer!",
+          ajj_value_get_type_name(v));
+      return -1;
+  }
+}
+
+static
+int to_string( struct opt* o , const struct ajj_value* v,
+    struct str* val ) {
+  switch(v->type) {
+    case AJJ_VALUE_BOOLEAN:
+      if(v->value.boolean) {
+        val->s = TRUE_STRING.str;
+        val->own = 0;
+      } else {
+        val->s = FALSE_STRING.str;
+        val->own = 0;
+      }
+      return 0;
+    case AJJ_VALUE_NUMBER:
+      {
+        char buf[256];
+        sprintf(buf,"%f",ajj_value_to_number(v));
+        val->s = strdup(buf);
+        val->own = 1;
+        return 0;
+      }
+    case AJJ_VALUE_STRING:
+      val->s = ((struct string*)(v->value.priv))->str;
+      val->own= 0;
+      return 0;
+    default:
+      report_error(o,"Cannot convert type:%s to string!",
+          ajj_value_get_type_name(v));
+      return -1;
+  }
+}
 
 static
 int fold_bin( struct opt* o , instructions instr );
@@ -157,6 +267,7 @@ int copy_ins( struct opt* o , int c );
     default: UNREACHABLE(); \
   } \
 
+/* Pass1 : do constant folding */
 static
 int pass1( struct opt* o ) {
   int a1;
@@ -216,6 +327,10 @@ done:
 fail:
 }
 
+/* Pass2 : patch the jump target */
+static
+int pass2( struct opt* o );
+
 static
 int check_const( struct opt* o , int pos , struct ajj_value* val ) {
   int c = o->o_buf[pos];
@@ -244,7 +359,7 @@ int check_const( struct opt* o , int pos , struct ajj_value* val ) {
       return 0;
     case VM_LNUM:
       arg = BC_1ARG(c);
-      assert(arg < o->prg->num_len);
+      assert((size_t)arg < o->prg->num_len);
       *val = ajj_value_number(o->prg->num_tbl[arg]);
       return 0;
     case VM_LIMM:
@@ -253,7 +368,7 @@ int check_const( struct opt* o , int pos , struct ajj_value* val ) {
       return 0;
     case VM_LSTR:
       arg = BC_1ARG(c);
-      assert( arg < o->prg->num_len );
+      assert((size_t)arg < o->prg->num_len );
       val->type = AJJ_VALUE_STRING;
       val->value.priv = arg + o->prg->str_tbl;
       return 0;
@@ -262,20 +377,7 @@ int check_const( struct opt* o , int pos , struct ajj_value* val ) {
   }
 }
 
-static
-int to_number( struct opt* o , const struct ajj_value* , double* val );
-
-static
-int to_integer( struct opt* o , const struct ajj_value* , int* val );
-
-static
-int to_string( struct opt* o , const struct ajj_value* , struct str* val );
-
-static
-int to_boolean( struct opt* o , const struct ajj_value* , int* val );
-
-#define old_sref(O) \
-  ((O)->o_sref[(O)->o_sref_len-BINARY_SWIN_SIZE])
+#define old_sref(O) ((O)->o_sref[(O)->o_sref_len-2])
 
 /* This function adjust the peephole window. It is called
  * when a new rewrite is able to perform. We have a very
@@ -283,23 +385,24 @@ int to_boolean( struct opt* o , const struct ajj_value* , int* val );
  * 1 instruction back. We reset peephole pointer back one
  * instruction and pop 2 out then write one back */
 
-#define BINARY_SWIN_SIZE 2
-
 static
 void rewrite_bin( struct opt* o , int pos , int type , int bc, int a1 ) {
   int srk;
-  assert( o->o_rlink_len >= BINARY_SWIN_SIZE );
+  assert( o->o_rlink_len >= 2 );
   srk = o->o_buf_len - o->p_beg;
+
   o->o_buf_len = o->p_beg; /* set the current buffer position to
                             * the start of peephole */
 
-  assert( o->o_sref_len >= BINARY_SWIN_SIZE );
-  o->o_sref_len -= BINARY_SWIN_SIZE;
+  assert( o->o_sref_len >= 2 );
+  o->o_sref_len -= 2;
 
-  if( o->o_sref_len > BINARY_SWIN_SIZE ) {
-    o->p_beg = o->o_rlink[ o->o_rlink_len-1 ];
+  if( o->o_rlink_len > 2 ) {
+    /* only back peephole pointer one instructions */
+    o->p_beg = o->o_rlink[ o->o_rlink_len-2 ];
   }
-  o->o_rlink_len -= BINARY_SWIN_SIZE;
+  o->o_rlink_len -= 2;
+
   /* insert the instruction */
   if(type == 0) {
     emit0(o,pos,bc);
@@ -308,18 +411,27 @@ void rewrite_bin( struct opt* o , int pos , int type , int bc, int a1 ) {
     emit1(o,pos,bc,a1);
     srk--;
   }
+
   /* add a new shrink */
-  o->cur_shrink += srk;
-  reserve_buf( o,off_buf,0,struct offset_buffer );
-  o->off_buf[o->off_buf_len].pos = o->pc-1;
-  o->off_buf[o->off_buf_len].shrink = o->cur_shrink;
-  ++(o->off_buf_len);
+  if(srk) {
+    o->cur_shrink += srk;
+    reserve_buf( o,off_buf,0,struct offset_buffer );
+    o->off_buf[o->off_buf_len].pos = o->pc-1;
+    o->off_buf[o->off_buf_len].shrink = o->cur_shrink;
+    ++(o->off_buf_len);
+  }
 }
+
+#define bin_emit0(o,pos,bc) rewrite_bin(o,pos,0,bc,0)
+#define bin_emit1(o,pos,bc,a1) rewrite_bin(o,pos,1,bc,a1)
 
 static
 int fold_bin( struct opt* o , instructions instr ) {
   int p = o->p_beg;
   struct ajj_value l,r;
+
+  assert(o->o_rlink_len >= 2);
+  assert( o->o_buf_len - o->p_beg <= 4 );
 
   if( check_const(o,p++,&l) || check_const(o,p,&r) ) {
     /* cannot fold it , one of the 2 operands is not const */
@@ -340,9 +452,8 @@ int fold_bin( struct opt* o , instructions instr ) {
           /* able to do the calculation here */
           double val = lv + rv;
           int sref = old_sref(o);
-          int i_val = const_num(o->prg,val);
-          patch_bin(o);
-          emit1(o,sref,VM_LNUM,i_val);
+          int i_val = program_const_num(o->prg,val);
+          bin_emit1(o,sref,VM_LNUM,i_val);
         }
       } else {
         struct str ls = NULL_STR;
@@ -356,9 +467,8 @@ int fold_bin( struct opt* o , instructions instr ) {
           return -1;
         }
         val = str_concate(&ls,&rs);
-        i_val = const_str(o->prg,&val,1);
-        patch_bin(o);
-        emit1(o,sref,VM_LSTR,i_val);
+        i_val = program_const_str(o->prg,&val,1);
+        bin_emit1(o,sref,VM_LSTR,i_val);
       }
       return 0;
     case VM_MUL:
@@ -392,9 +502,8 @@ int fold_bin( struct opt* o , instructions instr ) {
           val = str_mul(&lv,rv);
           str_destroy(&lv);
 
-          i_val = const_str(o->prg,&val,1);
-          patch_bin(o);
-          emit1(o,sref,VM_LSTR,i_val);
+          i_val = program_const_str(o->prg,&val,1);
+          bin_emit1(o,sref,VM_LSTR,i_val);
         }
       } else {
         double lv,rv;
@@ -402,11 +511,10 @@ int fold_bin( struct opt* o , instructions instr ) {
           return -1;
         } else {
           double val = lv * rv;
-          int i_val = const_num(o->prg,val);
+          int i_val = program_const_num(o->prg,val);
           int sref = old_sref(o);
 
-          patch_bin(o);
-          emit1(o,sref,VM_LNUM,i_val);
+          bin_emit1(o,sref,VM_LNUM,i_val);
         }
       }
       return 0;
@@ -421,9 +529,8 @@ int fold_bin( struct opt* o , instructions instr ) {
           int sref = old_sref(o); \
           int i_val; \
           C(val); \
-          i_val = const_num(o->prg,val); \
-          patch_bin(o); \
-          emit1(o,sref,VM_LNUM,i_val); \
+          i_val = program_const_num(o->prg,val); \
+          bin_emit1(o,sref,VM_LNUM,i_val); \
         } \
         return 0; \
       } while(0)
@@ -480,8 +587,7 @@ int fold_bin( struct opt* o , instructions instr ) {
         if( l.type == AJJ_VALUE_NONE && \
             r.type == AJJ_VALUE_NONE ) { \
           int sref = old_sref(o); \
-          patch_bin(o); \
-          emit0(o,sref,VM_L##T); \
+          bin_emit0(o,sref,VM_L##T); \
         } else { \
           if( l.type == AJJ_VALUE_STRING || \
               r.type == AJJ_VALUE_STRING ) { \
@@ -495,9 +601,8 @@ int fold_bin( struct opt* o , instructions instr ) {
               return -1; \
             } \
             res = strcmp(lv.s,rv.s) O 0; \
-            patch_bin(o); \
-            if(res) emit0(o,sref,VM_LTRUE);\
-            else emit0(o,sref,VM_LFALSE); \
+            if(res) bin_emit0(o,sref,VM_LTRUE);\
+            else bin_emit0(o,sref,VM_LFALSE);\
             str_destroy(&lv); \
             str_destroy(&rv); \
           } else { \
@@ -508,9 +613,8 @@ int fold_bin( struct opt* o , instructions instr ) {
               return -1; \
             } \
             val = lv O rv; \
-            patch_bin(o); \
-            if(val) emit0(o,sref,VM_LTRUE); \
-            else emit0(o,sref,VM_LFALSE); \
+            if(val) bin_emit0(o,sref,VM_LTRUE); \
+            else bin_emit0(o,sref,VM_LFALSE); \
           } \
         } \
         return 0; \
@@ -538,9 +642,8 @@ int fold_bin( struct opt* o , instructions instr ) {
             return -1; \
           } \
           res = strcmp(lv.s,rv.s) O 0; \
-          patch_bin(o); \
-          if(res) emit0(o,sref,VM_LTRUE); \
-          else emit0(o,sref,VM_LFALSE); \
+          if(res) bin_emit0(o,sref,VM_LTRUE); \
+          else bin_emit0(o,sref,VM_LFALSE); \
           str_destroy(&lv); \
           str_destroy(&rv); \
         } else { \
@@ -551,9 +654,8 @@ int fold_bin( struct opt* o , instructions instr ) {
             return -1; \
           } \
           val = lv O rv; \
-          patch_bin(o); \
-          if(val) emit0(o,sref,VM_LTRUE); \
-          else emit0(o,sref,VM_LFALSE); \
+          if(val) bin_emit0(o,sref,VM_LTRUE); \
+          else bin_emit0(o,sref,VM_LFALSE); \
         } \
         return 0; \
       } while(0)
@@ -578,17 +680,39 @@ int fold_bin( struct opt* o , instructions instr ) {
   return -1;
 }
 
-#define UNARY_SWIN_SIZE 1
 static
-void patch_una( struct opt* o , int pp_off ) {
+void rewrite_una( struct opt* o , int pp_off ,
+    int pos , int type , int bc , int a1) {
   int peephole = o->p_beg + pp_off;
+  int srk = o->o_buf_len - peephole;
 
-  assert(peephole < o->o_buf_len);
+  assert( o->o_rlink_len >= 2 );
+  assert( o->o_buf_len - o->p_beg <= 4 );
+
+  /* back one instructions */
   o->o_buf_len = peephole;
-  o->o_rlink_len--; /* back one instruction */
-  o->o_sref_len-- ; /* back one sref */
+  o->o_rlink_len--; 
+  o->o_sref_len-- ;
 
+  if(type == 0) {
+    emit0(o,pos,bc);
+    srk--;
+  } else {
+    emit1(o,pos,bc,a1);
+    srk--;
+  }
+
+  if(srk) {
+    o->cur_shrink += srk;
+    reserve_buf( o,off_buf,0,struct offset_buffer );
+    o->off_buf[o->off_buf_len].pos = o->pc-1;
+    o->off_buf[o->off_buf_len].shrink = o->cur_shrink;
+    ++(o->off_buf_len);
+  }
 }
+
+#define una_emit0(o,pp_off,pos,bc) rewrite_una(o,pp_off,pos,0,bc,0)
+#define una_emit1(o,pp_off,pos,bc,a1) rewrite_una(o,pp_off,pos,1,bc,a1)
 
 /* fold the unary operations */
 static
@@ -613,33 +737,31 @@ int fold_una( struct opt* o , instructions inst ) {
         int i_val;
         if( to_number(o,&v,&val) )
           return -1;
-        i_val = const_num(o->prg,val);
-        patch_una(o,an);
-        emit1(o,sref,VM_LNUM,i_val);
+        i_val = program_const_num(o->prg,val);
+        una_emit1(o,an,sref,VM_LNUM,i_val);
         return 0;
       }
     case VM_NOT:
       {
         int sref = old_sref(o);
-        patch_una(o,an);
         switch(v.type) {
           case AJJ_VALUE_NUMBER:
             if(v.value.number == 0)
-              emit0(o,sref,VM_LTRUE);
+              una_emit0(o,an,sref,VM_LTRUE);
             else
-              emit0(o,sref,VM_LFALSE);
+              una_emit0(o,an,sref,VM_LFALSE);
             break;
           case AJJ_VALUE_BOOLEAN:
             if(v.value.boolean)
-              emit0(o,sref,VM_LFALSE);
+              una_emit0(o,an,sref,VM_LFALSE);
             else
-              emit0(o,sref,VM_LTRUE);
+              una_emit0(o,an,sref,VM_LTRUE);
             break;
           case AJJ_VALUE_NONE:
-            emit0(o,sref,VM_LTRUE);
+            una_emit0(o,an,sref,VM_LTRUE);
             break;
           default:
-            emit0(o,sref,VM_LFALSE);
+            una_emit0(o,an,sref,VM_LFALSE);
             break;
         }
         return 0;
@@ -649,47 +771,4 @@ int fold_una( struct opt* o , instructions inst ) {
       return -1;
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

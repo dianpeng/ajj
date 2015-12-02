@@ -89,6 +89,48 @@ int program_add_par( struct program* prg , struct string* name ,
   }
 }
 
+static
+int program_const_str( struct program* prg , struct string* str ,
+    int own ) {
+  if( str->len > 128 ) {
+insert:
+    if( prg->str_len == prg->str_cap ) {
+      prg->str_tbl = mem_grow(prg->str_tbl, sizeof(struct string),
+          &(prg->str_cap));
+    }
+    if(own) {
+      prg->str_tbl[prg->str_len] = *str;
+    } else {
+      prg->str_tbl[prg->str_len] = string_dup(str);
+    }
+    return prg->str_len++;
+  } else {
+    size_t i = 0 ;
+    for( ; i < prg->str_len ; ++i ) {
+      if( string_eq(prg->str_tbl+i,str) ) {
+        if(own) string_destroy(str);
+        return i;
+      }
+    }
+    goto insert;
+  }
+}
+
+static
+int program_const_num( struct program* prg , double num ) {
+  size_t i;
+  if( prg->num_len== prg->num_cap ) {
+    prg->num_tbl = mem_grow(prg->num_tbl,sizeof(double),
+        &(prg->num_cap));
+  }
+  for( i = 0 ; i < prg->num_len ; ++i ) {
+    if( num == prg->num_tbl[i] )
+      return i;
+  }
+  prg->num_tbl[prg->num_len] = num;
+  return prg->num_len++;
+}
+
 /* =============================================
  * Interfaces
  * ===========================================*/
