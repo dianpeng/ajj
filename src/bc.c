@@ -54,7 +54,7 @@ void dump_program_ctable( const struct program* prg , FILE* output ) {
   do { \
     char buf[64]; \
     tk_get_code_snippet(src,prg->spos[cnt],buf,64); \
-    a1 = bc_next_arg(prg,&i); \
+    a1 = bc_1st_arg(c1);\
     fprintf(output,"%d %zu:%d(... %s ...) %s %d\n",cnt+1,i-5,prg->spos[cnt],buf,N,a1); \
   } while(0); break
 
@@ -62,8 +62,8 @@ void dump_program_ctable( const struct program* prg , FILE* output ) {
  do { \
    char buf[64]; \
    tk_get_code_snippet(src,prg->spos[cnt],buf,64); \
-   a1 = bc_next_arg(prg,&i); \
-   a2 = bc_next_arg(prg,&i); \
+   a1 = bc_1st_arg(c1);\
+   a2 = bc_2nd_arg(prg,&i); \
    fprintf(output,"%d %zu:%d(... %s ...) %s %d %d\n",cnt+1,i-9,prg->spos[cnt],buf,N,a1,a2); \
  } while(0); break
 
@@ -76,7 +76,8 @@ void dump_program( const char* src , const struct program* prg , FILE* output ) 
   dump_program_ctable(prg,output);
   fprintf(output,"Code=======================================\n\n");
   while(1) {
-    instructions instr = bc_next(prg,&i);
+    int c1 = bc_next(prg,&i);
+    instructions instr = bc_instr(c1);
     if( instr == VM_HALT ) break;
     switch(instr) {
       VM_INSTRUCTIONS(DO)

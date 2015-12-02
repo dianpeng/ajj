@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <assert.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 #ifndef UNREACHABLE
 #define UNREACHABLE() assert(!"UNREACHABLE!")

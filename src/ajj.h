@@ -60,6 +60,7 @@ struct ajj_value {
                   * its first field/entry. */
     double number;
     struct ajj_object* object;
+    void* priv;  /* private alias */
   } value;
   int type;
 };

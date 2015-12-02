@@ -33,101 +33,22 @@ extern struct string SUPER;
 extern struct string SELF;
 extern struct string ITER;
 
-/* Instructions documentation =====================================================
- * We will use a stack based VM to do evaluations. It means for our VM, we have a
- * value stack that is used to store temporary evaluating value and also the local
- * variables. For each execution frame (function frame), we have 2 registers, one is
- * EBP points to the start/bottom of the stack ; and the other is the ESP points to
- * the end/top of the stack. Additionally , a frame also has a PC register points to
- * the code points.
- * The execution is based on function/frame, each function has its own code page, it
- * means each function's code doesn't resides on a single memory page.
- * In VM, we have 2 types of addressing mode, and all corresponding instructions will
- * have B or T prefix. B stands from bottom ; and T stands from top.
+/* Instructions
+ * All the instruction itself only occupies one byte, but for alignment, each
+ * instruction will at least occupy 4 bytes, or 8 bytes. Each instruction is
+ * able to carry 0 , 1 or 2 parameters , depend on the instruction itself. The
+ * general format is as follow:
+ * --------------
+ * |OP|---------|    Instruction carries no parameters
+ * --------------
  *
- * Following will describe each instructions meannig, the format is as follow :
- * instr(par-num) , which stands for , to instruction "instr" , it has "par-num" para
- * -meters per call. Assume EBP points to the end of value stack ; and ESP points to
- *  the start of value stack. B[X] = EBP+X ; T[X] = ESP-X
+ * --------------
+ * |OP| par     |    Instruction carries 1 parameters
+ * --------------
  *
- * 1. add(0) : add and pop top 2 values, push the result back to stack.
- * 2. sub(0) : sub and pop top 2 values, push the result back to stack.
- * 3. div(0) : div and pop top 2 values, push the result back to stack.
- * 4. mul(0) : mul and pop top 2 values, push the result back to stack.
- * 5. pow(0) : pow and pop top 2 values, push the result back to stack.
- * 6. eq (0) : check equal and pop top 2 values, push result back to stack
- * 7. ne (0) : check not equal and pop top 2 values, push result back to stack
- * 8. lt (0) : check less equal and pop top 2 values, push result back to stack
- * 9. le (0) : check less or equal and pop top 2 values, push result back to stack
- *10. gt (0) : check greater than and pop top 2 values, push result back to stack
- *11. ge (0) : check greater than and pop top 2 values, push result back to stack
- *14. neg(0) : negate and pop top 1 values, push result back to stack.
- *15. divtruct(0): div truncate and pop top 2 values,push result back to stack.
- *17. call(2): @1: function name index ; @2: function parameter count ;
-               call a function. Pop all the function calling frame out of stack push result on
- *18. ret (0): return from a function call.
- *19. print(0): print and pop top value.
- *20. pop (1): @1 number of values . Pop top @1 values out.
- *21. tpush(1): @1 address of value on stack (index).
-                push the value on T[@1] at the top of stack.
- *23. bpush(1): @1 address of value on stack(index).
-                push the value on B[@1]
- *26. move(2): @1 address of left operand ; @2 right operand
-                move B[@2] to B[@1].
- *29. lstr(1): @1 index in constant string table.
-                load the string onto the stack
- *30. ltrue(0): load trun onto the stack
- *31. lfalse(0):load false onto the stack
- *32. lnum(1) : @1 index in constant number table.
-                load the number onto the stack
- *33. lzero(0): load zero onto stack.
- *34. lnone(0): load none onto stack.
- *35. limm(1) : @1 number(integer).
-                load this immdieate number onto stack.
- *36. llist(0): load an empty list onto stack.
- *37. ldict(0): load an empty dict onto stack.
- *38. attrset(0): T[3]: objects ; T[2]: key ; T[1]: value.
-                push "key" and "value" pair into "object" and pop "key" and "value"
- *39. attrpush(0): T[2]: list ; T[1]: value.
-                push "value" into "list" and pop "value".
- *40. attrget(0): T[2]:object ; T[1]:key.
-                get value from "object" with "key" onto stack and pop "object" AND "key".
- *41. attrcall(2): @1 function name index ; @2 function parameters count T.
-                  T[@2+1]: object
-                  call a function with name @1 and has function parameter @2 on "object",
-                  and push the result on stack and pop calling frame out.
- *42. upvalueset(1): @1 upvalue name.
-                    set upvalue with name @1 with value on T[1] and pop T[1].
- *43. upvalueget(1): @1 upvalue name.
-                    get upvalue with name @1 onto stack.
- *44. upvaluedel(1): @1 upvalue name.
-                    del upvalue with name @1
- *45. loop(1): @1 name of the loop closure
-                basic loop calling , after looping, it will pop the top 1 out of stack.
- *46. looprec(1): @1 name of the loop closure
-                recursively loop calling, after looping it will pop the top 1 out of stack.
- *47. jmp(1): @1 PC position.
-                jump to @1
- *48. jt (1): @1 PC position.
-                jump to @1 only when the top of stack is evaluated to true. Pop T[1].
- *49. jlt(1): @1 PC position @2
-                jump to @1 only when the top of stack is evaluated to true. Pop T[1] only when
-                jump is not performed
- *50. jlf(1): @1 PC position @2
-                jump to @1 only when the top of stack is evaluated to false. Pop T[1] only when
-                the jump is not performed
- *51. jept(1): @1 PC position.
-                jump to @1 only when T[1] is empty. Pop T[1].
- *52. enter(0): Enter a GC scope.
- *53. exit(0) : Exit a GC scope.
- *54. include(2): @1 include type @2 optional variable.
-                @1 could be 0 (NONE) , 1(UPVALUE) and 2(JSON).
-                @2 is the function parameter if we have.
-                After include/rendering the template on to stack, pop all the related value.
- *55. import(2): ----
- *56. import_symbol:
- *57. extends
- *58. nop0,nop1,nop2
+ * --------------------------
+ * |OP| par 1   |   par 2   |  Instruction carries 2 parameters
+ * --------------------------
  */
 
 #define VM_INSTRUCTIONS(X) \
@@ -201,7 +122,14 @@ typedef enum {
 #undef X
 } instructions;
 
+#define BC_1ST_MASK (0x00ffffff)
+
+#define BC_INSTRUCTION(C) ((instructions)((C)>>24))
+#define BC_1ARG(C) ((C)&BC_1ST_MASK)
+
 const char* bc_get_instruction_name( int );
+
+int bc_get_argument_num( instructions );
 
 /* emitter for byte codes */
 struct emitter {
@@ -210,26 +138,13 @@ struct emitter {
   size_t spos_cap;/* capacity for source code ref */
 };
 
-#define EMIT_RESERVE(em,cap,C,PS,PTR,L) \
-  do { \
-    void* nc; \
-    assert( em->C < (cap) ); \
-    nc = malloc((cap)*(PS)); \
-    if( em->prg->PTR && em->prg->len != 0 ) { \
-      memcpy(nc,em->prg->PTR,em->prg->L); \
-      free(em->prg->PTR); \
-    } \
-    em->prg->PTR = nc; \
-    em->C = cap; \
-  } while(0)
-
 static
 void emitter_reserve_code_page( struct emitter* em , size_t cap ) {
   if( em->prg->codes && em->prg->len != 0 ) {
-    em->prg->codes = mem_grow(em->prg->codes,sizeof(char),&cap);
+    em->prg->codes = realloc(em->prg->codes,sizeof(int)*cap);
     em->cd_cap = cap;
   } else {
-    em->prg->codes = malloc(cap);
+    em->prg->codes = malloc(cap*sizeof(int));
     em->cd_cap = cap;
   }
 }
@@ -237,33 +152,12 @@ void emitter_reserve_code_page( struct emitter* em , size_t cap ) {
 static
 void emitter_reserve_spos( struct emitter* em , size_t cap ) {
   if( em->prg->spos && em->prg->spos_len != 0 ) {
-    em->prg->spos = mem_grow(em->prg->spos,sizeof(int),&cap);
+    em->prg->spos = realloc(em->prg->spos,sizeof(int)*cap);
     em->spos_cap = cap;
   } else {
     em->prg->spos = malloc(cap*sizeof(int));
     em->spos_cap = cap;
   }
-}
-
-static
-void emitter_emit0( struct emitter* em , int spos , int bc ) {
-  /* reserve size for 2 arrays */
-  if( em->cd_cap <= em->prg->len + 9 ) {
-    emitter_reserve_code_page(em,2*em->cd_cap+9);
-  }
-  if( em->spos_cap == em->prg->spos_len ) {
-    emitter_reserve_spos(em,em->spos_cap*2);
-  }
-
-  /* push source code reference */
-  em->prg->spos[em->prg->spos_len] = spos;
-  ++em->prg->spos_len;
-
-  assert(bc>=0 && bc< SIZE_OF_INSTRUCTIONS);
-
-  *((unsigned char*)(em->prg->codes) + em->prg->len)
-    = (unsigned char)(bc);
-  ++(em->prg->len);
 }
 
 static
@@ -276,34 +170,54 @@ void emitter_init( struct emitter* em , struct program* prg ) {
 }
 
 static
-void emitter_emit_int( struct emitter* em , int arg ) {
-  assert( em->cd_cap >= em->prg->len + 4 ); /* ensure we have enough space to run */
-  *((int*)((char*)(em->prg->codes)+em->prg->len)) = arg;
-  em->prg->len += 4;
+void emitter_ensure( struct emitter* em ) {
+  /* reserve size for 2 arrays */
+  if( em->cd_cap < em->prg->len + 2 ) {
+    emitter_reserve_code_page(em,2*em->cd_cap);
+  }
+  if( em->spos_cap == em->prg->spos_len ) {
+    emitter_reserve_spos(em,em->spos_cap*2);
+  }
+}
+
+static
+void emitter_emit0( struct emitter* em , int spos , int bc ) {
+  emitter_ensure(em);
+  /* push source code reference */
+  em->prg->spos[em->prg->spos_len] = spos;
+  ++em->prg->spos_len;
+  assert(bc>=0 && bc< SIZE_OF_INSTRUCTIONS);
+  *((int*)(em->prg->codes)+em->prg->len) = (bc<<24);
+  ++(em->prg->len);
 }
 
 static
 void emitter_emit1( struct emitter* em , int spos , int bc , int a1 ) {
-  emitter_emit0(em,spos,bc);
-  emitter_emit_int(em,a1);
+  emitter_ensure(em);
+  /* push source code reference */
+  em->prg->spos[em->prg->spos_len] = spos;
+  ++em->prg->spos_len;
+  assert(bc>=0 && bc< SIZE_OF_INSTRUCTIONS);
+  assert( (a1&BC_1ST_MASK) == a1 );
+  *((int*)(em->prg->codes)+em->prg->len) = (bc<<24)|(a1);
+  ++(em->prg->len);
 }
 
 static
 void emitter_emit2( struct emitter* em , int spos , int bc , int a1 , int a2 ) {
   emitter_emit1(em,spos,bc,a1);
-  emitter_emit_int(em,a2);
+  *((int*)(em->prg->codes)+em->prg->len) = a2;
+  ++(em->prg->len);
 }
 
 static
 int emitter_put( struct emitter* em , int arg_sz ) {
   int ret;
-  size_t add;
+  int add;
   assert( arg_sz == 0 || arg_sz == 1 || arg_sz == 2 );
+  emitter_ensure(em);
+  add = (arg_sz == 0 || arg_sz == 1) ? 1 : 2;
   ret = em->prg->len;
-  add = arg_sz * 4 + 1;
-  if( em->cd_cap <= em->prg->len + add ) {
-    emitter_reserve_code_page(em,em->cd_cap * 2 );
-  }
   em->prg->len += add;
   return ret;
 }
@@ -340,22 +254,33 @@ int emitter_label( struct emitter* em ) {
 }
 
 static
-instructions bc_next( const struct program* prg , size_t* pos ) {
+int bc_next( const struct program* prg , size_t* pos ) {
   if( prg->len == *pos ) {
     return VM_HALT;
   } else {
-    instructions instr = (instructions)(*((unsigned char*)(prg->codes)+*pos));
+    int ret = *((int*)(prg->codes)+*pos);
     ++*pos;
-    return instr;
+    return ret;
   }
 }
 
 static
-int bc_next_arg( const struct program* prg , size_t* pos ) {
-  assert(*pos <= prg->len+4);
-  int arg = *((int*)((char*)(prg->codes)+*pos));
-  *pos += 4;
-  return arg;
+instructions bc_instr( int c ) {
+  return (instructions)(c>>24);
+}
+
+static
+int bc_1st_arg( int c ) {
+  return (int)(c&BC_1ST_MASK);
+}
+
+static
+int bc_2nd_arg( const struct program* prg , size_t* pos ) {
+  int ret;
+  assert( prg->len > *pos );
+  ret = *((int*)(prg->codes)+*pos);
+  ++*pos;
+  return ret;
 }
 
 /* dump program into human readable format */

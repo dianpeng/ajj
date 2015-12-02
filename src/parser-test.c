@@ -270,7 +270,7 @@ void test_expr() {
 
 
   { /* simple expression 3 */
-    const char* src = "{% do users.append(some_thing+\'UUV\') >= users.name %}\n";
+    const char* src = "{% do users.append(some_thing+\'UUV\') >= -users.name %}\n";
     struct ajj* a = ajj_create();
     struct ajj_object* obj = parse(a,"Hello World",src,0);
     const struct program* prg;
@@ -294,7 +294,7 @@ void test_expr() {
 
 
   { /* logic */
-    const char* src = "{% if append >= only and user >= more or user < 100 or None != False %}\n" \
+    const char* src = "{% if append >= only and user >= more or not(user < 100) or None != False %}\n" \
                       "{% endif %}";
     struct ajj* a = ajj_create();
     struct ajj_object* obj = parse(a,"Hello World",src,0);
@@ -824,7 +824,7 @@ void test_constexpr() {
   }
  
   {
-    const char* src = "{% macro input1(arg1=[1,2,3],arg2={'U':'V','Q':123,'P':()},arg3='UV',arg4=44,arg5=True,arg6=False,arg7=None) %}" \
+    const char* src = "{% macro input1(arg1=[1,-2,3],arg2={'U':'V','Q':123,'P':()},arg3='UV',arg4=44,arg5=True,arg6=False,arg7=None) %}" \
                       "{% endmacro %}";
     struct ajj* a = ajj_create();
     struct ajj_object* obj = parse(a,"Whoha",src,0);
@@ -851,6 +851,8 @@ int main() {
   test_include();
   test_import();
   test_extends();
+  test_upvalue();
+  test_move();
   test_constexpr();
   return 0;
 }
