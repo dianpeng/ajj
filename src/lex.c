@@ -678,3 +678,20 @@ void tk_get_code_snippet( const char* src , size_t pos ,
   }
   *output = 0;
 }
+
+void tk_get_coordinate( const char* src , size_t until,
+    size_t* ln, size_t* pos ) {
+  size_t i;
+  size_t l = 1;
+  size_t p = 1;
+  for( i = 0 ; i < until ; ++i ) {
+    assert(src[i]);
+    if( src[i] == '\n' ) {
+      ++l; p = 1;
+    } else {
+      ++p;
+    }
+  }
+  *ln = l;
+  *pos = p;
+}

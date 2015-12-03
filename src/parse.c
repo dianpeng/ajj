@@ -39,6 +39,7 @@
 #define emit0_at(em,P,BC) emitter_emit0_at(em,P,BC)
 #define emit1_at(em,P,BC,A1) emitter_emit1_at(em,P,BC,A1)
 #define emit2_at(em,P,BC,A1,A2) emitter_emit2_at(em,P,BC,A1,A2)
+#define emit_put(em,T) emitter_put(em,p->tk.pos,T)
 
 /* Lexical Scope
  * Lexical scope cannot cross function boundary. Once a new function
@@ -155,26 +156,19 @@ static
 void report_error( struct parser* p , const char* format, ... ) {
   va_list vl;
   int len;
-  int pos,ln;
+  size_t ln,pos;
   size_t i;
   char cs[32];
   struct tokenizer* tk = &(p->tk);
 
   /* get the position and line number of tokenizer */
-  pos = ln = 1;
-  for( i = 0 ; i < tk->pos && tk->src[i] ; ++i ) {
-    if( tk->src[i] == '\n' ) {
-      ++ln;pos =0;
-    } else {
-      ++pos;
-    }
-  }
+  tk_get_coordinate(tk->src,tk->pos,&ln,&pos);
 
   tk_get_current_code_snippet(tk,cs,32);
 
   /* output the prefix message */
   len = snprintf(p->a->err,1024,
-      "[Parser:(%s:%d,%d)] at:... %s ...!\nMessage:",
+      "[Parser:(%s:%zu,%zu)] at:... %s ...!\nMessage:",
       p->src_key,pos,ln,cs);
 
   assert( len >0 && len < ERROR_BUFFER_SIZE );
@@ -406,7 +400,7 @@ int parse_tuple_or_subexpr( struct parser* p , struct emitter* em ) {
   /* We cannot look back and I don't want to patch the code as well.
    * So we have to spend an extra instruction on top of it in case
    * it is an tuple */
-  int instr = emitter_put(em,0);
+  int instr = emit_put(em,0);
   struct tokenizer* tk = &(p->tk);
 
   assert(tk->tk == TK_LPAR);
@@ -711,7 +705,6 @@ int parse_atomic( struct parser* p, struct emitter* em ) {
     case TK_LBRA:
       return parse_dict(p,em);
     default:
-      assert(0);
       report_error(p,"Unexpect token here:%s",tk_get_name(tk->tk));
       return -1;
   }
@@ -846,7 +839,7 @@ int parse_logic( struct parser* p, struct emitter* em ) {
       report_error(p,"Too much logic component,you have more than 1024!"); \
       return -1; \
     } \
-    jmp_tb[sz] = emitter_put(em,1); \
+    jmp_tb[sz] = emit_put(em,1); \
     bc_tb[sz] = (X); \
     ++sz; \
   } while(0)
@@ -890,7 +883,7 @@ done:
  */
 static
 int parse_expr( struct parser* p, struct emitter* em ) {
-  int fjmp = emitter_put(em,1);
+  int fjmp = emit_put(em,1);
   int val1_l = emitter_label(em);
   struct tokenizer* tk = &(p->tk);
   CALLE(parse_logic(p,em));
@@ -901,7 +894,7 @@ int parse_expr( struct parser* p, struct emitter* em ) {
     tk_move(tk);
 
     /* An unconditional jump to skip the alternative path and condition */
-    val1_jmp = emitter_put(em,1);
+    val1_jmp = emit_put(em,1);
 
     /* Parse the condition part */
     cond_l = emitter_label(em);
@@ -1168,13 +1161,13 @@ int parse_branch ( struct parser* p, struct emitter* em ) {
   tk_move(tk);
   CALLE(parse_expr(p,em));
   /* condition failed jump */
-  cond_jmp = emitter_put(em,1);
+  cond_jmp = emit_put(em,1);
 
   CONSUME(TK_RSTMT);
 
   CALLE(parse_scope(p,em,1,1));
   /* jump out of the scope */
-  PUSH_JMP(emitter_put(em,1));
+  PUSH_JMP(emit_put(em,1));
   do {
     switch(tk->tk) {
       case TK_ENDIF:
@@ -1197,7 +1190,7 @@ int parse_branch ( struct parser* p, struct emitter* em ) {
           emit1_at(em,cond_jmp,VM_JF,emitter_label(em));
           CALLE(parse_expr(p,em));
 
-          cond_jmp = emitter_put(em,1);
+          cond_jmp = emit_put(em,1);
           CONSUME(TK_RSTMT);
           break;
         }
@@ -1217,7 +1210,7 @@ int parse_branch ( struct parser* p, struct emitter* em ) {
         return -1;
     }
     CALLE(parse_scope(p,em,1,1));
-    PUSH_JMP(emitter_put(em,1));
+    PUSH_JMP(emit_put(em,1));
   } while(1);
 done:
   assert(jmp_sz >= 1);
@@ -1514,7 +1507,7 @@ static int parse_for_body( struct parser* p ,
    * call iter_start which is costy than simple test whether
    * it is empty or not */
   emit1(em,VM_TPUSH,1);
-  else_jmp = emitter_put(em,1);
+  else_jmp = emit_put(em,1);
 
   /* Enter into the scope of loop body */
   ENTER_SCOPE();
@@ -1526,7 +1519,7 @@ static int parse_for_body( struct parser* p ,
    * 2. object */
   loop_cond_pos = emitter_label(em);
   emit0(em,VM_ITER_HAS);
-  loop_jmp = emitter_put(em,1); /* loop jump */
+  loop_jmp = emit_put(em,1); /* loop jump */
 
   /* Dereferencing the key and value */
   deref_tp = -1;
@@ -1578,7 +1571,7 @@ static int parse_for_body( struct parser* p ,
     /* parse the filter onto the stack */
     CALLE(parse_expr(p,em));
     /* now check whether filter is correct or not */
-    filter_jmp = emitter_put(em,1);
+    filter_jmp = emit_put(em,1);
   }
   CONSUME(TK_RSTMT);
 
@@ -1617,7 +1610,7 @@ static int parse_for_body( struct parser* p ,
   if( PTOP()->lctrl->brks_len && deref_tp > 0 ) {
     /* generate a jump here to make sure normal execution flow
      * will skip the following ONE pop instruction */
-    brk_jmp = emitter_put(em,1);
+    brk_jmp = emit_put(em,1);
   }
 
   for( i = 0 ; i < PTOP()->lctrl->brks_len ; ++i ) {
@@ -1655,7 +1648,7 @@ static int parse_for_body( struct parser* p ,
   /* Check if we have an else branch */
   if( p->tk.tk == TK_ELSE ) {
     /* Set up the loop_body_jmp hooks */
-    loop_body_jmp = emitter_put(em,1);
+    loop_body_jmp = emit_put(em,1);
 
     /* Patch the else_jmp */
     emit1_at(em,else_jmp,VM_JEPT,emitter_label(em));
@@ -1740,7 +1733,7 @@ parse_filter( struct parser* p , struct emitter* em ) {
   tk_move(tk);
   CALLE(symbol(p,&name));
   tk_move(tk);
-  vm_lstr = emitter_put(em,1);
+  vm_lstr = emit_put(em,1);
 
   if( tk->tk == TK_LPAR ) {
     CALLE(parse_funccall_or_pipe(p,em,&name,1));
@@ -1919,7 +1912,7 @@ parse_break( struct parser* p , struct emitter* em ) {
     return -1;
   }
   pos = PTOP()->lctrl->brks_len;
-  PTOP()->lctrl->brks[pos].code_pos = emitter_put(em,2);
+  PTOP()->lctrl->brks[pos].code_pos = emit_put(em,2);
   PTOP()->lctrl->brks[pos].enter_cnt=
     PTOP()->lctrl->cur_enter - 1;
   ++PTOP()->lctrl->brks_len;
@@ -1940,7 +1933,7 @@ parse_continue( struct parser* p , struct emitter* em ) {
     return -1;
   }
   pos = PTOP()->lctrl->conts_len;
-  PTOP()->lctrl->conts[pos].code_pos = emitter_put(em,2);
+  PTOP()->lctrl->conts[pos].code_pos = emit_put(em,2);
   PTOP()->lctrl->conts[pos].enter_cnt=
     PTOP()->lctrl->cur_enter - 1;
   ++PTOP()->lctrl->conts_len;

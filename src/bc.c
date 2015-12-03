@@ -21,6 +21,17 @@ bc_get_instruction_name( int bc ) {
 #undef X
 }
 
+int bc_get_argument_num( instructions instr ) {
+#define X(A,B,C) case A: return B;
+  switch(instr) {
+    VM_INSTRUCTIONS(X)
+    default:
+      UNREACHABLE();
+      return -1;
+  }
+#undef X
+}
+
 /* dump the constant table of a program */
 static
 void dump_program_ctable( const struct program* prg , FILE* output ) {
@@ -55,7 +66,7 @@ void dump_program_ctable( const struct program* prg , FILE* output ) {
     char buf[64]; \
     tk_get_code_snippet(src,prg->spos[cnt],buf,64); \
     a1 = bc_1st_arg(c1);\
-    fprintf(output,"%d %zu:%d(... %s ...) %s %d\n",cnt+1,i-5,prg->spos[cnt],buf,N,a1); \
+    fprintf(output,"%d %zu:%d(... %s ...) %s %d\n",cnt+1,i-1,prg->spos[cnt],buf,N,a1); \
   } while(0); break
 
 #define DO2(N) \
@@ -64,7 +75,7 @@ void dump_program_ctable( const struct program* prg , FILE* output ) {
    tk_get_code_snippet(src,prg->spos[cnt],buf,64); \
    a1 = bc_1st_arg(c1);\
    a2 = bc_2nd_arg(prg,&i); \
-   fprintf(output,"%d %zu:%d(... %s ...) %s %d %d\n",cnt+1,i-9,prg->spos[cnt],buf,N,a1,a2); \
+   fprintf(output,"%d %zu:%d(... %s ...) %s %d %d\n",cnt+1,i-2,prg->spos[cnt],buf,N,a1,a2); \
  } while(0); break
 
 #define DO(A,B,C) case A: DO##B(C);
@@ -87,4 +98,5 @@ void dump_program( const char* src , const struct program* prg , FILE* output ) 
     }
     ++cnt;
   }
+  assert( cnt == prg->spos_len );
 }

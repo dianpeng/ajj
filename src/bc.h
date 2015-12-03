@@ -142,7 +142,7 @@ struct emitter {
 
 static
 void emitter_reserve_code_page( struct emitter* em , size_t cap ) {
-  if( em->prg->codes && em->prg->len != 0 ) {
+  if( em->prg->codes && em->cd_cap != 0 ) {
     em->prg->codes = realloc(em->prg->codes,sizeof(int)*cap);
     em->cd_cap = cap;
   } else {
@@ -153,7 +153,7 @@ void emitter_reserve_code_page( struct emitter* em , size_t cap ) {
 
 static
 void emitter_reserve_spos( struct emitter* em , size_t cap ) {
-  if( em->prg->spos && em->prg->spos_len != 0 ) {
+  if( em->prg->spos && em->spos_cap != 0 ) {
     em->prg->spos = realloc(em->prg->spos,sizeof(int)*cap);
     em->spos_cap = cap;
   } else {
@@ -186,8 +186,10 @@ static
 void emitter_emit0( struct emitter* em , int spos , int bc ) {
   emitter_ensure(em);
   /* push source code reference */
-  em->prg->spos[em->prg->spos_len] = spos;
-  ++em->prg->spos_len;
+  if(spos>=0) {
+    em->prg->spos[em->prg->spos_len] = spos;
+    ++em->prg->spos_len;
+  }
   assert(bc>=0 && bc< SIZE_OF_INSTRUCTIONS);
   *((int*)(em->prg->codes)+em->prg->len) = (bc<<24);
   ++(em->prg->len);
@@ -197,8 +199,10 @@ static
 void emitter_emit1( struct emitter* em , int spos , int bc , int a1 ) {
   emitter_ensure(em);
   /* push source code reference */
-  em->prg->spos[em->prg->spos_len] = spos;
-  ++em->prg->spos_len;
+  if(spos>=0) {
+    em->prg->spos[em->prg->spos_len] = spos;
+    ++em->prg->spos_len;
+  }
   assert(bc>=0 && bc< SIZE_OF_INSTRUCTIONS);
   assert( (a1&BC_1ST_MASK) == a1 );
   *((int*)(em->prg->codes)+em->prg->len) = (bc<<24)|(a1);
@@ -213,7 +217,7 @@ void emitter_emit2( struct emitter* em , int spos , int bc , int a1 , int a2 ) {
 }
 
 static
-int emitter_put( struct emitter* em , int arg_sz ) {
+int emitter_put( struct emitter* em , int pos , int arg_sz ) {
   int ret;
   int add;
   assert( arg_sz == 0 || arg_sz == 1 || arg_sz == 2 );
@@ -221,6 +225,7 @@ int emitter_put( struct emitter* em , int arg_sz ) {
   add = (arg_sz == 0 || arg_sz == 1) ? 1 : 2;
   ret = em->prg->len;
   em->prg->len += add;
+  em->prg->spos[ em->prg->spos_len++ ] = pos;
   return ret;
 }
 
@@ -228,7 +233,7 @@ static
 void emitter_emit0_at( struct emitter* em , int pos , int bc ) {
   int save = em->prg->len;
   em->prg->len = pos;
-  emitter_emit0(em,pos,bc);
+  emitter_emit0(em,-1,bc);
   em->prg->len = save;
 }
 
@@ -237,7 +242,7 @@ void emitter_emit1_at( struct emitter* em , int pos ,
     int bc , int a1 ) {
   int save = em->prg->len;
   em->prg->len = pos;
-  emitter_emit1(em,pos,bc,a1);
+  emitter_emit1(em,-1,bc,a1);
   em->prg->len = save;
 }
 
@@ -246,7 +251,7 @@ void emitter_emit2_at( struct emitter* em , int pos , int bc ,
     int a1 , int a2 ) {
   int save = em->prg->len;
   em->prg->len = pos;
-  emitter_emit2(em,pos,bc,a1,a2);
+  emitter_emit2(em,-1,bc,a1,a2);
   em->prg->len = save;
 }
 
@@ -258,7 +263,7 @@ int emitter_label( struct emitter* em ) {
 static
 int bc_next( const struct program* prg , size_t* pos ) {
   if( prg->len == *pos ) {
-    return VM_HALT;
+    return BC_WRAP_INSTRUCTION0(VM_HALT);
   } else {
     int ret = *((int*)(prg->codes)+*pos);
     ++*pos;
@@ -273,7 +278,7 @@ instructions bc_instr( int c ) {
 
 static
 int bc_1st_arg( int c ) {
-  return (int)(c&BC_1ST_MASK);
+  return BC_1ARG(c);
 }
 
 static

@@ -27,8 +27,7 @@ extern struct string MAIN; /* For __main__ */
    (V)->type==AJJ_VALUE_ITERATOR|| \
    (V)->type==AJJ_VALUE_BOOLEAN)
 
-#define AJJ_IS_REFERENCE(V) \
-  (!(AJJ_IS_PRIMITIVE(V)))
+#define AJJ_IS_REFERENCE(V) (!(AJJ_IS_PRIMITIVE(V)))
 
 
 #define LIST_LOCAL_BUF_SIZE 4

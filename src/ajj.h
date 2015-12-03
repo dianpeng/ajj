@@ -2,6 +2,7 @@
 #define _AJJ_H_
 #include <stddef.h>
 #include <stdio.h>
+#include <assert.h>
 
 #define AJJ_SYMBOL_NAME_MAX_SIZE 32
 #define AJJ_GLOBAL_SYMBOL_MAX_SIZE 256
@@ -78,8 +79,30 @@ enum {
   AJJ_VALUE_SIZE
 };
 
+static
 const char*
-ajj_value_get_type_name( const struct ajj_value* );
+ajj_value_get_type_name( const struct ajj_value* v ) {
+  switch(v->type) {
+    case AJJ_VALUE_NOT_USE:
+      return NULL;
+    case AJJ_VALUE_NUMBER:
+      return "number";
+    case AJJ_VALUE_BOOLEAN:
+      return "boolean";
+    case AJJ_VALUE_NONE:
+      return "none";
+    case AJJ_VALUE_STRING:
+      return "string";
+    case AJJ_VALUE_LIST:
+      return "list";
+    case AJJ_VALUE_DICT:
+      return "dict";
+    case AJJ_VALUE_OBJECT:
+      return "object";
+    default:
+      return NULL;
+  }
+}
 
 extern struct ajj_value AJJ_TRUE;
 extern struct ajj_value AJJ_FALSE;

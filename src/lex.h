@@ -122,6 +122,9 @@ void tk_get_code_snippet( const char* src, size_t pos ,
 #define tk_get_current_code_snippet(tk,output,l) \
   tk_get_code_snippet((tk)->src,(tk)->pos,output,l)
 
+void tk_get_coordinate( const char* src , size_t until,
+    size_t* ln, size_t* pos );
+
 static inline
 token_id tk_init( struct tokenizer* tk , const char* src ) {
   tk->src = src;

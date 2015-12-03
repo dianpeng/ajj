@@ -1,12 +1,13 @@
+#include <math.h>
 #include "opt.h"
 #include "ajj-priv.h"
 #include "util.h"
 #include "bc.h"
 #include "vm.h"
 #include "object.h"
-#include <math.h>
 #include <errno.h>
 #include <limits.h>
+#include <stdarg.h>
 
 /* A peephole optimizer
  * This optimizer basically helps to remove those unused NOP
@@ -39,7 +40,7 @@
  * support unlimited length peephole which can help us reduce those
  * constant indefinitly long.
  *
- * Another to note, since we only support real number using double
+ * Another thing to note, since we only support real number using double
  * precision floating point number and it doesn't support accosiative
  * on EVERY operations. Like expression 2 + a + 3 , we actually
  * cannot constant fold it, since 2+a+3 == (2+a) + 3 != (2+3) + a.
@@ -66,11 +67,19 @@ struct str {
 
 #define NULL_STR { NULL , 0 }
 
+#define INIT_BUF_SIZE 128
+
 #define reserve_buf(O,T,A,E) \
   do { \
     if( (O)->T##_len + (A) >= (O)->T##_cap ) { \
-      (O)->T = realloc( (O)->T , sizeof(E)*2*((O)->T##_cap) ); \
-      (O)->T##_cap *= 2; \
+      if( (O)->T##_len == 0 ) { \
+        (O)->T = malloc( sizeof(E)*INIT_BUF_SIZE ); \
+        (O)->T##_cap = INIT_BUF_SIZE; \
+      } else { \
+        size_t cap = sizeof(E)*((O)->T##_cap)+INIT_BUF_SIZE*sizeof(E); \
+        (O)->T = realloc( (O)->T ,cap ); \
+        (O)->T##_cap = cap; \
+      } \
     } \
   } while(0)
 
@@ -103,19 +112,87 @@ struct opt {
   int* o_rlink;
   size_t o_rlink_cap;
   size_t o_rlink_len;
+  int p_rlink; /* previous rlink */
 
   int* o_sref; /* output source code reference */
   size_t o_sref_len;
   size_t o_sref_cap;
 
+  int* o_jmp; /* jump instruction position in the output code
+               * buffer, later on used for patch those jump */
+  size_t o_jmp_len;
+  size_t o_jmp_cap;
+
   struct program* prg; /* target program */
-  size_t pc;
-  struct ajj* a; /* ajj */
+  size_t pc;     /* program counter */
+  size_t icnt;   /* instruction counter */
+
+  struct ajj_object* jinja; /* jinja */
+  struct ajj* a; /* for error buffer */
 };
 
 static
+void opt_init( struct opt* o , struct ajj* a , struct ajj_object* jj ) {
+  memset(o,0,sizeof(*o));
+  o->a = a;
+  o->jinja = jj;
+}
+
+static
+void opt_reset( struct opt* o , struct program* prg ) {
+  o->p_beg = 0;
+  o->off_buf_len = 0;
+  o->cur_shrink =0;
+  o->o_buf_len = 0;
+  o->o_rlink_len = 0;
+  o->p_rlink = 0;
+  o->o_sref_len = 0;
+  o->o_jmp_len = 0;
+  o->pc = 0;
+  o->icnt = 0;
+  o->prg = prg;
+}
+
+static
+void opt_destroy( struct opt* o ) {
+  if(o->off_buf_cap)
+    free(o->off_buf);
+  if(o->o_rlink_cap)
+    free(o->o_rlink);
+  if(o->o_jmp_cap)
+    free(o->o_jmp);
+  if(o->o_sref_cap)
+    free(o->o_sref);
+}
+
+static
+void report_error( struct opt* o ,const char* fmt , ... ) {
+  struct object* obj = &(o->jinja->val.obj);
+  const char* src = obj->src;
+  va_list vl;
+  size_t pos,ln;
+  char cs[64];
+  int len;
+
+  /* get code snippet and other location information */
+  tk_get_coordinate(src,o->prg->spos[o->icnt],&ln,&pos);
+  tk_get_code_snippet(src,o->prg->spos[o->icnt],cs,64);
+
+  /* dump the error */
+  len = snprintf(o->a->err,1024,
+      "[Optimizer:(%s:%zu,%zu)] at:... %s ...!\nMessage:",
+      obj->fn_tb->name.str,
+      ln,pos,
+      cs);
+  assert( len >0 && len < ERROR_BUFFER_SIZE );
+  /* output the rest messge even it is truncated */
+  va_start(vl,fmt);
+  vsnprintf(o->a->err+len,ERROR_BUFFER_SIZE-len, fmt,vl);
+}
+
+static
 void str_destroy( struct str* l ) {
-  if(l->own && l->str) free(l->str);
+  if(l->own && l->s) free((void*)l->s);
 }
 
 static
@@ -139,27 +216,77 @@ struct string str_mul( const struct str* l , int times ) {
   return strbuf_tostring(&sbuf);
 }
 
-/* help re-emit those instructions internally */
+/* The following function reemit the instructions accordingly
+ * and also it build the reverse link on the fly */
+
 static
 void emit0( struct opt* o , int pos , int bc ) {
   reserve_buf(o,o_rlink,0,int);
-  o->o_rlink[o->o_rlink_len++] = o->o_buf_len;
+  o->o_rlink[o->o_rlink_len++] = o->p_rlink;
+
+  o->p_rlink = o->o_buf_len;
+
+  reserve_buf(o,o_buf,1,int);
   o->o_buf[o->o_buf_len++] = BC_WRAP_INSTRUCTION0(bc);
+
   reserve_buf(o,o_sref,0,int);
   o->o_sref[o->o_sref_len++] = pos;
+}
+
+static
+void add_jmp( struct opt* o , int bc ) {
+  switch(bc) {
+    case VM_JMP:
+    case VM_JT:
+    case VM_JF:
+    case VM_JLT:
+    case VM_JLF:
+    case VM_JMPC:
+    case VM_JEPT:
+      reserve_buf(o,o_jmp,0,int);
+      /* once the jmp position is recorded, it won't change
+       * since the constant folding will never go across the
+       * boundary of the jmp instructions. You could not fold
+       * jump so we are safe */
+      o->o_jmp[o->o_jmp_len++] = o->o_buf_len;
+      return;
+    default:
+      return;
+  }
 }
 
 static
 void emit1( struct opt* o , int pos , int bc , int a1 ) {
   reserve_buf(o,o_rlink,0,int);
-  o->o_rlink[o->o_rlink_len++] = o->o_buf_len;
+  o->o_rlink[o->o_rlink_len++] = o->p_rlink;
+
+  o->p_rlink = o->o_buf_len;
+
+  add_jmp(o,bc);
+
+  reserve_buf(o,o_buf,2,int);
   o->o_buf[o->o_buf_len++] = BC_WRAP_INSTRUCTION1(bc,a1);
+
   reserve_buf(o,o_sref,0,int);
   o->o_sref[o->o_sref_len++] = pos;
 }
 
 static
-void report_error( struct opt* o ,const char* fmt , ... );
+void emit2( struct opt* o , int pos , int bc , int a1, int a2 ) {
+  reserve_buf(o,o_rlink,0,int);
+  o->o_rlink[o->o_rlink_len++] = o->p_rlink;
+
+  o->p_rlink = o->o_buf_len;
+
+  add_jmp(o,bc);
+
+  reserve_buf(o,o_buf,2,int);
+  o->o_buf[o->o_buf_len++] = BC_WRAP_INSTRUCTION1(bc,a1);
+  o->o_buf[o->o_buf_len++] = a2; /* 2nd parameter */
+
+  reserve_buf(o,o_sref,0,int);
+  o->o_sref[o->o_sref_len++] = pos;
+}
 
 static
 int to_number( struct opt* o , const struct ajj_value* v,
@@ -256,8 +383,51 @@ int fold_bin( struct opt* o , instructions instr );
 static
 int fold_una( struct opt* o , instructions instr );
 
+#define DO_0() \
+  do { \
+    emit0(o,o->prg->spos[o->icnt],instr); \
+    if( o->o_rlink_len >= 2 ) { \
+      o->p_beg = o->o_rlink[o->o_rlink_len-1]; \
+    } \
+  } while(0); break
+
+#define DO_1() \
+  do { \
+    int a1 = BC_1ARG(c1); \
+    emit1(o,o->prg->spos[o->icnt],instr,a1); \
+    if( o->o_rlink_len >= 2 ) { \
+      o->p_beg = o->o_rlink[o->o_rlink_len-1]; \
+    } \
+  } while(0); break
+
+#define DO_2() \
+  do { \
+    int a1 = BC_1ARG(c1); \
+    int a2 = bc_2nd_arg( o->prg,&(o->pc) ); \
+    emit2(o,o->prg->spos[o->icnt],instr,a1,a2); \
+    if( o->o_rlink_len >= 2 ) { \
+      o->p_beg = o->o_rlink[o->o_rlink_len-1]; \
+    } \
+  } while(0); break
+
+#define DO(A,B,C) case A: DO_##B();
+
+/* This function directly copy the instruction from the old buffer
+ * into the new buffer and move the peephole pointer if we need to */
 static
-int copy_ins( struct opt* o , int c );
+int copy_ins( struct opt* o , int c1 ) {
+  instructions instr = BC_INSTRUCTION(c1);
+  switch(instr) {
+    VM_INSTRUCTIONS(DO)
+    default:
+      UNREACHABLE();
+      return -1;
+  }
+}
+#undef DO
+#undef DO_0
+#undef DO_1
+#undef DO_2
 
 #define CALL_FOLD(X) \
   switch((X)) { \
@@ -270,10 +440,6 @@ int copy_ins( struct opt* o , int c );
 /* Pass1 : do constant folding */
 static
 int pass1( struct opt* o ) {
-  int a1;
-  int a2;
-  instructions pinstr = VM_HALT;
-
   while(1) {
     int c1 = bc_next(o->prg,&o->pc);
     instructions instr = bc_instr(c1);
@@ -287,6 +453,7 @@ int pass1( struct opt* o ) {
         o->off_buf[o->off_buf_len].pos = o->pc-1;
         o->off_buf[o->off_buf_len].shrink = o->cur_shrink;
         ++o->off_buf_len;
+        break;
       case VM_NOP2:
         bc_2nd_arg(o->prg,&(o->pc));
         o->cur_shrink+=2; /* one more shrink */
@@ -319,17 +486,74 @@ copy:
         copy_ins(o,c1);
         break;
     }
-    pinstr = instr;
+    ++(o->icnt);
   }
 
 done:
+  return 0;
 
 fail:
+  return -1;
+}
+
+
+/* Find the new value for old jump target. During the constant
+ * folding and NOP operation remove we build a offset buffer,
+ * which contains all the needed information to decide mapping */
+static
+int find_new_jtar( struct opt* o , int old_jtar ) {
+  size_t i;
+
+  for( i = 0 ; i < o->off_buf_len ; ++i ) {
+    if( o->off_buf[i].pos == old_jtar ) {
+      return o->off_buf[i].shrink;
+    } else if( o->off_buf[i].pos > old_jtar ) {
+      if( i > 0 ) {
+        assert( o->off_buf[i-1].pos < old_jtar );
+        return o->off_buf[i-1].shrink;
+      } else {
+        return 0;
+      }
+    }
+  }
+  return o->off_buf[o->off_buf_len-1].shrink;
 }
 
 /* Pass2 : patch the jump target */
 static
-int pass2( struct opt* o );
+void pass2( struct opt* o ) {
+  size_t i;
+  int a1;
+  int a2;
+  int shrink;
+  for( i = 0 ; i < o->o_jmp_len ; ++i ) {
+    int c = o->o_buf[o->o_jmp[i]];
+    instructions ins = BC_INSTRUCTION(c);
+    switch( ins ) {
+      case VM_JMP:
+      case VM_JT:
+      case VM_JF:
+      case VM_JLF:
+      case VM_JLT:
+      case VM_JEPT:
+        a1 = BC_1ARG(c);
+        shrink = find_new_jtar(o,a1);
+        a1 -= shrink;
+        /* patch the instruction in place */
+        o->o_buf[o->o_jmp[i]] = BC_WRAP_INSTRUCTION1(ins,a1);
+        break;
+      case VM_JMPC:
+        a2 = o->o_buf[o->o_jmp[i]+1];
+        shrink = find_new_jtar(o,a2);
+        a2 -= shrink;
+        o->o_buf[o->o_jmp[i]+1] = a2;
+        break;
+      default:
+        UNREACHABLE();
+        return;
+    }
+  }
+}
 
 static
 int check_const( struct opt* o , int pos , struct ajj_value* val ) {
@@ -377,7 +601,9 @@ int check_const( struct opt* o , int pos , struct ajj_value* val ) {
   }
 }
 
-#define old_sref(O) ((O)->o_sref[(O)->o_sref_len-2])
+/* old instruction's source code reference , used when reemit new
+ * instructions at the corresponding position */
+#define old_sref(O) ((O)->prg->spos[(O)->icnt])
 
 /* This function adjust the peephole window. It is called
  * when a new rewrite is able to perform. We have a very
@@ -389,7 +615,8 @@ static
 void rewrite_bin( struct opt* o , int pos , int type , int bc, int a1 ) {
   int srk;
   assert( o->o_rlink_len >= 2 );
-  srk = o->o_buf_len - o->p_beg;
+  srk = o->o_buf_len - o->p_beg + 1; /* the "1" represent the byte code length
+                                      * we eat the byte code as well */
 
   o->o_buf_len = o->p_beg; /* set the current buffer position to
                             * the start of peephole */
@@ -397,6 +624,7 @@ void rewrite_bin( struct opt* o , int pos , int type , int bc, int a1 ) {
   assert( o->o_sref_len >= 2 );
   o->o_sref_len -= 2;
 
+  o->p_rlink = o->o_rlink[o->o_rlink_len-2];
   if( o->o_rlink_len > 2 ) {
     /* only back peephole pointer one instructions */
     o->p_beg = o->o_rlink[ o->o_rlink_len-2 ];
@@ -513,7 +741,6 @@ int fold_bin( struct opt* o , instructions instr ) {
           double val = lv * rv;
           int i_val = program_const_num(o->prg,val);
           int sref = old_sref(o);
-
           bin_emit1(o,sref,VM_LNUM,i_val);
         }
       }
@@ -548,7 +775,7 @@ int fold_bin( struct opt* o , instructions instr ) {
     report_error(o,"Divide zero!"); \
     return -1; \
   } else { \
-    (V) = (lv) + (rv); \
+    (V) = (lv) / (rv); \
   } \
 } while(0)
       DO(DIV);
@@ -684,14 +911,15 @@ static
 void rewrite_una( struct opt* o , int pp_off ,
     int pos , int type , int bc , int a1) {
   int peephole = o->p_beg + pp_off;
-  int srk = o->o_buf_len - peephole;
+  int srk = o->o_buf_len - peephole + 1; /* 1 represent the byte code for opreation */
 
   assert( o->o_rlink_len >= 2 );
   assert( o->o_buf_len - o->p_beg <= 4 );
 
   /* back one instructions */
+  o->p_rlink = o->o_rlink[o->o_rlink_len-1];
   o->o_buf_len = peephole;
-  o->o_rlink_len--; 
+  o->o_rlink_len--;
   o->o_sref_len-- ;
 
   if(type == 0) {
@@ -737,7 +965,7 @@ int fold_una( struct opt* o , instructions inst ) {
         int i_val;
         if( to_number(o,&v,&val) )
           return -1;
-        i_val = program_const_num(o->prg,val);
+        i_val = program_const_num(o->prg,-val);
         una_emit1(o,an,sref,VM_LNUM,i_val);
         return 0;
       }
@@ -772,3 +1000,55 @@ int fold_una( struct opt* o , instructions inst ) {
   }
 }
 
+/* optimize a single struct program */
+static
+int opt_program( struct opt* o , struct program* prg ) {
+  opt_reset(o,prg);
+  if( pass1(o) )
+    return -1;
+  else
+    pass2(o);
+
+  /* move the o_buffer to the target program */
+  free(prg->codes);
+
+  prg->codes = o->o_buf;
+  prg->len = o->o_buf_len;
+
+  prg->spos = o->o_sref;
+  prg->spos_len = o->o_sref_len;
+
+  o->o_buf = NULL;
+  o->o_buf_len = 0;
+  o->o_buf_cap = 0;
+
+  o->o_sref = NULL;
+  o->o_sref_len = 0;
+  o->o_sref_cap = 0;
+
+  return 0;
+}
+
+int optimize( struct ajj* a , struct ajj_object* jinja ) {
+  struct opt o; /* optimizer context */
+  size_t i;
+  struct object* obj = &(jinja->val.obj);
+
+  assert(jinja->tp == AJJ_VALUE_JINJA );
+
+  opt_init(&o,a,jinja);
+
+  for( i = 0 ; i < obj->fn_tb->func_len ; ++i ) {
+    struct function* f = obj->fn_tb->func_tb + i;
+    assert(IS_JINJA(f));
+    if(opt_program(&o,&(f->f.jj_fn)))
+      goto fail;
+  }
+
+  opt_destroy(&o);
+  return 0;
+
+fail:
+  opt_destroy(&o);
+  return -1;
+}
