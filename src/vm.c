@@ -5,6 +5,7 @@
 #include "util.h"
 #include "json.h"
 #include "bc.h"
+#include "upvalue.h"
 
 #include <limits.h>
 #include <math.h>
@@ -78,6 +79,9 @@ double const_num( struct ajj* a, int idx ) {
 /* ============================
  * runtime
  * ==========================*/
+#define AJJ_EXEC_CALL 1 /* indicate we want to call a script
+                         * function recursively */
+
 static
 struct runtime* runtime_create( struct ajj_object* tp ) {
   struct runtime* rt = calloc(1,sizeof(*rt));
@@ -91,6 +95,14 @@ void runtime_destroy( struct runtime* rt );
 static
 void report_error( struct ajj* a , const char* format , ... );
 
+/* For C users, we don't allow them to call a script function in their
+ * registered C function easily, but we need it for execution in our
+ * VM. */
+static
+int call_script_func( struct ajj* a ,
+    const char* name,
+    struct ajj_value* par, size_t par_len ,
+    struct ajj_value* ret );
 
 /* =============================
  * Decoding
@@ -100,32 +112,23 @@ static
 int next_instr( struct ajj* a ) {
   struct func_frame* fr = cur_frame(a);
   const struct program* prg;
-
   assert(IS_JINJA(fr->entry));
   prg = GET_JINJAFUNC(fr->entry);
-  if( prg->len == fr->pc ) {
-    return VM_HALT;
-  } else {
-    int instr = (int)(*((char*)(prg->codes)+fr->pc));
-    ++(fr->pc);
-    return instr;
-  }
+  return bc_next(prg,&(fr->pc));
 }
 
 static
-int next_arg( struct ajj* a , int* fail ) {
+int instr_1st_arg( int c ) {
+  return bc_1st_arg(c);
+}
+
+static
+int instr_2nd_arg( struct ajj* a ) {
   struct func_frame* fr = cur_frame(a);
-  const struct program* prg = GET_JINJAFUNC(fr->entry);
+  const struct program* prg;
   assert(IS_JINJA(fr->entry));
-  if( prg->len <= fr->pc+4 ) {
-    *fail = 1;
-    return -1;
-  } else {
-    int arg = *((int*)((char*)(prg->codes)+fr->pc));
-    fr->pc += 4;
-    *fail = 0;
-    return arg;
-  }
+  prg = GET_JINJAFUNC(fr->entry);
+  return bc_2nd_arg(prg,&(fr->pc));
 }
 
 /* ============================
@@ -134,73 +137,26 @@ int next_arg( struct ajj* a , int* fail ) {
 
 static
 void set_upvalue( struct ajj* a, const struct string* name,
-    const struct ajj_value* value , int own , int* fail ) {
-  struct gvar_table* g = a->gvar_tb;
-  struct gvar* var = gvar_table_find(g,name);
-  if( var == NULL ) {
-    struct gvar new_var;
-    new_var.type = GVAR_VALUE;
-    new_var.gut.value = slab_malloc(&(a->glb_var_slab));
-    new_var.gut.value->prev = NULL;
-    new_var.gut.value->val = own ? ajj_value_copy(a,NULL,value) : *value;
-    gvar_table_insert(g,name,0,&new_var);
-  } else {
-    struct global_var* new_var;
-    if( var->type != GVAR_VALUE ) {
-      *fail = 1;
-      report_error(a,"The global variable:%s is not valid for assignment!",
-          name->str);
-      return;
-    }
-    new_var->prev = var->gut.value;
-    var->gut.value = new_var;
-    new_var->val = ajj_value_copy(a,NULL,value);
-  }
-  *fail = 0;
+    const struct ajj_value* value , int own ) {
+  struct upvalue* uv = upvalue_table_add(a,
+      a->upval_tb,name,own);
+  uv->type = UPVALUE_VALUE;
+  uv->gut.val = *value;
 }
 
 static
 struct ajj_value
 get_upvalue( struct ajj* a , const struct string* name ) {
-  struct gvar_table* g = a->gvar_tb;
-  struct gvar* var = gvar_table_find(g,name);
-  if( var == NULL ) {
+  struct upvalue* uv = upvalue_table_find(a->upval_tb,name);
+  if( uv->type != UPVALUE_VALUE )
     return AJJ_NONE;
-  } else {
-    if( var->type != GVAR_VALUE ) {
-      /* user reference to a global variable but this variable
-       * is not a value type. For this situations, we still return
-       * a NONE object */
-      return AJJ_NONE;
-    } else {
-      return var->gut.value->val;
-    }
-  }
+  else
+    return uv->gut.val;
 }
 
 static
 void del_upvalue( struct ajj* a, const struct string* name ) {
-  struct gvar* v = gvar_table_find(a->gvar_tb,name);
-  if( v != NULL ) {
-    if( v->type == GVAR_VALUE ) {
-      struct global_var* p = v->gut.value->prev;
-      if(IS_VALUE_OWNED(&(v->gut.value->val))) {
-        /* delete this upvalue only when we own it */
-        ajj_value_destroy(a,&(v->gut.value->val));
-      }
-      slab_free(&(a->glb_var_slab),v->gut.value);
-      if(p)
-        v->gut.value = p;
-      else
-        /* remove the value from the table since the parent
-         * field is NULL which means no more value existed */
-        gvar_table_remove(a->gvar_tb,name,NULL);
-    } else {
-      /* We should never be here to manually delete a non-VALUE upvalue.
-       * All the non-VALUE upvalue are assigned by user in C function side */
-      UNREACHABLE();
-    }
-  }
+  upvalue_table_del(a,a->upval_tb,name);
 }
 
 /* =============================
@@ -465,8 +421,7 @@ vm_call(struct ajj* a, struct ajj_value* obj , int* fail) {
   struct func_frame* fr = cur_frame(a);
   struct ajj_value argnum = ajj_value_number(fr->par_cnt);
   /* setting up the upvalue for argnum ( function parameter count ) */
-  set_upvalue(a,&ARGNUM,&argnum,1,fail);
-  if(*fail) return AJJ_NONE;
+  set_upvalue(a,&ARGNUM,&argnum,1);
 
   if( IS_C(fr->entry) ) {
     struct ajj_value ret;

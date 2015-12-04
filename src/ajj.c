@@ -30,14 +30,14 @@ struct ajj* ajj_create() {
 }
 
 void ajj_destroy( struct ajj* r ) {
+  /* MUST delete upvalue_table at very first */
+  upvalue_table_destroy(r,r->upval_tb);
+  map_destroy(&(r->tmpl_tbl));
+
   slab_destroy(&(r->upval_slab));
   slab_destroy(&(r->obj_slab));
   slab_destroy(&(r->ft_slab));
   slab_destroy(&(r->gc_slab));
-  map_destroy(&(r->tmpl_tbl));
-
-  /* TODO:: delete upvalue_table
-   * upvalue_table_destroy(&(r->upval_tb)); */
 }
 
 #define DOINDENT() \

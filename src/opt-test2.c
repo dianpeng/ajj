@@ -64,7 +64,6 @@ void test_for() {
     assert(!optimize(a,obj));
     dump_program(src,prg,stdout);
   }
-#endif
 
   {
     /* FOR LOOP */
@@ -84,10 +83,9 @@ void test_for() {
     dump_program(src,prg,stdout);
   }
 
-#if 0
   {
     /* FOR LOOP */
-    const char* src = "UVWXYZ{% for _,_ in my_dict if a != True %}\n" \
+    const char* src = "UVWXYZ{% for _,_ in my_dict if a != not True %}\n" \
                        "<dt>{{ KeyValue | filter1 }}</dt>\n" \
                        "<dt>{{ a | lower_case }}</dt>\n" \
                        "{% endfor %}";
@@ -97,15 +95,17 @@ void test_for() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
-
+    dump_program(src,prg,stdout);
+    assert( !optimize(a,obj) );
+    prg =ajj_object_jinja_main(obj);
+    assert(prg);
+    dump_program(src,prg,stdout);
   }
-
-
 
   {
     /* FOR LOOP WITH CONTROLS */
     const char* src = "{% for a in my_dict %}\n" \
-                      "{% if b == 3 %}{% continue %}{% endif %}\n" \
+                      "{% if b == 2*33//3 %}{% continue %}{% endif %}\n" \
                       "{% endfor %}\n";
     struct ajj* a = ajj_create();
     struct ajj_object* obj = parse(a,"Hello World",src,0);
@@ -113,14 +113,16 @@ void test_for() {
     assert(obj);
     prg =ajj_object_jinja_main(obj);
     assert(prg);
-
+    dump_program(src,prg,stdout);
+    assert( !optimize(a,obj) );
+    dump_program(src,prg,stdout);
   }
 
   {
     /* FOR LOOP WITH CONTROLS */
     const char* src = "{% for a in my_dict %}\n" \
-                      "{% if b == 3 %}{% break %}{% endif %}\n" \
-                      "{% if b == 2 %}{% continue %}{% endif %}\n" \
+                      "{% if b == 3+3*2/1**2%4 %}{% break %}{% endif %}\n" \
+                      "{% if b == 2+2*2/2%4**2 %}{% continue %}{% endif %}\n" \
                       "{% endfor %}\n";
     struct ajj* a = ajj_create();
     struct ajj_object* obj = parse(a,"Hello World",src,0);
@@ -128,15 +130,19 @@ void test_for() {
     assert(obj);
     prg =ajj_object_jinja_main(obj);
     assert(prg);
-
+    dump_program(src,prg,stdout);
+    assert( !optimize(a,obj) );
+    dump_program(src,prg,stdout);
   }
+#endif
+
 
   {
     /* FOR LOOP WITH CONTROLS */
     const char* src = "{% for a,b in my_dict %}\n" \
-                      "{% if b == 3 %}{% break %}{% endif %}\n" \
+                      "{% if b == 1*3 %}{% break %}{% endif %}\n" \
                       "{{ UU }}\n" \
-                      "{% if b == 2 %}{% continue %}{% endif %}\n" \
+                      "{% if b == 2*2 %}{% continue %}{% endif %}\n" \
                       "{{ VV }}\n" \
                       "{% endfor %}\n";
     struct ajj* a = ajj_create();
@@ -145,8 +151,13 @@ void test_for() {
     assert(obj);
     prg =ajj_object_jinja_main(obj);
     assert(prg);
+    dump_program(src,prg,stdout);
+    assert( !optimize(a,obj) );
+    dump_program(src,prg,stdout);
 
   }
+
+#if 0
   {
     /* FOR LOOP WITH CONTROLS */
     const char* src = "{% for _,_ in my_dict %}\n" \

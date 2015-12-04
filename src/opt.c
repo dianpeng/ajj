@@ -1011,6 +1011,7 @@ int opt_program( struct opt* o , struct program* prg ) {
 
   /* move the o_buffer to the target program */
   free(prg->codes);
+  free(prg->spos);
 
   prg->codes = o->o_buf;
   prg->len = o->o_buf_len;

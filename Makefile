@@ -22,6 +22,7 @@ parser-test:
 
 clean:
 	rm src/opt-test2
+	rm src/opt-test
 	rm src/*.gcno
 	rm src/*.gcda
 	rm src/*.gcov

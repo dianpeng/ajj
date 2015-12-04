@@ -9,6 +9,11 @@ struct ajj_object;
 struct func_table;
 struct gc_scope;
 
+
+/* A program is a structure represents the code compiled from Jinja template.
+ * It is the concrete entity that VM gonna execute. A program is alwyas held
+ * by an object's function table objects. */
+
 struct program {
   void* codes;
   size_t len;
@@ -35,16 +40,39 @@ struct program {
   size_t par_size;
 };
 
-/* Execution context */
+
+/* Our VM is always trying to call different functions, no matter it is a C
+ * function or a scripted function ( which is struct program ). Each function,
+ * during runtime will form a func_frame object which is stacked by the VM.
+ * VM is always executing the top of that func_frame stack. By walk that stack,
+ * we can know the stack traces of current execution. One thing to note, the
+ * frame is also used to represent the C function execution */
+
 struct func_frame {
   const struct function* entry; /* Function entry */
+
+  /* the following fields are only used when the function is a script
+   * function. Otherwise they are all set to 0 */
+
   int ebp; /* EBP register */
   int esp; /* ESP register */
   size_t pc ; /* Program counter register */
-  struct string name; /* function name */
-  int par_cnt : 16 ;
-  int method  : 1;    /* whether this call is a method call */
+
+  struct string name; /* function name , a pointer that just points to the
+                       * name inside of entry */
+
+  int par_cnt : 16 ;  /* parameter count when calling this function */
+
+  int method  : 1;    /* whether this is a method call, if it is a method call,
+                       * it means this call has a corresponding object */
 };
+
+
+/* Runtime object is the internal VM data structure which contains all the VM
+ * execution resources. It has a pointer points to the main jinja template and
+ * contains a value stack + an function frame stack. Also a gc_scope pointer always
+ * points to the current gc scope and a output FILE points to where the output
+ * of the jinja template should go to. */
 
 struct runtime {
   struct ajj_object* cur_tmpl;   /* current jinja template */

@@ -44,40 +44,50 @@ struct upvalue_table {
   struct upvalue_table* prev; /* previous table */
 };
 
+
 /* Global varialbes table. Wrapper around map */
 static
 struct upvalue_table*
 upvalue_table_create( struct upvalue_table* p ) {
   struct upvalue_table* ret = malloc(sizeof(*p));
-  map_create(&(ret->d),sizeof(struct upvalue),
+  map_create(&(ret->d),sizeof(struct upvalue*),
       UPVALUE_DEFAULT_BUF_SIZE );
   ret->prev = p;
   return ret;
 }
 
-void upvalue_table_clear( struct upvalue_table* m );
-
 struct upvalue_table*
-upvalue_table_destroy_one( struct upvalue_table* m );
+upvalue_table_destroy_one( struct ajj* a,
+    struct upvalue_table* m );
 
-struct upvalue_table*
-upvalue_table_destroy( struct upvalue_table* m );
+/* this function will recursively clean each
+ * upvalue table layer and delete the table
+ * itself. */
+void
+upvalue_table_destroy( struct ajj* a,
+    struct upvalue_table* m );
 
 /* add a upvalue into the upvalue table chain */
-int upvalue_table_add( struct upvalue_table* ,
+struct upvalue*
+upvalue_table_add( struct ajj* a ,
+    struct upvalue_table* ,
     const struct string* ,
-    int own,
-    const struct upvalue* );
+    int own );
 
-int upvalue_table_add_c( struct upvalue_table* ,
-    const char* key,
-    const struct upvalue* );
+struct upvalue*
+upvalue_table_add_c( struct ajj* a,
+    struct upvalue_table* ,
+    const char* key );
 
-int upvalue_table_del( struct upvalue_table* ,
-    const struct string* ,
-    struct upvalue* );
+/* delete a upvalue inside of the table chain */
+int
+upvalue_table_del( struct ajj* a,
+    struct upvalue_table* ,
+    const struct string* );
 
-int upvalue_table_del_c( struct upvalue_table* ,
+int
+upvalue_table_del_c( struct ajj* a,
+    struct upvalue_table* ,
     const char* key,
     struct upvalue* );
 

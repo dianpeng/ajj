@@ -19,6 +19,9 @@ struct ajj;
 struct ajj_value;
 struct ajj_object;
 
+#define AJJ_EXEC_OK   0
+#define AJJ_EXEC_FAIL -1
+
 typedef int (*ajj_function)( struct ajj* ,
     void* ,
     struct ajj_value*,
