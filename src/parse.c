@@ -1870,34 +1870,6 @@ parse_move( struct parser* p , struct emitter* em ) {
   return 0;
 }
 
-/* Upvalue */
-static int
-parse_upvalue( struct parser* p , struct emitter* em ) {
-  int var_idx;
-  struct tokenizer* tk = &(p->tk);
-  struct string str;
-
-  assert( tk->tk == TK_UPVALUE );
-  tk_move(tk);
-  EXPECT(TK_VARIABLE);
-  strbuf_move(&(tk->lexeme),&str);
-  var_idx=program_const_str(em->prg,&str,1);
-  tk_move(tk);
-  CALLE(parse_expr(p,em));
-  emit1(em,VM_UPVALUE_SET,var_idx);
-  CONSUME(TK_RSTMT);
-
-  /* Start to parsing the body */
-  CALLE(parse_scope(p,em,0,0));
-
-  /* Generate deletion for this scope */
-  emit1(em,VM_UPVALUE_DEL,var_idx);
-
-  CONSUME(TK_ENDUPVALUE);
-  CONSUME(TK_RSTMT);
-  return 0;
-}
-
 /* Loop control statements */
 static int
 parse_break( struct parser* p , struct emitter* em ) {
@@ -2241,7 +2213,6 @@ parse_scope( struct parser* p , struct emitter* em ,
           HANDLE_CASE(CALL,call)
           HANDLE_CASE(MACRO,macro)
           HANDLE_CASE(BLOCK,block)
-          HANDLE_CASE(UPVALUE,upvalue)
           HANDLE_CASE(WITH,with)
           case TK_INCLUDE:
             if( is_in_main(p) )

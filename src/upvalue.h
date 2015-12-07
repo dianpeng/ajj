@@ -88,8 +88,7 @@ upvalue_table_del( struct ajj* a,
 int
 upvalue_table_del_c( struct ajj* a,
     struct upvalue_table* ,
-    const char* key,
-    struct upvalue* );
+    const char* key );
 
 struct upvalue*
 upvalue_table_find( struct upvalue_table* ,

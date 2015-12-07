@@ -25,12 +25,11 @@ upvalue_table_add( struct ajj* a,
 struct upvalue*
 upvalue_table_add_c( struct ajj* a,
     struct upvalue_table* tb,
-    const char* key,
-    struct upvalue* val ) {
+    const char* key) {
   struct upvalue* ret = slab_malloc(&(a->upval_slab));
   struct upvalue** slot;
   if( (slot = map_find_c(&(tb->d),key)) == NULL ) {
-    CHECK( !map_insert_c(&(tb->d),key,&val) );
+    CHECK( !map_insert_c(&(tb->d),key,&ret) );
   } else {
     ret->prev = *slot;
     (*slot) = ret;
@@ -48,7 +47,7 @@ int upvalue_table_del( struct ajj* a ,
       struct upvalue* uv = *slot;
       if( uv->prev == NULL ) {
         /* this is the end of the chain */
-        CHECK( !map_remove(&(cur_tb->d),key) );
+        CHECK( !map_remove(&(cur_tb->d),key,NULL) );
       } else {
         *slot = uv->prev;
       }
@@ -70,7 +69,7 @@ int upvalue_table_del_c( struct ajj* a,
       struct upvalue* uv = *slot;
       if( uv->prev == NULL ) {
         /* this is the end of the chain */
-        CHECK( !map_remove_c(&(cur_tb->d),key) );
+        CHECK( !map_remove_c(&(cur_tb->d),key,NULL) );
       } else {
         *slot = uv->prev;
       }
@@ -117,7 +116,7 @@ upvalue_table_destroy_one( struct ajj* a ,
   int itr;
 
   itr = map_iter_start(&(m->d));
-  while( map_iter_has_next(&(m->d),itr) ) {
+  while( map_iter_has(&(m->d),itr) ) {
     struct map_pair p = map_iter_deref(&(m->d),itr);
     struct upvalue* uv = *(struct upvalue**)p.val;
     while( uv ) {

@@ -794,21 +794,6 @@ void test_move() {
 }
 
 static
-void test_upvalue() {
-  {
-    const char* src = "{% upvalue my_key my_value.item(1)+2 %}" \
-                      "{{ my_key }}" \
-                      "{% endupvalue %}";
-    struct ajj* a = ajj_create();
-    struct ajj_object* obj = parse(a,"Whoha",src,0);
-    const struct program* prg;
-    assert(obj);
-    prg = ajj_object_jinja_main(obj);
-    assert(prg);
-  }
-}
-
-static
 void test_constexpr() {
  
   {
@@ -851,7 +836,6 @@ int main() {
   test_include();
   test_import();
   test_extends();
-  test_upvalue();
   test_move();
   test_constexpr();
   return 0;
