@@ -4,6 +4,7 @@
 struct string THIS = CONST_STRING("__this__");
 struct string ARGNUM = CONST_STRING("__argnum__");
 struct string MAIN = CONST_STRING("__main__");
+struct string FUNC = CONST_STRING("__func__");
 struct string CALLER = CONST_STRING("__caller__");
 struct string SUPER  = CONST_STRING("super");
 struct string SELF   = CONST_STRING("self");
@@ -57,25 +58,25 @@ void dump_program_ctable( const struct program* prg , FILE* output ) {
 #define DO0(N) \
   do { \
     char buf[64]; \
-    tk_get_code_snippet(src,prg->spos[cnt],buf,64); \
-    fprintf(output,"%d %zu:%d(... %s ...) %s\n",cnt+1,i-1,prg->spos[cnt],buf,N); \
+    tk_get_code_snippet(src,sref,buf,64); \
+    fprintf(output,"%d %zu:%d(... %s ...) %s\n",cnt+1,i-1,sref,buf,N); \
   } while(0); break
 
 #define DO1(N) \
   do { \
     char buf[64]; \
-    tk_get_code_snippet(src,prg->spos[cnt],buf,64); \
+    tk_get_code_snippet(src,sref,buf,64); \
     a1 = bc_1st_arg(c1);\
-    fprintf(output,"%d %zu:%d(... %s ...) %s %d\n",cnt+1,i-1,prg->spos[cnt],buf,N,a1); \
+    fprintf(output,"%d %zu:%d(... %s ...) %s %d\n",cnt+1,i-1,sref,buf,N,a1); \
   } while(0); break
 
 #define DO2(N) \
  do { \
    char buf[64]; \
-   tk_get_code_snippet(src,prg->spos[cnt],buf,64); \
+   tk_get_code_snippet(src,sref,buf,64); \
    a1 = bc_1st_arg(c1);\
    a2 = bc_2nd_arg(prg,&i); \
-   fprintf(output,"%d %zu:%d(... %s ...) %s %d %d\n",cnt+1,i-2,prg->spos[cnt],buf,N,a1,a2); \
+   fprintf(output,"%d %zu:%d(... %s ...) %s %d %d\n",cnt+1,i-2,sref,buf,N,a1,a2); \
  } while(0); break
 
 #define DO(A,B,C) case A: DO##B(C);
@@ -87,6 +88,7 @@ void dump_program( const char* src , const struct program* prg , FILE* output ) 
   dump_program_ctable(prg,output);
   fprintf(output,"Code=======================================\n\n");
   while(1) {
+    int sref = prg->spos[i];
     int c1 = bc_next(prg,&i);
     instructions instr = bc_instr(c1);
     if( instr == VM_HALT ) break;
@@ -98,5 +100,4 @@ void dump_program( const char* src , const struct program* prg , FILE* output ) 
     }
     ++cnt;
   }
-  assert( cnt == prg->spos_len );
 }

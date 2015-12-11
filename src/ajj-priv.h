@@ -7,7 +7,7 @@
 #include "object.h"
 #include "upvalue.h"
 
-#define ERROR_BUFFER_SIZE 1024
+#define ERROR_BUFFER_SIZE 1024*4 /* 4kb for error buffer, already very large */
 #define UPVALUE_SLAB_SIZE 32
 #define FUNCTION_SLAB_TABLE_SIZE 32
 #define OBJECT_SLAB_SIZE 128
@@ -81,6 +81,6 @@ void ajj_clear_template( struct ajj* );
 /* internal utility functions */
 char* ajj_aux_load_file( struct ajj* a, const char* , size_t* );
 
-char* ajj_render( struct ajj* a , const char* , size_t* );
+int ajj_render( struct ajj* a , const char* , const char*  , FILE* );
 
 #endif /* _AJJ_PRIV_H_ */

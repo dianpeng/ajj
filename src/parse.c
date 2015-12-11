@@ -33,13 +33,22 @@
     } \
   } while(0)
 
+#define ENTER_SCOPE() \
+  do { \
+    if( PTOP()->in_loop ) { \
+      PTOP()->lctrl->cur_enter++; \
+    } \
+    emit0(em,VM_ENTER); \
+  } while(0)
+
+
 #define emit0(em,BC) emitter_emit0(em,p->tk.pos,BC)
 #define emit1(em,BC,A1) emitter_emit1(em,p->tk.pos,BC,A1)
 #define emit2(em,BC,A1,A2) emitter_emit2(em,p->tk.pos,BC,A1,A2)
-#define emit0_at(em,P,BC) emitter_emit0_at(em,P,BC)
-#define emit1_at(em,P,BC,A1) emitter_emit1_at(em,P,BC,A1)
-#define emit2_at(em,P,BC,A1,A2) emitter_emit2_at(em,P,BC,A1,A2)
-#define emit_put(em,T) emitter_put(em,p->tk.pos,T)
+#define emit0_at(em,P,BC) emitter_emit0_at(em,P,p->tk.pos,BC)
+#define emit1_at(em,P,BC,A1) emitter_emit1_at(em,P,p->tk.pos,BC,A1)
+#define emit2_at(em,P,BC,A1,A2) emitter_emit2_at(em,P,p->tk.pos,BC,A1,A2)
+#define emit_put(em,T) emitter_put(em,T)
 
 /* Lexical Scope
  * Lexical scope cannot cross function boundary. Once a new function
@@ -243,15 +252,6 @@ struct lex_scope* lex_scope_exit( struct parser*  p ) {
   }
   return PTOP();
 }
-
-#define ENTER_SCOPE() \
-  do { \
-    if( PTOP()->in_loop ) { \
-      PTOP()->lctrl->cur_enter++; \
-    } \
-    emit0(em,VM_ENTER); \
-  } while(0)
-
 /* This function is not an actual set but a set if not existed.
  * Because most of the local symbol definition has such semantic.
  * This function returns -2 represent error,
@@ -1690,7 +1690,6 @@ int parse_for( struct parser* p , struct emitter* em ) {
   tk_move(tk);
   /* We don't support tuple in our code. So we don't really have unpacked
    * semantic here. We support following semantic :
-   * value
    * key
    * _,value
    * key,_

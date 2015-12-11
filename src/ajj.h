@@ -34,10 +34,11 @@ typedef int (*ajj_method)( struct ajj* , /* execution context */
     size_t ,
     struct ajj_value* );
 
-typedef void* (*ajj_class_ctor)( struct ajj* ,
+typedef int (*ajj_class_ctor)( struct ajj* ,
     void* ,
     struct ajj_value*,
-    size_t );
+    size_t ,
+    void** ret );
 
 typedef void (*ajj_class_dtor)( struct ajj* ,
     void* udata , void* object );

@@ -29,6 +29,7 @@ extern struct string THIS;
 extern struct string ARGNUM;
 extern struct string MAIN;
 extern struct string CALLER;
+extern struct string FUNC;
 extern struct string SUPER;
 extern struct string SELF;
 extern struct string ITER;
@@ -49,6 +50,16 @@ extern struct string ITER;
  * --------------------------
  * |OP| par 1   |   par 2   |  Instruction carries 2 parameters
  * --------------------------
+ *
+ * NOTES:
+ * This design is a *horrible* design, but I have made it here, so I don't want
+ * to refactory it until a major rewrite is needed. The lesson I learned here
+ * is to AVOID variant length instruction as much as possible. It is horrible
+ * since it is not self indexed and because the decode order is always forward,
+ * you are not even sure that where to find an arbitary entry for an instruction.
+ * Which is extreamly painful to do patch ! A fixed length instruction will save
+ * us much efforts when we want to locate a random instruction or go forward
+ * orbackward
  */
 
 #define VM_INSTRUCTIONS(X) \
@@ -137,28 +148,17 @@ int bc_get_argument_num( instructions );
 struct emitter {
   struct program* prg;
   size_t cd_cap; /* capacity for current code */
-  size_t spos_cap;/* capacity for source code ref */
 };
 
 static
-void emitter_reserve_code_page( struct emitter* em , size_t cap ) {
-  if( em->prg->codes && em->cd_cap != 0 ) {
-    em->prg->codes = realloc(em->prg->codes,sizeof(int)*cap);
-    em->cd_cap = cap;
-  } else {
-    em->prg->codes = malloc(cap*sizeof(int));
-    em->cd_cap = cap;
-  }
-}
-
-static
-void emitter_reserve_spos( struct emitter* em , size_t cap ) {
-  if( em->prg->spos && em->spos_cap != 0 ) {
-    em->prg->spos = realloc(em->prg->spos,sizeof(int)*cap);
-    em->spos_cap = cap;
-  } else {
-    em->prg->spos = malloc(cap*sizeof(int));
-    em->spos_cap = cap;
+void emitter_ensure( struct emitter* em ) {
+  /* reserve size for 2 arrays */
+  if( em->cd_cap < em->prg->len + 2 ) {
+    size_t c = em->cd_cap;
+    em->prg->codes = mem_grow( em->prg->codes ,
+        sizeof(int),&c);
+    em->prg->spos = mem_grow(em->prg->spos,
+        sizeof(int),&(em->cd_cap));
   }
 }
 
@@ -166,58 +166,34 @@ static
 void emitter_init( struct emitter* em , struct program* prg ) {
   em->prg = prg;
   em->cd_cap = 0;
-  em->spos_cap= 0;
-  emitter_reserve_spos(em,MINIMUM_CODE_PAGE_SIZE);
-  emitter_reserve_code_page(em,MINIMUM_CODE_PAGE_SIZE);
-}
-
-static
-void emitter_ensure( struct emitter* em ) {
-  /* reserve size for 2 arrays */
-  if( em->cd_cap < em->prg->len + 2 ) {
-    emitter_reserve_code_page(em,2*em->cd_cap);
-  }
-  if( em->spos_cap == em->prg->spos_len ) {
-    emitter_reserve_spos(em,em->spos_cap*2);
-  }
+  emitter_ensure(em);
 }
 
 static
 void emitter_emit0( struct emitter* em , int spos , int bc ) {
   emitter_ensure(em);
-  /* push source code reference */
-  if(spos>=0) {
-    em->prg->spos[em->prg->spos_len] = spos;
-    ++em->prg->spos_len;
-  }
+  em->prg->spos[em->prg->len] = spos;
   assert(bc>=0 && bc< SIZE_OF_INSTRUCTIONS);
-  *((int*)(em->prg->codes)+em->prg->len) = (bc<<24);
-  ++(em->prg->len);
+  em->prg->codes[em->prg->len++] = BC_WRAP_INSTRUCTION0(bc);
 }
 
 static
 void emitter_emit1( struct emitter* em , int spos , int bc , int a1 ) {
   emitter_ensure(em);
-  /* push source code reference */
-  if(spos>=0) {
-    em->prg->spos[em->prg->spos_len] = spos;
-    ++em->prg->spos_len;
-  }
+  em->prg->spos[em->prg->len] = spos;
   assert(bc>=0 && bc< SIZE_OF_INSTRUCTIONS);
   assert( (a1&BC_1ST_MASK) == a1 );
-  *((int*)(em->prg->codes)+em->prg->len) = (bc<<24)|(a1);
-  ++(em->prg->len);
+  em->prg->codes[em->prg->len++] = BC_WRAP_INSTRUCTION1(bc,a1);
 }
 
 static
 void emitter_emit2( struct emitter* em , int spos , int bc , int a1 , int a2 ) {
   emitter_emit1(em,spos,bc,a1);
-  *((int*)(em->prg->codes)+em->prg->len) = a2;
-  ++(em->prg->len);
+  em->prg->codes[em->prg->len++] = a2;
 }
 
 static
-int emitter_put( struct emitter* em , int pos , int arg_sz ) {
+int emitter_put( struct emitter* em , int arg_sz ) {
   int ret;
   int add;
   assert( arg_sz == 0 || arg_sz == 1 || arg_sz == 2 );
@@ -225,33 +201,32 @@ int emitter_put( struct emitter* em , int pos , int arg_sz ) {
   add = (arg_sz == 0 || arg_sz == 1) ? 1 : 2;
   ret = em->prg->len;
   em->prg->len += add;
-  em->prg->spos[ em->prg->spos_len++ ] = pos;
   return ret;
 }
 
 static
-void emitter_emit0_at( struct emitter* em , int pos , int bc ) {
+void emitter_emit0_at( struct emitter* em , int pos , int spos , int bc ) {
   int save = em->prg->len;
   em->prg->len = pos;
-  emitter_emit0(em,-1,bc);
+  emitter_emit0(em,spos,bc);
   em->prg->len = save;
 }
 
 static
 void emitter_emit1_at( struct emitter* em , int pos ,
-    int bc , int a1 ) {
+    int spos , int bc , int a1 ) {
   int save = em->prg->len;
   em->prg->len = pos;
-  emitter_emit1(em,-1,bc,a1);
+  emitter_emit1(em,spos,bc,a1);
   em->prg->len = save;
 }
 
 static
-void emitter_emit2_at( struct emitter* em , int pos , int bc ,
-    int a1 , int a2 ) {
+void emitter_emit2_at( struct emitter* em , int pos ,
+    int spos , int bc , int a1 , int a2 ) {
   int save = em->prg->len;
   em->prg->len = pos;
-  emitter_emit2(em,-1,bc,a1,a2);
+  emitter_emit2(em,spos,bc,a1,a2);
   em->prg->len = save;
 }
 
@@ -265,9 +240,7 @@ int bc_next( const struct program* prg , size_t* pos ) {
   if( prg->len == *pos ) {
     return BC_WRAP_INSTRUCTION0(VM_HALT);
   } else {
-    int ret = *((int*)(prg->codes)+*pos);
-    ++*pos;
-    return ret;
+    return prg->codes[(*pos)++];
   }
 }
 
@@ -285,9 +258,7 @@ static
 int bc_2nd_arg( const struct program* prg , size_t* pos ) {
   int ret;
   assert( prg->len > *pos );
-  ret = *((int*)(prg->codes)+*pos);
-  ++*pos;
-  return ret;
+  return prg->codes[(*pos)++];
 }
 
 /* dump program into human readable format */

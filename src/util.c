@@ -1,9 +1,29 @@
 #include "util.h"
 
 struct string NULL_STRING = { NULL , 0 };
+struct string EMPTY_STRING = CONST_STRING("");
 struct string TRUE_STRING = CONST_STRING("true");
 struct string FALSE_STRING= CONST_STRING("false");
 struct string NONE_STRING = CONST_STRING("none");
+
+struct string
+string_concate( const struct string* l , const struct string* r ) {
+  struct strbuf sbuf;
+  strbuf_init_cap(&sbuf,l->len+r->len+1);
+  strbuf_append(&sbuf,l->str,l->len);
+  strbuf_append(&sbuf,r->str,r->len);
+  return strbuf_tostring(&sbuf);
+}
+
+struct string
+string_multiply( const struct string*  l , int times ) {
+  struct strbuf sbuf;
+  strbuf_init_cap(&sbuf,l->len*times + 1);
+  while(times--) {
+    strbuf_append(&sbuf,l->str,l->len);
+  }
+  return strbuf_tostring(&sbuf);
+}
 
 /* Yet another open addressing hash table */
 static
@@ -28,7 +48,7 @@ struct map_entry* map_insert_entry_c( struct map* d ,
   e = d->entry + idx;
 
   if( !e->used ) {
-    return e;
+    return insert ? e : NULL;
   } else {
     struct map_entry* ret = e->del ? e : NULL;
     struct map_entry* ne = e;
@@ -123,8 +143,7 @@ void map_rehash( struct map* d ) {
   }
 
   /* free old memory if we have to */
-  if(d->entry)
-    free(d->entry);
+  free(d->entry);
 
   temp_d.len = d->len;
   *d = temp_d;
@@ -376,5 +395,10 @@ void* mem_grow( void* ptr , size_t obj_sz,
    * filled up with data. We just copy garbage bytes and
    * it is no harm */
   *old_cap *= 2;
+
+  if( *old_cap == 0 )
+    *old_cap = INITIAL_MEMORY_SIZE;
+  else if( *old_cap > BOUNDED_MEMORY_SIZE )
+    *old_cap = BOUNDED_MEMORY_SIZE;
   return realloc(ptr,obj_sz*(*old_cap));
 }

@@ -47,6 +47,7 @@ void c_closure_init( struct c_closure* cc ) {
 enum {
   C_FUNCTION,
   C_METHOD,
+  OBJECT_CTOR,
   JJ_BLOCK,
   JJ_MACRO,
   JJ_MAIN
@@ -57,6 +58,7 @@ const char* function_get_type_name( int tp ) {
   switch(tp) {
     case C_FUNCTION: return "c-function";
     case C_METHOD: return "c-method";
+    case OBJECT_CTOR: return "object-ctor";
     case JJ_BLOCK: return "jinja-block";
     case JJ_MACRO: return "jinja-macro";
     case JJ_MAIN: return "jinja-main";
@@ -64,11 +66,13 @@ const char* function_get_type_name( int tp ) {
   }
 }
 
+struct func_table;
 struct function {
   union {
     struct c_closure c_fn; /* C function */
     ajj_method c_mt; /* C method */
     struct program jj_fn; /* JJ_BLOCK/JJ_MACRO */
+    struct func_table* obj_ctor; /* Object's constructor function */
   } f;
   struct string name;
   int tp;
@@ -76,14 +80,16 @@ struct function {
 
 #define IS_CFUNCTION(f) ((f)->tp == C_FUNCTION)
 #define IS_CMETHOD(f) ((f)->tp == C_METHOD)
+#define IS_OBJECTCTOR(f) ((f)->tp == OBJECT_CTOR)
 #define IS_JJBLOCK(f) ((f)->tp == JJ_BLOCK)
 #define IS_JJMACRO(f) ((f)->tp == JJ_MACRO)
 #define IS_JJMAIN(f) ((f)->tp == JJ_MAIN)
 #define IS_JINJA(f) ((f)->tp == JJ_BLOCK || (f)->tp == JJ_MACRO || (f)->tp == JJ_MAIN)
-#define IS_C(f) (!IS_JINJA(f))
+#define IS_C(f) (IS_CFUNCTION(f) || IS_CMETHOD(f))
 #define GET_CCLOSURE(F) (&((F)->f.c_fn))
 #define GET_CMETHOD(F) (&((F)->f.c_mt))
 #define GET_JINJAFUNC(F) (&((F)->f.jj_fn))
+#define GET_OBJECTCTOR(F) ((F)->f.obj_ctor)
 
 struct func_table {
   struct function func_buf[ AJJ_FUNC_LOCAL_BUF_SIZE ];
@@ -291,10 +297,9 @@ struct function* func_table_add_func( struct func_table* tb ) {
      nf = malloc( sizeof(struct function)*(tb->func_cap)*2 );
      memcpy(nf,tb->func_tb,tb->func_len*sizeof(struct function));
    } else {
-     nf = realloc(tb->func_tb,sizeof(struct function)*(tb->func_cap)*2);
+     nf = mem_grow(tb->func_tb,sizeof(struct function),&(tb->func_cap));
    }
    tb->func_tb = nf;
-   tb->func_cap *= 2;
   }
   return tb->func_tb + (tb->func_len++);
 }
@@ -472,14 +477,22 @@ ajj_object_create_jinja( struct ajj* a , const char* name ,
     const char* src , int own );
 
 static
-const struct program*
-ajj_object_jinja_main( const struct ajj_object* obj ) {
-  struct function* f;
+const struct function*
+ajj_object_jinja_main_func( const struct ajj_object* obj ) {
+  const struct function* f;
   assert(obj->tp == AJJ_VALUE_JINJA);
   if( (f=func_table_find_func(obj->val.obj.fn_tb,&MAIN)) ) {
     assert(IS_JINJA(f));
-    return &(f->f.jj_fn);
+    return f;
   }
+  return NULL;
+}
+
+static
+const struct program*
+ajj_object_jinja_main( const struct ajj_object* obj ) {
+  const struct function* f = ajj_object_jinja_main_func(obj);
+  if(f) return &(f->f.jj_fn);
   return NULL;
 }
 

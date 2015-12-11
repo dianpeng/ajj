@@ -15,10 +15,9 @@ struct gc_scope;
  * by an object's function table objects. */
 
 struct program {
-  void* codes;
-  size_t len;
+  int* codes;
   int* spos;
-  size_t spos_len;
+  size_t len;
 
   struct string* str_tbl;
   size_t str_len;
@@ -57,14 +56,15 @@ struct func_frame {
   int ebp; /* EBP register */
   int esp; /* ESP register */
   size_t pc ; /* Program counter register */
+  size_t ppc; /* Previous PC */
 
   struct string name; /* function name , a pointer that just points to the
                        * name inside of entry */
 
   int par_cnt : 16 ;  /* parameter count when calling this function */
 
-  int method  : 1;    /* whether this is a method call, if it is a method call,
-                       * it means this call has a corresponding object */
+  struct ajj_object* obj; /* if it is an object call, then the object pointer
+                           * to the corresponding caller object */
 };
 
 
@@ -75,9 +75,9 @@ struct func_frame {
  * of the jinja template should go to. */
 
 struct runtime {
-  struct ajj_object* cur_tmpl;   /* current jinja template */
+  struct ajj_object* cur_obj; /* current calling object */
   struct func_frame call_stk[ AJJ_MAX_CALL_STACK ];
-  size_t cur_call_stk; /* Current stk position */
+  int cur_call_stk; /* Current stk position */
   struct ajj_value val_stk[AJJ_MAX_VALUE_STACK_SIZE]; /* current value stack size */
   struct gc_scope* cur_gc; /* current gc scope */
   FILE* output;
@@ -86,6 +86,7 @@ struct runtime {
 static inline
 void program_init( struct program* prg ) {
   prg->codes = NULL;
+  prg->spos = NULL;
   prg->len = 0;
 
   prg->str_len = 0;
@@ -97,8 +98,6 @@ void program_init( struct program* prg ) {
   prg->num_tbl = malloc(sizeof(double)*AJJ_LOCAL_CONSTANT_SIZE);
 
   prg->par_size =0;
-  prg->spos = NULL;
-  prg->spos_len = 0;
 }
 
 void program_destroy( struct program* prg );
@@ -163,18 +162,8 @@ int program_const_num( struct program* prg , double num ) {
  * Interfaces
  * ===========================================*/
 
-int vm_run_func( struct ajj* ,
-    struct ajj_object* tp,
-    const struct string* name,
-    struct ajj_value*,
-    size_t len,
-    struct ajj_value* output );
-
-int vm_run_jj( struct ajj* a,
-    struct ajj_object* tp ,
-    struct ajj_value*,
-    size_t len,
-    struct ajj_value* output );
+int vm_run_jinja( struct ajj* a, struct ajj_object* jj,
+    FILE* output );
 
 #endif /* _VM_H_ */
 

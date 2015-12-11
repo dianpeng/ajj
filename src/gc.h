@@ -5,7 +5,7 @@
 
 /* Garbage Collection
  * A key feature for our implementation is that we don't have a *GOOD*
- * gc implementation. Why that is a feature ? Because we don't support
+ * gc implementation. Why that is a feature ? Because we don't pay for
  * a real GC. In CPython , it uses reference counting to implement the
  * GC with a check routine to ensure reference counting works correctly.
  * In many other language a real GC is implemented, mark and sweep. In
@@ -50,6 +50,7 @@
  * count but we don't pay cost to invoke some mark and sweep or cycle
  * reference detection to "FIX" the buffer thing. But this thing only works
  * in jinja since it has a very strict variable assignment rules.
+ * So happy to not spend 1000 lines of code to craft a mark-sweep algorithm :)
  */
 
 struct ajj;

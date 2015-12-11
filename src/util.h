@@ -23,6 +23,9 @@
 
 #define ARRAY_SIZE(X) (sizeof(X)/sizeof((X)[0]))
 
+#define INITIAL_MEMORY_SIZE 512
+#define BOUNDED_MEMORY_SIZE 1024*64
+
 #ifndef NDEBUG
 #define CHECK assert
 #else
@@ -73,6 +76,7 @@ struct string {
 };
 
 extern struct string NULL_STRING;
+extern struct string EMPTY_STRING; /* contains a "" string , good for display */
 extern struct string TRUE_STRING;
 extern struct string FALSE_STRING;
 extern struct string NONE_STRING;
@@ -129,7 +133,7 @@ int string_cmp( const struct string* l , const struct string* r ) {
 
 static
 void string_destroy( struct string* str ) {
-  if( str->str ) free((void*)str->str);
+  free((void*)str->str);
   *str = NULL_STRING;
 }
 
@@ -137,6 +141,12 @@ static
 int string_null( const struct string* str ) {
   return str->str == NULL || str->len == 0;
 }
+
+struct string
+string_concate( const struct string* l , const struct string* r );
+
+struct string
+string_multiply( const struct string* l , int times );
 
 
 /* ====================================================
@@ -169,6 +179,14 @@ void strbuf_init( struct strbuf* buf ) {
 }
 
 static
+void strbuf_init_cap( struct strbuf* buf , size_t cap ) {
+  buf->str = NULL;
+  buf->len = 0;
+  assert(cap>0);
+  strbuf_reserve(buf,cap);
+}
+
+static
 void strbuf_push( struct strbuf* buf , char c ) {
   if( buf->cap == 0 || buf->cap == buf->len+1 ) {
     size_t c = buf->cap == 0 ? STRBUF_INIT_SIZE : buf->cap*2;
@@ -193,10 +211,8 @@ void strbuf_append( struct strbuf* buf , const char* str , size_t len ) {
 
 static
 void strbuf_destroy( struct strbuf* buf ) {
-  if( buf->str ) {
-    free(buf->str);
-    buf->cap = buf->len = 0;
-  }
+  free(buf->str);
+  buf->cap = buf->len = 0;
 }
 
 static

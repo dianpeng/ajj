@@ -37,6 +37,37 @@ upvalue_table_add_c( struct ajj* a,
   return ret;
 }
 
+struct upvalue*
+upvalue_table_overwrite( struct ajj* a ,
+    struct upvalue_table* tb,
+    const struct string* key ,
+    int own ) {
+  struct upvalue** slot;
+  if( (slot = map_find(&(tb->d),key)) == NULL ) {
+    struct upvalue* ret = slab_malloc(&(a->upval_slab));
+    CHECK( !map_insert(&(tb->d),key,own,&ret));
+    return ret;
+  } else {
+    assert(*slot);
+    return *slot;
+  }
+}
+
+struct upvalue*
+upvalue_table_overwrite_c( struct ajj* a ,
+    struct upvalue_table* tb,
+    const char* key ) {
+  struct upvalue** slot;
+  if( (slot = map_find_c(&(tb->d),key)) == NULL ) {
+    struct upvalue* ret = slab_malloc(&(a->upval_slab));
+    CHECK( !map_insert_c(&(tb->d),key,&ret));
+    return ret;
+  } else {
+    assert(*slot);
+    return *slot;
+  }
+}
+
 int upvalue_table_del( struct ajj* a ,
     struct upvalue_table* tb,
     const struct string* key ) {

@@ -136,7 +136,25 @@ void test_for() {
   }
 #endif
 
+  {
+    struct ajj* a = ajj_create();
+    const char* src = "ABCDEF {{ yyy }} {{ __func__ }} {{ __argnum__*2 if __argnum__ > 0 else 1989 }} BCDEF\n" \
+                       "{% set var='abc123' %}\n" \
+                       "{% if __argnum__ != 0 %} __argnum__ : {{ __argnum__ }} \n" \
+                       "{% elif var - 0 %} __argnum__ : TRUE {{ __argnum__ }} \n" \
+                       "{% else %} __argnum__ : {{ False }} False \n" \
+                       "{% endif %}\n";
+    struct ajj_object* jinja;
+    const struct program* prg;
+    jinja = parse(a,"Hello World",src,0);
+    assert(jinja);
+    prg = ajj_object_jinja_main(jinja);
+    dump_program(src,prg,stdout);
+    assert( !optimize(a,jinja) );
+    dump_program(src,prg,stdout);
+  }
 
+#if 0
   {
     /* FOR LOOP WITH CONTROLS */
     const char* src = "{% for a,b in my_dict %}\n" \
@@ -157,7 +175,6 @@ void test_for() {
 
   }
 
-#if 0
   {
     /* FOR LOOP WITH CONTROLS */
     const char* src = "{% for _,_ in my_dict %}\n" \

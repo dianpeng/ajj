@@ -1,6 +1,8 @@
 #include "ajj-priv.h"
 #include "util.h"
 #include "lex.h"
+#include "parse.h"
+
 #include <stdlib.h>
 #include <assert.h>
 #include <errno.h>
@@ -241,4 +243,40 @@ void ajj_object_print( struct object* obj , FILE* output ,
 void ajj_value_print( const struct ajj_value* val ,
     FILE* output, int opt ) {
   return ajj_value_print_priv(val,output,opt,0);
+}
+
+char* ajj_aux_load_file( struct ajj* a , const char* fname ,
+    size_t* size) {
+  FILE* f = fopen(fname,"r");
+  long int start;
+  long int end;
+  size_t len;
+  size_t rsz;
+  char* r;
+
+  if(!f) return NULL;
+  start = ftell(f);
+  fseek(f,0,SEEK_END); /* not portable for SEEK_END can be
+                        * meaningless */
+  end = ftell(f);
+  fseek(f,0,SEEK_SET);
+  len = (size_t)(end-start);
+  r = malloc(len+1);
+  rsz = fread(r,1,len,f);
+  assert( rsz <= len );
+  r[rsz] = 0;
+  *size = rsz;
+  fclose(f);
+  return r;
+}
+
+int ajj_render( struct ajj* a , const char* src ,
+    const char* key , FILE* output ) {
+  struct ajj_object* obj = parse(a,key,src,0);
+  if(!obj) return -1;
+#if 0
+  return vm_run_jinja(a,obj,output);
+#else
+  return -1;
+#endif
 }

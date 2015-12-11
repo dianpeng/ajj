@@ -12,15 +12,9 @@ void list_reserve( struct list* l ) {
     mem = malloc(sizeof(struct ajj_value)*2*l->cap);
     memcpy(mem,l->entry,l->len*sizeof(struct ajj_value));
   } else {
-    /* use realloc */
-    mem = realloc(l->entry,
-        sizeof(struct ajj_value)*2*l->cap);
+    mem = mem_grow(l->entry,sizeof(struct ajj_value),&(l->cap));
   }
-
-  if( l->lbuf != l->entry )
-    free(l->entry);
   l->entry = mem;
-  l->cap *= 2;
 }
 
 void list_push( struct list* l , const struct ajj_value* val ) {
@@ -116,4 +110,17 @@ ajj_value_delete_string( struct ajj* a, struct ajj_value* str ) {
   slab_free(&(a->obj_slab),str->value.object);
   /* reset value */
   str->type = AJJ_VALUE_NOT_USE;
+}
+
+struct ajj_object*
+ajj_object_move( struct gc_scope* scp , struct ajj_object* obj ) {
+  assert(obj->scp);
+
+  /* only do move when we fonud out that the target scope has smaller
+   * scp_id value since this means we have less lifecycle */
+  if( obj->scp->scp_id > scp->scp_id ) {
+    LREMOVE(obj);
+    LINSERT(obj,&(scp->gc_tail));
+    obj->scp = scp;
+  }
 }

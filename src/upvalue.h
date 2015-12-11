@@ -26,15 +26,13 @@
 enum {
   UPVALUE_VALUE,
   UPVALUE_FUNCTION,
-  UPVALUE_OBJECT
 };
 
 struct upvalue {
   struct upvalue* prev;      /* previous upvalue */
   union {
     struct ajj_value val;    /* value , could contain whatever */
-    struct c_closure func;   /* global function */
-    struct func_table* obj;  /* user registered object */
+    struct function gfunc;   /* function, global executable entry */
   } gut;
   int type;
 };
@@ -76,6 +74,17 @@ upvalue_table_add( struct ajj* a ,
 
 struct upvalue*
 upvalue_table_add_c( struct ajj* a,
+    struct upvalue_table* ,
+    const char* key );
+
+struct upvalue*
+upvalue_table_overwrite( struct ajj* a,
+    struct upvalue_table* ,
+    const struct string* ,
+    int own );
+
+struct upvalue*
+upvalue_table_overwrite_c( struct ajj* a,
     struct upvalue_table* ,
     const char* key );
 
