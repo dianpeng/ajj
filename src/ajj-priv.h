@@ -37,6 +37,7 @@ struct ajj {
    * start executing the code */
   struct runtime* rt;
   struct upvalue_table* upval_tb; /* upvalue table */
+  struct upvalue_table builtins;  /* builtin table */
 };
 
 static

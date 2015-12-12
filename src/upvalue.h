@@ -42,16 +42,21 @@ struct upvalue_table {
   struct upvalue_table* prev; /* previous table */
 };
 
+static
+struct upvalue*
+upvalue_table_init( struct upvalue_table* ret , struct upvalue_table* p ) {
+  map_create(&(ret->d),sizeof(struct upvalue*),
+      UPVALUE_DEFAULT_BUF_SIZE);
+  ret->prev = p;
+  return ut;
+}
 
 /* Global varialbes table. Wrapper around map */
 static
 struct upvalue_table*
 upvalue_table_create( struct upvalue_table* p ) {
   struct upvalue_table* ret = malloc(sizeof(*p));
-  map_create(&(ret->d),sizeof(struct upvalue*),
-      UPVALUE_DEFAULT_BUF_SIZE );
-  ret->prev = p;
-  return ret;
+  return upvalue_table_init(ret,p);
 }
 
 struct upvalue_table*
@@ -63,7 +68,8 @@ upvalue_table_destroy_one( struct ajj* a,
  * itself. */
 void
 upvalue_table_destroy( struct ajj* a,
-    struct upvalue_table* m );
+    struct upvalue_table* m ,
+    struct upvalue_table* until );
 
 /* add a upvalue into the upvalue table chain */
 struct upvalue*

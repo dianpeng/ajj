@@ -6,6 +6,7 @@
 
 struct gc_scope;
 struct ajj;
+struct object;
 
 extern struct string MAIN; /* For __main__ */
 
@@ -30,8 +31,6 @@ extern struct string MAIN; /* For __main__ */
 #define AJJ_IS_REFERENCE(V) (!(AJJ_IS_PRIMITIVE(V)))
 
 
-#define LIST_LOCAL_BUF_SIZE 4
-#define DICT_DEFAULT_BUF_SIZE 4
 
 struct c_closure {
   void* udata; /* user data */
@@ -111,138 +110,9 @@ struct object {
 
   /* Field only used when the object is a JINJA object */
   const char* src;     /* source file */
+
+  struct ajj_slot* slot;
 };
-
-
-/* ======================================
- * List
- * ====================================*/
-
-struct list {
-  struct ajj_value lbuf[LIST_LOCAL_BUF_SIZE];
-  struct ajj_value* entry;
-  size_t cap;
-  size_t len;
-};
-
-static
-void list_create( struct list* l ) {
-  l->entry = l->lbuf;
-  l->cap = LIST_LOCAL_BUF_SIZE;
-  l->len = 0;
-}
-
-void list_destroy(struct list* );
-
-void list_push( struct list* , const struct ajj_value* val );
-
-static
-size_t list_size( struct list* l ) {
-  return l->len;
-}
-static
-struct ajj_value*
-list_index( const struct list* l , size_t i ) {
-  assert(i < l->len);
-  return l->entry + i;
-}
-void list_clear();
-
-/* iterator for list */
-static
-int list_iter_start( const struct list* l ) {
-  UNUSE_ARG(l);
-  return 0;
-}
-static
-int list_iter_has( const struct list* l , int itr ) {
-  return itr < l->len;
-}
-static
-int list_iter_move( const struct list* l , int itr ) {
-  return itr+1;
-}
-static
-struct ajj_value*
-list_iter_deref( const struct list* l , int itr ) {
-  return list_index(l,itr);
-}
-
-/* =====================================
- * Dict
- * just wrapper around map structure
- * ===================================*/
-static
-void dict_create( struct map* d ) {
-  map_create(d,sizeof(struct ajj_value),DICT_DEFAULT_BUF_SIZE);
-}
-
-static
-void dict_clear( struct map* d ) {
-  map_clear(d);
-}
-
-static
-void dict_destroy( struct map* d ) {
-  map_destroy(d);
-}
-
-static
-int dict_insert( struct map* d , const struct string* k,
-    int own, const struct ajj_value* val ) {
-  return map_insert(d,k,own,val);
-}
-
-static
-int dict_insert_c( struct map* d , const char* k,
-    const struct ajj_value* val ) {
-  return map_insert_c(d,k,val);
-}
-
-static
-int dict_remove( struct map* d , const struct string* k,
-    void* val ) {
-  return map_remove(d,k,val);
-}
-
-static
-int dict_remove_c( struct map* d , const char* k, void* val ) {
-  return map_remove_c(d,k,val);
-}
-
-static
-struct ajj_value*
-dict_find( struct map* d , const struct string* k ) {
-  return map_find(d,k);
-}
-
-static
-struct ajj_value*
-dict_find_c( struct map* d , const char* k ) {
-  return map_find_c(d,k);
-}
-
-/* iterator wrapper */
-static
-int dict_iter_start( const struct map* d ) {
-  return map_iter_start(d);
-}
-
-static
-int dict_iter_move( const struct map* d , int itr ) {
-  return map_iter_move(d,itr);
-}
-
-static
-int dict_iter_has( const struct map* d , int itr ) {
-  return map_iter_has(d,itr);
-}
-
-static
-struct map_pair
-dict_iter_deref( struct map* d , int itr ) {
-  return map_iter_deref(d,itr);
-}
 
 /* ======================================
  * AJJ_OBJECT
@@ -251,17 +121,10 @@ struct ajj_object {
   struct ajj_object* prev;
   struct ajj_object* next;
   struct ajj_object* parent[AJJ_EXTENDS_MAX_SIZE]; /* for extends */
-  unsigned short parent_len;
-  unsigned short tp; /* Type for this object. This type CAN be different
-                      * with the type in its holder ajj_value. A AJJ_VALUE_STRING
-                      * could internally represent as 1. AJJ_VALUE_STRING (heap)
-                      * 2. AJJ_VALUE_CONST_STRING (reference).
-                      * Also this tp can be AJJ_VALUE_JINJA, which represents a
-                      * jinja template, but its holder's type is AJJ_VALUE_OBJECT. */
+  size_t parent_len;
+  int tp;
   union {
     struct string str; /* string */
-    struct map  d;     /* dictionary */
-    struct list l;     /* list */
     struct object obj; /* object */
   } val;
   struct gc_scope* scp;
@@ -269,7 +132,6 @@ struct ajj_object {
 
 #define IS_OBJECT_OWNED(obj) (((obj)->scp) == NULL)
 #define IS_VALUE_OWNED(val) ((AJJ_IS_PRIMITIVE(val))||((val)->value.object->scp!=NULL))
-
 
 /* This function will initialize an existed function table */
 static
@@ -420,49 +282,22 @@ ajj_object_create_const_string( struct ajj*a , struct gc_scope* scp,
 
 static
 struct ajj_object*
-ajj_object_dict( struct ajj_object* obj ) {
-  dict_create(&(obj->val.d));
-  obj->tp = AJJ_VALUE_DICT;
-  return obj;
-}
-
-static
-struct ajj_object*
-ajj_object_create_dict( struct ajj* a, struct gc_scope* scp ) {
-  return ajj_object_dict(ajj_object_create(a,scp));
-}
-
-static
-struct ajj_object*
-ajj_object_list( struct ajj_object* obj ) {
-  list_create(&(obj->val.l));
-  obj->tp = AJJ_VALUE_LIST;
-  return obj;
-}
-
-static
-struct ajj_object*
-ajj_object_create_list( struct ajj* a, struct gc_scope* scp ) {
-  return ajj_object_list(ajj_object_create(a,scp));
-}
-
-static
-struct ajj_object*
-ajj_object_obj( struct ajj_object* obj , struct func_table* fn_tb, void* data ) {
+ajj_object_obj( struct ajj_object* obj , struct func_table* fn_tb, void* data , int tp ) {
   struct object* o = &(obj->val.obj);
   dict_create(&(o->prop));
   o->fn_tb = fn_tb;
   o->data = data;
   o->src = NULL;
-  obj->tp = AJJ_VALUE_OBJECT;
+  o->slot= NULL;
+  obj->tp = tp;
   return obj;
 }
 
 static
 struct ajj_object*
 ajj_object_create_obj( struct ajj* a, struct gc_scope* scp,
-    struct func_table* fn_tb, void* data ) {
-  return ajj_object_obj(ajj_object_create(a,scp),fn_tb,data);
+    struct func_table* fn_tb, void* data , int tp ) {
+  return ajj_object_obj(ajj_object_create(a,scp),fn_tb,data,tp);
 }
 
 /* Creating a jinja object. A jinja object is an object represents a
@@ -568,20 +403,6 @@ const char* ajj_value_to_cstr( const struct ajj_value* val ) {
 }
 
 static
-const struct map*
-ajj_value_to_dict( const struct ajj_value* val ) {
-  assert(val->type == AJJ_VALUE_DICT);
-  return &(val->value.object->val.d);
-}
-
-static
-const struct list*
-ajj_value_to_list( const struct ajj_value* val ) {
-  assert(val->type == AJJ_VALUE_LIST);
-  return &(val->value.object->val.l);
-}
-
-static
 const struct object*
 ajj_value_to_obj( const struct ajj_value* val ) {
   assert(val->type == AJJ_VALUE_OBJECT);
@@ -635,8 +456,7 @@ struct ajj_value ajj_value_assign( struct ajj_object* obj ) {
  * then this value is escaped and it means no gc_scope will hold it
  * The typical usage is for assigning to upvalue */
 struct ajj_value
-ajj_value_copy( struct ajj* a , struct gc_scope* ,
-    const struct ajj_value* src );
+ajj_value_move( struct gc_scope* , struct ajj_value* );
 
 /* This allow user to delete a string promptly without waiting for the
  * corresponding gc scope exit */

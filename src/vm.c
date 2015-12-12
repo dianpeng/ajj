@@ -413,16 +413,7 @@ int is_empty( struct ajj* a , const struct ajj_value* val , int* fail ) {
     case AJJ_VALUE_STRING:
       *fail = 0;
       return ajj_value_to_string(val)->len == 0;
-    case AJJ_VALUE_LIST:
-      *fail = 0;
-      return ajj_value_to_list(val)->len == 0;
-    case AJJ_VALUE_DICT:
-      *fail = 0;
-      return ajj_value_to_dict(val)->len == 0;
-    default:
-      *fail = 1;
-      report_error(a,"Type:%s cannot be used to test whether it is empty or not!",
-          ajj_value_get_type_name(val));
+      /* TODO :: */
       return -1;
   }
 }
@@ -577,6 +568,7 @@ int call_ctor( struct ajj* a , struct func_table* ft,
     struct ajj_value* ret ) {
   size_t pc = cur_frame(a)->par_cnt;
   size_t i;
+  int tp;
   void* udata;
   struct ajj_object* obj;
   struct ajj_value par[AJJ_FUNC_ARG_MAX_SIZE];
@@ -596,11 +588,12 @@ int call_ctor( struct ajj* a , struct func_table* ft,
       ft->udata,
       par,
       pc,
-      &udata) ) {
+      &udata,
+      &tp) ) {
     return -1;
   }
 
-  obj = ajj_object_create_obj(a,a->rt->cur_gc,ft,udata);
+  obj = ajj_object_create_obj(a,a->rt->cur_gc,ft,udata,tp);
   *ret = ajj_value_assign(obj);
   return 0; /* finish the call */
 }

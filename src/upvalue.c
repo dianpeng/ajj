@@ -165,8 +165,9 @@ upvalue_table_destroy_one( struct ajj* a ,
 
 void
 upvalue_table_destroy( struct ajj* a,
-    struct upvalue_table* m ) {
-  while(m) {
+    struct upvalue_table* m ,
+    struct upvalue_table* until ) {
+  while(m!=until) {
     m = upvalue_table_destroy_one(a,m);
   }
 }

@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <assert.h>
+#include <stdarg.h>
 
 #define AJJ_SYMBOL_NAME_MAX_SIZE 32
 #define AJJ_GLOBAL_SYMBOL_MAX_SIZE 256
@@ -18,6 +19,7 @@
 struct ajj;
 struct ajj_value;
 struct ajj_object;
+struct ajj_io;
 
 #define AJJ_EXEC_OK   0
 #define AJJ_EXEC_FAIL -1
@@ -38,10 +40,26 @@ typedef int (*ajj_class_ctor)( struct ajj* ,
     void* ,
     struct ajj_value*,
     size_t ,
-    void** ret );
+    void** ret ,
+    int* type );
 
 typedef void (*ajj_class_dtor)( struct ajj* ,
     void* udata , void* object );
+
+/* SLOT protocol is used to provide some function that is directly
+ * recognized by the VM. All the iterator function is directly called
+ * by VM without issuing a function name and do function lookup. With
+ * slot function implemented, an registered object is able to be interated in
+ * the for loop */
+struct ajj_slot {
+  int (*iter_start) ( void* , struct ajj_value* );
+  int (*iter_move ) ( void* , struct ajj_value* , int );
+  int (*iter_has  ) ( void* , struct ajj_value* , int );
+  struct ajj_value (*iter_get_key)( void* , struct ajj_value* , int );
+  struct ajj_value (*iter_get_val)( void* , struct ajj_value* , int );
+  size_t (*length) ( void* , struct ajj_value* );
+  int (*print)( void* , struct ajj_value* , struct ajj_io* );
+};
 
 struct ajj_class {
   char name[ AJJ_SYMBOL_NAME_MAX_SIZE ]; /* name of the symbol */
@@ -53,6 +71,8 @@ struct ajj_class {
     ajj_method method;
     char name[AJJ_SYMBOL_NAME_MAX_SIZE];
   } * mem_func;
+
+  struct ajj_slot slot;
 
   size_t mem_func_len; /* length of member function */
   void* udata; /* user data shared by all the functions */
@@ -76,8 +96,6 @@ enum {
   AJJ_VALUE_BOOLEAN,
   AJJ_VALUE_NONE,
   AJJ_VALUE_STRING,
-  AJJ_VALUE_LIST,
-  AJJ_VALUE_DICT,
   AJJ_VALUE_OBJECT,
 
   AJJ_VALUE_SIZE
@@ -97,10 +115,6 @@ ajj_value_get_type_name( const struct ajj_value* v ) {
       return "none";
     case AJJ_VALUE_STRING:
       return "string";
-    case AJJ_VALUE_LIST:
-      return "list";
-    case AJJ_VALUE_DICT:
-      return "dict";
     case AJJ_VALUE_OBJECT:
       return "object";
     default:
@@ -119,37 +133,37 @@ struct ajj_value ajj_value_number( double val ) {
   value.value.number = val;
   return value;
 }
-
 static inline
 int ajj_value_to_boolean( const struct ajj_value* val ) {
   assert(val->type == AJJ_VALUE_BOOLEAN);
   return val->value.boolean;
 }
-
 static inline
 double ajj_value_to_number( const struct ajj_value* val ) {
   assert(val->type == AJJ_VALUE_NUMBER);
   return val->value.number;
 }
-
 const char* ajj_value_to_str( const struct ajj_value* val );
-
-/* List API =============================== */
-void ajj_list_push( const struct ajj_value*, const struct ajj_value* );
-void ajj_list_clear( const struct ajj_value* );
-size_t ajj_list_size( const struct ajj_value* );
-struct ajj_value* ajj_list_index( struct ajj_value* , size_t );
-
-/* Dict API ============================== */
-int ajj_dict_insert( const struct ajj_value* , const char* key ,
-    const struct ajj_value* val );
-const struct ajj_value*
-ajj_dict_find( const struct ajj_value* , const char* key );
-int ajj_dict_delete( const struct ajj_value* , const char* key );
 
 /* AJJ ============================= */
 struct ajj* ajj_create();
 void ajj_destroy( struct ajj* );
+void ajj_error ( struct ajj* , const char* format , ... );
+
+struct ajj_value ajj_new_object( struct ajj* , const char* name );
+
+/* IO ============================= */
+/* We used to decide just use FILE* as our IO abstration layer since we could use it handle
+ * in memory output. However, since FILE*'s memory buffer version doesn't support dynamic
+ * buffer growth so we have to roll our own wheels. This one is really just a very thing
+ * warpper on top of the memory and FILE* */
+struct ajj_io* ajj_io_create_file( struct ajj* a , FILE* );
+struct ajj_io* ajj_io_create_mem ( struct ajj* a , size_t size );
+void ajj_io_destroy( struct ajj_io* );
+int ajj_io_printf( struct ajj_io* , const char* fmt , ... );
+int ajj_io_vprintf( struct ajj_io* , const char* fmt , va_list );
+int ajj_io_write( struct ajj_io* , void* mem , size_t len );
+int ajj_io_flush( struct ajj_io* );
 
 /* MISC ============================= */
 enum {

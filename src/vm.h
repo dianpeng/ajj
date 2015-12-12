@@ -61,7 +61,7 @@ struct func_frame {
   struct string name; /* function name , a pointer that just points to the
                        * name inside of entry */
 
-  int par_cnt : 16 ;  /* parameter count when calling this function */
+  int par_cnt ;  /* parameter count when calling this function */
 
   struct ajj_object* obj; /* if it is an object call, then the object pointer
                            * to the corresponding caller object */
@@ -157,6 +157,23 @@ int program_const_num( struct program* prg , double num ) {
   prg->num_tbl[prg->num_len] = num;
   return prg->num_len++;
 }
+
+/* helper function for converting the ajj_value to specific type */
+int vm_to_number( const struct ajj_value* , double* );
+int vm_to_integer( const struct ajj_value* , int* );
+/* boolean conversion will NEVER fail */
+int vm_to_boolean( const struct ajj_value* );
+static
+int vm_is_true( const struct ajj_value* val ) {
+  return vm_to_boolean(val) == 1;
+}
+static
+int vm_is_false( const struct ajj_value* val ) {
+  return vm_to_boolean(val) == 0;
+}
+static
+struct string
+vm_to_string( const struct ajj_value* val , int* own );
 
 /* =============================================
  * Interfaces

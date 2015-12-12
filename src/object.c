@@ -124,3 +124,14 @@ ajj_object_move( struct gc_scope* scp , struct ajj_object* obj ) {
     obj->scp = scp;
   }
 }
+
+
+struct ajj_value
+ajj_value_move( struct gc_scope* scp, struct ajj_value* val ) {
+  if(AJJ_IS_PRIMITIVE(val)) {
+    return *val;
+  } else {
+    ajj_object_move(scp,val->value.object);
+    return *val;
+  }
+}

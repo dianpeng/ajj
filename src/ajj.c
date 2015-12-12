@@ -28,14 +28,18 @@ struct ajj* ajj_create() {
   gc_init(&(r->gc_root));
   r->rt = NULL;
   r->upval_tb = upvalue_table_create(NULL);
+  upvalue_table_init(&(r->builtins));
+  /* lastly load the builtins into the ajj things */
+  ajj_builtin_load(r);
   return r;
 }
 
 void ajj_destroy( struct ajj* r ) {
   /* MUST delete upvalue_table at very first */
-  upvalue_table_destroy(r,r->upval_tb);
-  map_destroy(&(r->tmpl_tbl));
+  upvalue_table_destroy(r,r->upval_tb,&(r->builtins));
+  ajj_builtin_destroy(r);
 
+  map_destroy(&(r->tmpl_tbl));
   slab_destroy(&(r->upval_slab));
   slab_destroy(&(r->obj_slab));
   slab_destroy(&(r->ft_slab));
