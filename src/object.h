@@ -30,7 +30,7 @@ extern struct string MAIN; /* For __main__ */
 
 #define AJJ_IS_REFERENCE(V) (!(AJJ_IS_PRIMITIVE(V)))
 
-
+#define DEFAULT_PROPERTY_SIZE 8
 
 struct c_closure {
   void* udata; /* user data */
@@ -66,6 +66,7 @@ const char* function_get_type_name( int tp ) {
 }
 
 struct func_table;
+
 struct function {
   union {
     struct c_closure c_fn; /* C function */
@@ -97,6 +98,7 @@ struct func_table {
   size_t func_cap;
   ajj_class_dtor dtor;
   ajj_class_ctor ctor;
+  struct ajj_slot slot;    /* slot function table */
   void* udata;
   struct string name; /* object's name */
 };
@@ -110,8 +112,6 @@ struct object {
 
   /* Field only used when the object is a JINJA object */
   const char* src;     /* source file */
-
-  struct ajj_slot* slot;
 };
 
 /* ======================================
@@ -145,6 +145,7 @@ void func_table_init( struct func_table* tb ,
   tb->dtor = dtor ;
   tb->ctor = ctor ;
   tb->name = own ? *name : string_dup(name);
+  memset(&(tb->slot),0,sizeof(tb->slot));
 }
 
 /* Clear the GUT of func_table object */
@@ -174,7 +175,7 @@ struct function* func_table_find_func( struct func_table* tb,
 
 static
 struct c_closure*
-func_table_add_c_clsoure( struct func_table* tb , struct string* name , int own ) {
+func_table_add_c_clsoure( struct func_table* tb , const struct string* name , int own ) {
   struct function* f = func_table_find_func(tb,name);
   if( f != NULL )
     return NULL;
@@ -187,7 +188,7 @@ func_table_add_c_clsoure( struct func_table* tb , struct string* name , int own 
 
 static
 ajj_method*
-func_table_add_c_method( struct func_table* tb , struct string* name , int own ) {
+func_table_add_c_method( struct func_table* tb , const struct string* name , int own ) {
   struct function* f = func_table_find_func(tb,name);
   if( f != NULL )
     return NULL;
@@ -199,7 +200,7 @@ func_table_add_c_method( struct func_table* tb , struct string* name , int own )
 
 static
 struct function*
-func_table_add_jinja_func( struct func_table* tb, struct string* name, int own ) {
+func_table_add_jinja_func( struct func_table* tb, const struct string* name, int own ) {
   struct function* f = func_table_find_func(tb,name);
   if( f != NULL )
     return NULL;
@@ -211,7 +212,7 @@ func_table_add_jinja_func( struct func_table* tb, struct string* name, int own )
 
 static
 struct program*
-func_table_add_jj_block( struct func_table* tb, struct string* name , int own ) {
+func_table_add_jj_block( struct func_table* tb, const struct string* name , int own ) {
   struct function* f = func_table_add_jinja_func(tb,name,own);
   if(f) f->tp = JJ_BLOCK;
   else return NULL;
@@ -220,7 +221,7 @@ func_table_add_jj_block( struct func_table* tb, struct string* name , int own ) 
 
 static
 struct program*
-func_table_add_jj_macro( struct func_table* tb, struct string* name , int own ) {
+func_table_add_jj_macro( struct func_table* tb, const struct string* name , int own ) {
   struct function* f = func_table_add_jinja_func(tb,name,own);
   if(f) f->tp = JJ_MACRO;
   else return NULL;
@@ -229,7 +230,7 @@ func_table_add_jj_macro( struct func_table* tb, struct string* name , int own ) 
 
 static
 struct program*
-func_table_add_jj_main( struct func_table* tb, struct string* name , int own ) {
+func_table_add_jj_main( struct func_table* tb, const struct string* name , int own ) {
   struct function* f = func_table_add_jinja_func(tb,name,own);
   if(f) f->tp = JJ_MAIN;
   else return NULL;
@@ -276,19 +277,18 @@ static
 struct ajj_object*
 ajj_object_create_const_string( struct ajj*a , struct gc_scope* scp,
     const struct string* str ) {
-  return ajj_object_const_string( ajj_object_create(a,scp),
-      str);
+  return ajj_object_const_string( ajj_object_create(a,scp),str);
 }
 
 static
 struct ajj_object*
 ajj_object_obj( struct ajj_object* obj , struct func_table* fn_tb, void* data , int tp ) {
   struct object* o = &(obj->val.obj);
-  dict_create(&(o->prop));
+  map_create(&(o->prop),sizeof(struct ajj_value),
+      DEFAULT_PROPERTY_SIZE);
   o->fn_tb = fn_tb;
   o->data = data;
   o->src = NULL;
-  o->slot= NULL;
   obj->tp = tp;
   return obj;
 }
@@ -300,9 +300,16 @@ ajj_object_create_obj( struct ajj* a, struct gc_scope* scp,
   return ajj_object_obj(ajj_object_create(a,scp),fn_tb,data,tp);
 }
 
+static
+struct ajj_object*
+ajj_object_create_list( struct ajj* a , struct gc_scope* scp );
+
+static
+struct ajj_object*
+ajj_object_create_dict( struct ajj* a , struct gc_scope* scp );
+
 /* Creating a jinja object. A jinja object is an object represents a
- * compiled jinja source file. It is only used internally by the parser
- */
+ * compiled jinja source file. It is only used internally by the parser */
 struct ajj_object*
 ajj_object_jinja( struct ajj* , struct ajj_object* obj ,
     const char* name , const char* src , int own );

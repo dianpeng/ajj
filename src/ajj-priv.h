@@ -38,6 +38,11 @@ struct ajj {
   struct runtime* rt;
   struct upvalue_table* upval_tb; /* upvalue table */
   struct upvalue_table builtins;  /* builtin table */
+
+  /* INLINE those common builtin types and this makes our builtin type
+   * creation easier and faster */
+  struct func_table* list;
+  struct func_table* dict;
 };
 
 static

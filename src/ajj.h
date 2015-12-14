@@ -71,10 +71,8 @@ struct ajj_class {
     ajj_method method;
     char name[AJJ_SYMBOL_NAME_MAX_SIZE];
   } * mem_func;
-
-  struct ajj_slot slot;
-
   size_t mem_func_len; /* length of member function */
+  struct ajj_slot slot;
   void* udata; /* user data shared by all the functions */
 };
 
@@ -149,8 +147,12 @@ const char* ajj_value_to_str( const struct ajj_value* val );
 struct ajj* ajj_create();
 void ajj_destroy( struct ajj* );
 void ajj_error ( struct ajj* , const char* format , ... );
+struct ajj_value
+ajj_new_object( struct ajj* , const char* name );
 
-struct ajj_value ajj_new_object( struct ajj* , const char* name );
+/* Register object ======================*/
+int ajj_env_add_value( struct ajj* a , const char* , int type , ... );
+int ajj_env_del_value( struct ajj* a , const char* );
 
 /* IO ============================= */
 /* We used to decide just use FILE* as our IO abstration layer since we could use it handle

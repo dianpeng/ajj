@@ -124,6 +124,7 @@ int list_pop_back( struct ajj* a,
       --l->len;
     }
     RETURN_VOID;
+  }
 }
 
 /* index */
@@ -219,13 +220,3 @@ list_iter_get_val( void* udata , struct ajj_value* l , int itr ) {
   assert( itr < LIST(l)->len);
   return LIST(l)->entry[itr];
 }
-
-
-
-
-
-
-
-
-
-

@@ -2,6 +2,7 @@
 #include "util.h"
 #include "lex.h"
 #include "parse.h"
+#include "builtin.h"
 
 #include <stdlib.h>
 #include <assert.h>
@@ -28,6 +29,8 @@ struct ajj* ajj_create() {
   gc_init(&(r->gc_root));
   r->rt = NULL;
   r->upval_tb = upvalue_table_create(NULL);
+  r->list = NULL;
+  r->dict = NULL;
   upvalue_table_init(&(r->builtins));
   /* lastly load the builtins into the ajj things */
   ajj_builtin_load(r);
@@ -38,13 +41,43 @@ void ajj_destroy( struct ajj* r ) {
   /* MUST delete upvalue_table at very first */
   upvalue_table_destroy(r,r->upval_tb,&(r->builtins));
   ajj_builtin_destroy(r);
-
   map_destroy(&(r->tmpl_tbl));
   slab_destroy(&(r->upval_slab));
   slab_destroy(&(r->obj_slab));
   slab_destroy(&(r->ft_slab));
   slab_destroy(&(r->gc_slab));
 }
+
+static
+void ajj_env_add_object( struct ajj* a , const struct string* name,
+    const struct ajj_class* cls ) {
+  size_t i;
+  struct func_table* tb = slab_malloc(&(a->ft_slab));
+  struct upvalue* uv;
+  struct string n = string_dup(name);
+
+  func_table_init(tb);
+  uv = upvalue_table_add(a,a->upval_tb,&n,1);
+  uv->gut.gfunc.tp = OBJECT_CTOR;
+  uv->gut.gfunc.f.obj_ctor = tb; /* owned by this slot */
+
+  tb->slot = cls->slot;
+  tb->ctor = cls->ctor;
+  tb->dtor = cls->dtor;
+  tb->name = n;
+  tb->udata= cls->udata;
+
+  for( i = 0 ; i < cls->mem_func_len ; ++i ) {
+    struct string fn;
+    fn.str = cls->mem_func[i].name;
+    fn.len = strlen(cls->mem_func[i].name);
+    *func_table_add_c_method(tb,&fn,0) = cls->mem_func[i].method;
+  }
+}
+
+/* ======================================================
+ * PRINT
+ * ====================================================*/
 
 #define DOINDENT() \
   do { \

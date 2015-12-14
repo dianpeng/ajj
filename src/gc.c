@@ -24,14 +24,6 @@ gc_scope_destroy( struct ajj* a , struct gc_scope* scp ) {
         break;
       case AJJ_VALUE_CONST_STRING:
         break; /* break since we don't delete const string */
-      case AJJ_VALUE_DICT:
-        map_destroy(&(cur->val.d)); /* delete the map, we don't need to
-                                     * delete anything recursivly since
-                                     * all the internal gut is gc managed */
-        break;
-      case AJJ_VALUE_LIST:
-        list_destroy(&(cur->val.l));
-        break;
       case AJJ_VALUE_OBJECT: /* user defined stuff */
 
         /* delete the property list */

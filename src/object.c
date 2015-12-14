@@ -97,6 +97,36 @@ ajj_object_create_jinja( struct ajj* a , const char* name ,
   return ajj_object_jinja(a,obj,name,src,own);
 }
 
+struct ajj_object*
+ajj_object_create_list( struct ajj* a , struct gc_scope* scp ) {
+  void* udata;
+  int tp;
+  assert(a->list);
+
+  if(a->list->ctor( a,
+      a->list->udata,
+      &udata,
+      NULL,0,
+      &tp) == AJJ_EXEC_FAIL)
+    return NULL;
+  return ajj_object_create_obj(a,scp,udata,tp);
+}
+
+struct ajj_object*
+ajj_object_create_dict( struct ajj* a , struct gc_scope* scp ) {
+  void* udata;
+  int tp;
+  assert(a->dict);
+
+  if(a->dict->ctor(a,
+        a->dict->udata,
+        &udata,
+        NULL,0,
+        &tp) == AJJ_EXEC_FAIL)
+    return NULL;
+  return ajj_object_create_obj(a,scp,udata,tp);
+}
+
 /* Value */
 void
 ajj_value_delete_string( struct ajj* a, struct ajj_value* str ) {
