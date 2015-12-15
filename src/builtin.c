@@ -222,13 +222,14 @@ int list_empty( struct ajj* a , void* udata , struct ajj_value* l ) {
 }
 
 static
-int list_in ( struct ajj* a , void* udata , struct ajj_value* l , const struct ajj_value* idx ) {
+int list_in ( struct ajj* a , void* udata , struct ajj_value* l ,
+    const struct ajj_value* idx ) {
   int k;
   UNUSE_ARG(a);
   UNUSE_ARG(udata);
   assert( IS_A(l,LIST_TYPE) );
   if( vm_to_integer(a,idx,&k) ) {
-    FAIL(a,"list::__in__ cannot convert index to integer!");
+    return 0;
   } else {
     return LIST(l)->len > idx && idx >= 0;
   }
@@ -236,7 +237,8 @@ int list_in ( struct ajj* a , void* udata , struct ajj_value* l , const struct a
 
 static
 struct ajj_value
-list_index( struct ajj* a , void* udata , struct ajj_value* l , const struct ajj_value* idx ) {
+list_index( struct ajj* a , void* udata , struct ajj_value* l ,
+    const struct ajj_value* idx ) {
   int i;
   if( vm_to_integer(a,idx,&i) )
     return AJJ_NONE;
@@ -276,14 +278,6 @@ static struct ajj_class LIST_CLASS  = {
   },
   NULL
 };
-
-/* XList
- * An easy way to craft a list that is used to do foreach. It basically doesn't have any
- * member and cannot be used to add and set member */
-struct xlist {
-  size_t len;
-};
-
 
 /* DICT */
 #define DICT_TYPE 2
@@ -442,12 +436,184 @@ int dict_clear( struct ajj* a ,
 static
 int dict_iter_start( struct ajj* a , void* udata ,
     struct ajj_value* obj ) {
-  struct map* m = DICT(obj);
   UNUSE_ARG(a);
   UNUSE_ARG(udata);
 
   assert( IS_A(obj,DICT_TYPE) );
-  return map_iter_start(m);
+  return map_iter_start(DICT(m));
+}
+
+static
+int dict_iter_has( struct ajj* a , void* udata,
+    struct ajj_value* obj , int itr ) {
+  UNUSE_ARG(a);
+  UNUSE_ARG(udata);
+
+  assert( IS_A(obj,DICT_TYPE) );
+  return map_iter_start(DICT(obj),itr);
+}
+
+static
+int dict_iter_move( struct ajj* a  , void* udata,
+    struct ajj_value* obj , int itr ) {
+  UNUSE_ARG(a);
+  UNUSE_ARG(udata);
+
+  assert( IS_A(obj,DICT_TYPE) );
+  return map_iter_move(DICT(obj),itr);
+}
+
+static
+struct ajj_value
+dict_iter_get_key( struct ajj* a , void* udata,
+    struct ajj_value* obj , int itr ) {
+  struct map_pair ret;
+  UNUSE_ARG(a);
+  UNUSE_ARG(udata);
+  assert( IS_A(obj,DICT_TYPE) );
+  ret = map_iter_deref(DICT(obj),itr);
+  /* return a copied string for key, we do the copy for safety reason
+   * because it is possible this object is dropped but its returned key
+   * should not dropped so we cannot return a constant string reference */
+  return ajj_value_assign(
+      ajj_object_create_string(
+        a,
+        ajj_cur_gc_scope(a),
+        ret.key
+        ));
+}
+
+static
+struct ajj_value
+dict_iter_get_val( struct ajj* a , void* udata,
+    struct ajj_value* obj , int itr ) {
+  struct map_pair ret;
+  UNUSE_ARG(a);
+  UNUSE_ARG(udata);
+  assert( IS_A(obj,DICT_TYPE) );
+  ret = map_iter_deref(DICT(obj),itr);
+  return *(struct ajj_value*)(ret.val);
+}
+
+static
+size_t dict_length( struct ajj* a , void* udata,
+    struct ajj_value* obj ) {
+  UNUSE_ARG(a);
+  UNUSE_ARG(udata);
+  return DICT(obj)->len;
+}
+
+static
+int dict_in( struct ajj* a , void* udata,
+    struct ajj_value* obj , const struct ajj_value* key ) {
+  struct string str;
+  int own;
+  UNUSE_ARG(a);
+  UNUSE_ARG(udata);
+  assert( IS_A(obj,DICT_TYPE) );
+  if( vm_to_string(key,&str,&own) )
+    return 0;
+  else {
+    if( map_find( DICT(obj) , str ) ) {
+      if(own) string_destroy(&str);
+      return 1;
+    } else {
+      if(own) string_destroy(&str);
+      return 0;
+    }
+  }
+}
+
+static
+int dict_empty( struct ajj* a , void* udata,
+    struct ajj_value* obj , const struct ajj_value* key ) {
+  UNUSE_ARG(a);
+  UNUSE_ARG(udata);
+  assert( IS_A(obj,DICT_TYPE) );
+  return DICT(obj)->len == 0;
+}
+
+static
+struct ajj_value
+dict_index( struct ajj* a , void* udata,
+    struct ajj_value* obj, const struct ajj_value* key ) {
+  struct string str;
+  int own;
+  if( vm_to_string(key,&str,&own) )
+    return AJJ_NONE;
+  else {
+    struct ajj_value* val;
+    val = map_find(DICT(obj),&str);
+    if(own) string_destroy(&str);
+    return val == NULL ? AJJ_NONE : *val;
+  }
+}
+
+static struct ajj_class DICT_CLASS = {
+  "dict",
+  dict_ctor,
+  dict_dtor,
+  {
+    { dict_set , "set" },
+    { dict_get , "get" },
+    { dict_update, "update" },
+    { dict_has_key, "has_key" },
+    { dict_clear, "clear" }
+  },
+  5,
+  {
+    dict_iter_start,
+    dict_iter_move,
+    dict_iter_has,
+    dict_iter_get_key,
+    dict_iter_get_val,
+    dict_length,
+    dict_empty,
+    dict_in,
+    dict_index
+  },
+  NULL
+}
+
+/* XList
+ * An easy way to craft a list that is used to do foreach. It basically doesn't have any
+ * member and cannot be used to add and set member */
+#define XLIST_TYPE 3
+#define XLIST(val) ((struct xlist*)(OBJECT(val)))
+
+struct xlist {
+  size_t len;
+};
+
+static
+int xlist_ctor( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_len,
+    void** ret,
+    int* tp ) {
+  struct xlist* x;
+  int val;
+
+  if( arg_len != 1 || vm_to_integer(arg,&val) ) {
+    FAIL(a,"xlist::__ctor__ can only accept 1 argument and it must be \
+        a integer!");
+  } else {
+    x = malloc(sizeof(*x));
+    x->len = (size_t)(val);
+    *ret = x;
+    *tp = XLIST_TYPE;
+    return AJJ_EXEC_OK;
+  }
+}
+
+static
+int xlist_dtor( struct ajj* a, void* udata,
+    void* object ) {
+  UNUSE_ARG(a);
+  UNUSE_ARG(udata);
+  free(object);
+  return AJJ_EXEC_OK;
 }
 
 

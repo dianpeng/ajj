@@ -62,6 +62,10 @@ struct ajj_io {
   int tp;
 };
 
+/* get the current gc scope */
+struct gc_scope*
+ajj_cur_gc_scope( struct ajj* a );
+
 static
 void ajj_io_init_file( struct ajj_io* io , FILE* f ) {
   assert(f);
