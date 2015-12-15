@@ -156,9 +156,9 @@ void emitter_ensure( struct emitter* em ) {
   if( em->cd_cap < em->prg->len + 2 ) {
     size_t c = em->cd_cap;
     em->prg->codes = mem_grow( em->prg->codes ,
-        sizeof(int),&c);
+        sizeof(int),2,&c);
     em->prg->spos = mem_grow(em->prg->spos,
-        sizeof(int),&(em->cd_cap));
+        sizeof(int),2,&(em->cd_cap));
   }
 }
 
@@ -262,6 +262,6 @@ int bc_2nd_arg( const struct program* prg , size_t* pos ) {
 }
 
 /* dump program into human readable format */
-void dump_program( const char* src , const struct program* , FILE* output );
+void dump_program( const char* src , const struct program* , struct ajj_io* output );
 
 #endif /* _BC_H_ */

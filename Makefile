@@ -26,7 +26,6 @@ parser-test:
 
 
 clean:
-	rm src/*.gcno
 	rm src/*.gcda
 	rm src/*.gcov
 	rm src/opt-test

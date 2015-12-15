@@ -70,8 +70,7 @@ struct str {
 #define reserve_buf(O,T,A,E) \
   do { \
     if( (O)->T##_len + (A) >= (O)->T##_cap ) { \
-      (O)->T##_cap += A; \
-      (O)->T = mem_grow( (O)->T, sizeof(E) , &((O)->T##_cap) ); \
+      (O)->T = mem_grow( (O)->T, sizeof(E) , A , &((O)->T##_cap) ); \
     } \
   } while(0)
 
@@ -289,10 +288,10 @@ int to_number( struct opt* o , const struct ajj_value* v,
       {
         double d;
         errno = 0;
-        d = strtod(((struct string*)(v->value.priv))->str,NULL);
+        d = strtod(((struct string*)(v->value.__private__))->str,NULL);
         if( errno ) {
           report_error(o,"Cannot convert str:%s to number because:%s",
-              ((struct string*)(v->value.priv))->str,
+              ((struct string*)(v->value.__private__))->str,
               strerror(errno));
           return -1;
         }
@@ -354,7 +353,7 @@ int to_string( struct opt* o , const struct ajj_value* v,
         return 0;
       }
     case AJJ_VALUE_STRING:
-      val->s = ((struct string*)(v->value.priv))->str;
+      val->s = ((struct string*)(v->value.__private__))->str;
       val->own= 0;
       return 0;
     default:
@@ -568,14 +567,6 @@ int check_const( struct opt* o , int pos , struct ajj_value* val ) {
     case VM_LNONE:
       *val = AJJ_NONE;
       return 0;
-    case VM_LDICT:
-      val->type = AJJ_VALUE_DICT;
-      val->value.object = NULL;
-      return 0;
-    case VM_LLIST:
-      val->type = AJJ_VALUE_LIST;
-      val->value.object = NULL;
-      return 0;
     case VM_LNUM:
       arg = BC_1ARG(c);
       assert((size_t)arg < o->prg->num_len);
@@ -589,7 +580,7 @@ int check_const( struct opt* o , int pos , struct ajj_value* val ) {
       arg = BC_1ARG(c);
       assert((size_t)arg < o->prg->str_len );
       val->type = AJJ_VALUE_STRING;
-      val->value.priv = arg + o->prg->str_tbl;
+      val->value.__private__ = arg + o->prg->str_tbl;
       return 0;
     default:
       return -1;

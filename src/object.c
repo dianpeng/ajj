@@ -12,7 +12,7 @@ void list_reserve( struct list* l ) {
     mem = malloc(sizeof(struct ajj_value)*2*l->cap);
     memcpy(mem,l->entry,l->len*sizeof(struct ajj_value));
   } else {
-    mem = mem_grow(l->entry,sizeof(struct ajj_value),&(l->cap));
+    mem = mem_grow(l->entry,sizeof(struct ajj_value),0,&(l->cap));
   }
   l->entry = mem;
 }
@@ -80,6 +80,7 @@ ajj_object_jinja( struct ajj* a , struct ajj_object* obj ,
   struct string fn = string_dupc(name);
   func_table_init(ft,
       NULL,NULL, /* null ctor and dtor */
+      NULL,NULL, /* slot and udata */
       &fn,
       1);
   dict_create(&(obj->val.obj.prop));

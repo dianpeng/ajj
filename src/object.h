@@ -138,6 +138,8 @@ static
 void func_table_init( struct func_table* tb ,
     ajj_class_ctor ctor ,
     ajj_class_dtor dtor ,
+    const struct ajj_slot* slot,
+    void* udata,
     struct string* name , int own ) {
   tb->func_tb = tb->func_buf;
   tb->func_len = 0;
@@ -145,7 +147,11 @@ void func_table_init( struct func_table* tb ,
   tb->dtor = dtor ;
   tb->ctor = ctor ;
   tb->name = own ? *name : string_dup(name);
-  memset(&(tb->slot),0,sizeof(tb->slot));
+  if(slot)
+    tb->slot = *slot;
+  else
+    memset(&(tb->slot),0,sizeof(*slot));
+  tb->udata = udata;
 }
 
 /* Clear the GUT of func_table object */
@@ -160,7 +166,7 @@ struct function* func_table_add_func( struct func_table* tb ) {
      nf = malloc( sizeof(struct function)*(tb->func_cap)*2 );
      memcpy(nf,tb->func_tb,tb->func_len*sizeof(struct function));
    } else {
-     nf = mem_grow(tb->func_tb,sizeof(struct function),&(tb->func_cap));
+     nf = mem_grow(tb->func_tb,sizeof(struct function),0,&(tb->func_cap));
    }
    tb->func_tb = nf;
   }

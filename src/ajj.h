@@ -31,7 +31,7 @@ typedef int (*ajj_function)( struct ajj* ,
     struct ajj_value* );
 
 typedef int (*ajj_method)( struct ajj* , /* execution context */
-    struct ajj_object* obj,
+    struct ajj_value* obj,
     struct ajj_value*,
     size_t ,
     struct ajj_value* );
@@ -52,13 +52,16 @@ typedef void (*ajj_class_dtor)( struct ajj* ,
  * slot function implemented, an registered object is able to be interated in
  * the for loop */
 struct ajj_slot {
-  int (*iter_start) ( void* , struct ajj_value* );
-  int (*iter_move ) ( void* , struct ajj_value* , int );
-  int (*iter_has  ) ( void* , struct ajj_value* , int );
-  struct ajj_value (*iter_get_key)( void* , struct ajj_value* , int );
-  struct ajj_value (*iter_get_val)( void* , struct ajj_value* , int );
-  size_t (*length) ( void* , struct ajj_value* );
-  int (*print)( void* , struct ajj_value* , struct ajj_io* );
+  int (*iter_start) ( struct ajj* , void* , struct ajj_value* );
+  int (*iter_move ) ( struct ajj* , void* , struct ajj_value* , int );
+  int (*iter_has  ) ( struct ajj* , void* , struct ajj_value* , int );
+  struct ajj_value (*iter_get_key)( struct ajj* , void* , struct ajj_value* , int );
+  struct ajj_value (*iter_get_val)( struct ajj* , void* , struct ajj_value* , int );
+  size_t (*length) ( struct ajj* , void* , struct ajj_value* );
+  int (*empty)( struct ajj* , void* , struct ajj_value* );
+  int (*in) ( struct ajj* , void* , struct ajj_value* , const struct ajj_value* );
+  struct ajj_value (*index) ( struct ajj* , void* , struct ajj_value* ,
+          const struct ajj_value* );
 };
 
 struct ajj_class {
@@ -83,12 +86,14 @@ struct ajj_value {
                   * its first field/entry. */
     double number;
     struct ajj_object* object;
-    void* priv;  /* private alias */
+    void* __private__; /* For carry private data usage, user don't need
+                        * to use it and know it at all */
   } value;
   int type;
 };
 
 enum {
+  AJJ_VALUE_CLASS = -1,
   AJJ_VALUE_NOT_USE = 0,
   AJJ_VALUE_NUMBER,
   AJJ_VALUE_BOOLEAN,
@@ -96,8 +101,12 @@ enum {
   AJJ_VALUE_STRING,
   AJJ_VALUE_OBJECT,
 
+
+  /* always the last one to define */
   AJJ_VALUE_SIZE
 };
+
+/* AJJ VALUE ============================== */
 
 static
 const char*
@@ -143,15 +152,24 @@ double ajj_value_to_number( const struct ajj_value* val ) {
 }
 const char* ajj_value_to_str( const struct ajj_value* val );
 
+/* This function will create a specific value based on the type
+ * you tells it and the corresponding parameters you put into it.
+ * The return value , if it is a heap based object , will live on
+ * the scope that CURRENTLY the vm on. But if you call it while no
+ * executiong is performing, the value you get is on the global gc
+ * scope which will only be released when you delete the corresponding
+ * ajj object. */
+
+struct ajj_value
+ajj_value_new( struct ajj* a , int type , ... );
+
 /* AJJ ============================= */
 struct ajj* ajj_create();
 void ajj_destroy( struct ajj* );
 void ajj_error ( struct ajj* , const char* format , ... );
-struct ajj_value
-ajj_new_object( struct ajj* , const char* name );
 
 /* Register object ======================*/
-int ajj_env_add_value( struct ajj* a , const char* , int type , ... );
+void ajj_env_add_value( struct ajj* a , const char* , int type , ... );
 int ajj_env_del_value( struct ajj* a , const char* );
 
 /* IO ============================= */
@@ -159,19 +177,22 @@ int ajj_env_del_value( struct ajj* a , const char* );
  * in memory output. However, since FILE*'s memory buffer version doesn't support dynamic
  * buffer growth so we have to roll our own wheels. This one is really just a very thing
  * warpper on top of the memory and FILE* */
+extern struct ajj_io* AJJ_IO_STDOUT;
+extern struct ajj_io* AJJ_IO_STDERR;
+
 struct ajj_io* ajj_io_create_file( struct ajj* a , FILE* );
 struct ajj_io* ajj_io_create_mem ( struct ajj* a , size_t size );
 void ajj_io_destroy( struct ajj_io* );
 int ajj_io_printf( struct ajj_io* , const char* fmt , ... );
 int ajj_io_vprintf( struct ajj_io* , const char* fmt , va_list );
 int ajj_io_write( struct ajj_io* , void* mem , size_t len );
-int ajj_io_flush( struct ajj_io* );
+void ajj_io_flush( struct ajj_io* );
 
 /* MISC ============================= */
 enum {
   AJJ_VALUE_PRETTY,
   AJJ_VALUE_COMPACT
 };
-void ajj_value_print( const struct ajj_value* , FILE* , int );
+void ajj_value_print( const struct ajj_value* , struct ajj_io* , int );
 
 #endif /* _AJJ_H_ */

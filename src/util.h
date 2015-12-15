@@ -369,6 +369,6 @@ void slab_free( struct slab* , void* );
  * and the size for the new memory is obj_sz * length
  * After calling this function, the input mem will be freeed */
 
-void* mem_grow( void* , size_t obj_sz , size_t* old_cap );
+void* mem_grow( void* , size_t obj_sz , size_t append, size_t* old_cap );
 
 #endif /* _UTIL_H_ */

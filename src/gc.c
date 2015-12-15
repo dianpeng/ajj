@@ -11,7 +11,7 @@ gc_scope_create( struct ajj* a , struct gc_scope* scp ) {
 }
 
 void
-gc_scope_destroy( struct ajj* a , struct gc_scope* scp ) {
+gc_scope_exit( struct ajj* a , struct gc_scope* scp ) {
   struct ajj_object* tail = &(scp->gc_tail);
   struct ajj_object* cur = tail->next;
 
@@ -51,4 +51,10 @@ gc_scope_destroy( struct ajj* a , struct gc_scope* scp ) {
     cur = n;
   }
   LINIT(&(scp->gc_tail)); /* reset the gc scope list */
+}
+
+void
+gc_scope_destroy( struct ajj* a , struct gc_scope* scp ) {
+  gc_scope_exit(a,scp);
+  slab_free(&(a->gc_slab),scp);
 }

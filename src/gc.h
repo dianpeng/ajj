@@ -73,6 +73,7 @@ gc_scope_create( struct ajj* a, struct gc_scope* scp );
 
 /* This function will destroy all the gc scope allocated memory and also
  * the gc_scope object itself */
+void gc_scope_exit( struct ajj* , struct gc_scope* );
 void gc_scope_destroy( struct ajj* , struct gc_scope* );
 
 #endif /* _GC_H_ */

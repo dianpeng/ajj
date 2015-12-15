@@ -45,6 +45,39 @@ struct ajj {
   struct func_table* dict;
 };
 
+enum {
+  AJJ_IO_FILE,
+  AJJ_IO_MEM
+};
+
+struct ajj_io {
+  union {
+    FILE* f; /* make c89 initilization happy */
+    struct {
+      char* mem;
+      size_t len;
+      size_t cap;
+    } m;
+  } out;
+  int tp;
+};
+
+static
+void ajj_io_init_file( struct ajj_io* io , FILE* f ) {
+  assert(f);
+  io->tp = AJJ_IO_FILE;
+  io->out.f = f;
+}
+
+static
+void ajj_io_init_mem ( struct ajj_io* io , size_t cap ) {
+  assert(cap);
+  io->tp = AJJ_IO_MEM;
+  io->out.m.mem = malloc(cap);
+  io->out.m.len = 0;
+  io->out.m.cap = cap;
+}
+
 static
 struct ajj_object*
 ajj_find_template( struct ajj* a , const char* name ) {

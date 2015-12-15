@@ -80,7 +80,7 @@ struct runtime {
   int cur_call_stk; /* Current stk position */
   struct ajj_value val_stk[AJJ_MAX_VALUE_STACK_SIZE]; /* current value stack size */
   struct gc_scope* cur_gc; /* current gc scope */
-  FILE* output;
+  struct ajj_io* output;
 };
 
 static inline
@@ -123,6 +123,7 @@ int program_const_str( struct program* prg , struct string* str ,
 insert:
     if( prg->str_len == prg->str_cap ) {
       prg->str_tbl = mem_grow(prg->str_tbl, sizeof(struct string),
+          0,
           &(prg->str_cap));
     }
     if(own) {
@@ -148,6 +149,7 @@ int program_const_num( struct program* prg , double num ) {
   size_t i;
   if( prg->num_len== prg->num_cap ) {
     prg->num_tbl = mem_grow(prg->num_tbl,sizeof(double),
+        0,
         &(prg->num_cap));
   }
   for( i = 0 ; i < prg->num_len ; ++i ) {
@@ -172,15 +174,15 @@ int vm_is_false( const struct ajj_value* val ) {
   return vm_to_boolean(val) == 0;
 }
 static
-struct string
-vm_to_string( const struct ajj_value* val , int* own );
+int vm_to_string( const struct ajj_value* val ,
+        struct string* str , int* own );
 
 /* =============================================
  * Interfaces
  * ===========================================*/
 
 int vm_run_jinja( struct ajj* a, struct ajj_object* jj,
-    FILE* output );
+    struct ajj_io* output );
 
 #endif /* _VM_H_ */
 

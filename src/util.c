@@ -390,18 +390,21 @@ void slab_destroy( struct slab* sl ) {
  * Other
  * =============================*/
 void* mem_grow( void* ptr , size_t obj_sz,
+    size_t append ,
     size_t* old_cap ) {
   size_t cap = *old_cap;
   /* We an use realloc safe even if the input ptr is not
    * filled up with data. We just copy garbage bytes and
    * it is no harm */
   if(cap == 0) {
-    cap = INITIAL_MEMORY_SIZE;
+    cap = INITIAL_MEMORY_SIZE > append ? INITIAL_MEMORY_SIZE : append;
   } else {
     if( cap >= BOUNDED_MEMORY_SIZE ) {
       /* now we fallback to linear growth instead of exponential
        * growth which avoids large memory allocation and waste */
-      cap += BOUNDED_MEMORY_SIZE;
+      cap += BOUNDED_MEMORY_SIZE > append ? BOUNDED_MEMORY_SIZE : append;
+    } else {
+      cap += (append > cap) ? append+cap : cap;
     }
   }
   *old_cap = cap;

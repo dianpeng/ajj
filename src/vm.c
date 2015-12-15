@@ -70,12 +70,7 @@ int unwind_stack( struct ajj* a , char* buf ) {
       if( buf == end ) break;
     } else {
       const char* obj_name;
-      if( fr[i].obj->tp == AJJ_VALUE_DICT )
-        obj_name = "dict";
-      else if( fr[i].obj->tp == AJJ_VALUE_LIST )
-        obj_name = "list";
-      else
-        obj_name = fr[i].obj->val.obj.fn_tb->name.str;
+      obj_name = fr[i].obj->val.obj.fn_tb->name.str;
       buf += snprintf(buf,end-buf,"%d %s:%s %d\n",i,
           obj_name,
           fr[i].name.str,
@@ -148,7 +143,7 @@ double const_num( struct ajj* a, int idx ) {
  * runtime
  * ==========================*/
 static
-struct runtime* runtime_create( struct ajj* a , FILE* output ) {
+struct runtime* runtime_create( struct ajj* a , struct ajj_io* output ) {
   struct runtime* rt = malloc(sizeof(*rt));
   rt->cur_obj = NULL;
   rt->cur_call_stk = 0;
@@ -499,6 +494,7 @@ DEFINE_BIN_HANDLER(vm_gt,>,STRING_COMP_GT,boolean)
 #undef STRING_COMP_GE
 #undef STRING_COMP_GT
 
+/* handle multiply */
 static
 struct ajj_value vm_mul( struct ajj* a , const struct ajj_value* l,
     const struct ajj_value* r , int* fail ) {
@@ -677,7 +673,6 @@ vm_call(struct ajj* a, struct ajj_object* obj ,
       assert( IS_OBJECTCTOR(fr->entry) );
       assert( obj == NULL );
       ft = fr->entry->f.obj_ctor;
-      return call_ctor(a,ft,ret);
     }
   }
 }
@@ -825,9 +820,7 @@ void vm_attrpush( struct ajj* a , struct ajj_value* obj,
 
 static
 void vm_print( struct ajj* a , const struct string* str ) {
-  FILE* f = a->rt->output;
-  assert(f);
-  fwrite(str->str,1,str->len+1,f); /* faster than fprintf */
+  ajj_io_write(a->rt->output,str->str,1,str->len+1);
 }
 
 static
@@ -837,7 +830,7 @@ void vm_enter( struct ajj* a) {
 
 static
 void vm_exit( struct ajj* a , int loops ) {
-  for( ; loops > 0 ; --loops ) {
+  while( loops-- ) {
     struct gc_scope* p = a->rt->cur_gc->parent;
     assert(p != NULL);
     gc_scope_destroy(a,a->rt->cur_gc);
@@ -990,7 +983,6 @@ resolve_method( struct ajj* a , struct ajj_object** val ,
  * 1. Search the current template objects
  * 2. Search its parent objects from left to right
  * 3. Search global functions */
-
 static
 const struct function*
 resolve_free_function( struct ajj* a, const struct string* name ,
@@ -1689,7 +1681,7 @@ done:
 }
 
 int vm_run_jinja( struct ajj* a , struct ajj_object* jj,
-    FILE* output ) {
+    struct ajj_io* output ) {
   struct runtime* rt = runtime_create(a,output);
   const struct function* main;
   int fail;
