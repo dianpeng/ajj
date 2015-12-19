@@ -43,12 +43,13 @@ struct upvalue_table {
 };
 
 static
-struct upvalue*
-upvalue_table_init( struct upvalue_table* ret , struct upvalue_table* p ) {
+struct upvalue_table*
+upvalue_table_init( struct upvalue_table* ret ,
+    struct upvalue_table* p ) {
   map_create(&(ret->d),sizeof(struct upvalue*),
       UPVALUE_DEFAULT_BUF_SIZE);
   ret->prev = p;
-  return ut;
+  return ret;
 }
 
 /* Global varialbes table. Wrapper around map */
@@ -62,6 +63,9 @@ upvalue_table_create( struct upvalue_table* p ) {
 struct upvalue_table*
 upvalue_table_destroy_one( struct ajj* a,
     struct upvalue_table* m );
+
+void
+upvalue_table_clear( struct ajj* , struct upvalue_table * );
 
 /* this function will recursively clean each
  * upvalue table layer and delete the table

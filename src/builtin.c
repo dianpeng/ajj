@@ -61,11 +61,11 @@ int list_dtor( struct ajj* a, void* udata /* NULL */,
 /* append */
 static
 int list_append( struct ajj* a ,
-    struct ajj_object* obj,
+    struct ajj_value * obj,
     struct ajj_value* arg,
     size_t arg_len,
     struct ajj_value* ret ) {
-  struct list* l = obj->val.obj.data;
+  struct list* l = LIST(l);
   if( arg_len > 1 )
     FAIL(a,"list::append can only accept 1 argument!");
   if( l->len == l->cap ) {
@@ -76,7 +76,8 @@ int list_append( struct ajj* a ,
   }
   assert(l->len < l->cap);
   /* move the target value to THIS gc scope */
-  l->entry[l->len++] = ajj_value_move(obj->scp,arg);
+  l->entry[l->len++] = ajj_value_move(
+      obj->value.object->scp,arg);
 
   RETURN_VOID;
 }
@@ -101,8 +102,8 @@ int list_extend( struct ajj* a ,
     /* Unfortunately we cannot use memcpy since we need to move those
      * value to the new scope */
     for( i = 0 ; i < t->len ; ++i ) {
-      l->entry[l->len++] = ajj_value_move(obj->value.object->scp,
-          t->entry+i);
+      l->entry[l->len++] =
+        ajj_value_move(obj->value.object->scp,t->entry+i);
     }
 
     RETURN_VOID;
@@ -121,7 +122,8 @@ int list_pop_back( struct ajj* a,
   } else {
     struct list* l = LIST(obj);
     if( l->len == 0 ) {
-      FAIL(a,"list::pop_back cannot pop value from list has 0 elements!");
+      FAIL(a,"list::pop_back cannot pop value from \
+          list has 0 elements!");
     } else {
       --l->len;
     }
@@ -163,70 +165,62 @@ int list_clear( struct ajj* a,
 
 /* slot protocol */
 static
-size_t list_length( struct ajj* a , void* udata , struct ajj_value* l ) {
+size_t list_length( struct ajj* a , struct ajj_value* l ) {
   UNUSE_ARG(a);
-  UNUSE_ARG(udata);
   assert( IS_A(l,LIST_TYPE) );
   return LIST(l)->len;
 }
 
 static
-int list_iter_start( struct ajj* a , void* udata , struct ajj_value* l) {
+int list_iter_start( struct ajj* a , struct ajj_value* l) {
   UNUSE_ARG(a);
-  UNUSE_ARG(udata);
   assert( IS_A(l,LIST_TYPE) );
   return 0;
 }
 
 static
-int list_iter_move( struct ajj* a , void* udata , struct ajj_value* l, int itr ) {
+int list_iter_move( struct ajj* a , struct ajj_value* l, int itr ) {
   UNUSE_ARG(a);
-  UNUSE_ARG(udata);
   assert( IS_A(l,LIST_TYPE) );
   return itr+1;
 }
 
 static
-int list_iter_has( struct ajj* a , void* udata , struct ajj_value* l , int itr ) {
+int list_iter_has( struct ajj* a , struct ajj_value* l , int itr ) {
   UNUSE_ARG(a);
-  UNUSE_ARG(udata);
   assert( IS_A(l,LIST_TYPE) );
   return itr < LIST(l)->len;
 }
 
 static
 struct ajj_value
-list_iter_get_key( struct ajj* a , void* udata , struct ajj_value* l , int itr ) {
+list_iter_get_key( struct ajj* a , struct ajj_value* l , int itr ) {
   UNUSE_ARG(a);
-  UNUSE_ARG(udata);
   assert( IS_A(l,LIST_TYPE) );
   return ajj_value_number(itr);
 }
 
 static
 struct ajj_value
-list_iter_get_val( struct ajj* a , void* udata , struct ajj_value* l , int itr ) {
+list_iter_get_val( struct ajj* a , struct ajj_value* l , int itr ) {
   UNUSE_ARG(a);
-  UNUSE_ARG(udata);
   assert( IS_A(l,LIST_TYPE) );
   assert( itr < LIST(l)->len);
   return LIST(l)->entry[itr];
 }
 
 static
-int list_empty( struct ajj* a , void* udata , struct ajj_value* l ) {
+int list_empty( struct ajj* a , struct ajj_value* l ) {
   UNUSE_ARG(a);
-  UNUSE_ARG(udata);
   assert( IS_A(l,LIST_TYPE) );
   return LIST(l)->len == 0;
 }
 
 static
-int list_in ( struct ajj* a , void* udata , struct ajj_value* l ,
+int list_in ( struct ajj* a , struct ajj_value* l ,
     const struct ajj_value* idx ) {
   int k;
   UNUSE_ARG(a);
-  UNUSE_ARG(udata);
   assert( IS_A(l,LIST_TYPE) );
   if( vm_to_integer(a,idx,&k) ) {
     return 0;
@@ -237,7 +231,7 @@ int list_in ( struct ajj* a , void* udata , struct ajj_value* l ,
 
 static
 struct ajj_value
-list_index( struct ajj* a , void* udata , struct ajj_value* l ,
+list_attr_get( struct ajj* a , struct ajj_value* l ,
     const struct ajj_value* idx ) {
   int i;
   if( vm_to_integer(a,idx,&i) )
@@ -250,6 +244,34 @@ list_index( struct ajj* a , void* udata , struct ajj_value* l ,
       return l->entry[i];
     }
   }
+}
+
+static
+void list_attr_set( struct ajj* a, struct ajj_value* obj,
+    const struct ajj_value* idx ,
+    const struct ajj_value* val ) {
+  int i;
+  UNUSE_ARG(a);
+  assert( IS_A(obj,LIST_TYPE) );
+  if( vm_to_integer(a,idx,&i) )
+    return;
+  else {
+    struct list* l = LIST(obj);
+    if( idx < l->len ) {
+      l->entry[idx] = ajj_value_move(
+          l->value.object->scp,
+          val);
+    }
+  }
+}
+
+static
+void list_attr_push( struct ajj* a, struct ajj_value* obj,
+    const struct ajj_value* val ) {
+  assert( IS_A(obj,LIST_TYPE) );
+  struct ajj_value arg = *val;
+  struct ajj_value ret;
+  CHECK(list_extend(a,obj,&arg,1,&ret) == AJJ_EXEC_OK);
 }
 
 /* list class */
@@ -274,7 +296,9 @@ static struct ajj_class LIST_CLASS  = {
     list_length,
     list_empty,
     list_in,
-    list_index
+    list_attr_get,
+    list_attr_set,
+    list_attr_push
   },
   NULL
 };
@@ -434,30 +458,27 @@ int dict_clear( struct ajj* a ,
 }
 
 static
-int dict_iter_start( struct ajj* a , void* udata ,
+int dict_iter_start( struct ajj* a ,
     struct ajj_value* obj ) {
   UNUSE_ARG(a);
-  UNUSE_ARG(udata);
 
   assert( IS_A(obj,DICT_TYPE) );
   return map_iter_start(DICT(m));
 }
 
 static
-int dict_iter_has( struct ajj* a , void* udata,
+int dict_iter_has( struct ajj* a ,
     struct ajj_value* obj , int itr ) {
   UNUSE_ARG(a);
-  UNUSE_ARG(udata);
 
   assert( IS_A(obj,DICT_TYPE) );
   return map_iter_start(DICT(obj),itr);
 }
 
 static
-int dict_iter_move( struct ajj* a  , void* udata,
+int dict_iter_move( struct ajj* a  ,
     struct ajj_value* obj , int itr ) {
   UNUSE_ARG(a);
-  UNUSE_ARG(udata);
 
   assert( IS_A(obj,DICT_TYPE) );
   return map_iter_move(DICT(obj),itr);
@@ -465,11 +486,10 @@ int dict_iter_move( struct ajj* a  , void* udata,
 
 static
 struct ajj_value
-dict_iter_get_key( struct ajj* a , void* udata,
+dict_iter_get_key( struct ajj* a ,
     struct ajj_value* obj , int itr ) {
   struct map_pair ret;
   UNUSE_ARG(a);
-  UNUSE_ARG(udata);
   assert( IS_A(obj,DICT_TYPE) );
   ret = map_iter_deref(DICT(obj),itr);
   /* return a copied string for key, we do the copy for safety reason
@@ -485,31 +505,28 @@ dict_iter_get_key( struct ajj* a , void* udata,
 
 static
 struct ajj_value
-dict_iter_get_val( struct ajj* a , void* udata,
+dict_iter_get_val( struct ajj* a ,
     struct ajj_value* obj , int itr ) {
   struct map_pair ret;
   UNUSE_ARG(a);
-  UNUSE_ARG(udata);
   assert( IS_A(obj,DICT_TYPE) );
   ret = map_iter_deref(DICT(obj),itr);
   return *(struct ajj_value*)(ret.val);
 }
 
 static
-size_t dict_length( struct ajj* a , void* udata,
+size_t dict_length( struct ajj* a ,
     struct ajj_value* obj ) {
   UNUSE_ARG(a);
-  UNUSE_ARG(udata);
   return DICT(obj)->len;
 }
 
 static
-int dict_in( struct ajj* a , void* udata,
+int dict_in( struct ajj* a ,
     struct ajj_value* obj , const struct ajj_value* key ) {
   struct string str;
   int own;
   UNUSE_ARG(a);
-  UNUSE_ARG(udata);
   assert( IS_A(obj,DICT_TYPE) );
   if( vm_to_string(key,&str,&own) )
     return 0;
@@ -525,28 +542,32 @@ int dict_in( struct ajj* a , void* udata,
 }
 
 static
-int dict_empty( struct ajj* a , void* udata,
+int dict_empty( struct ajj* a ,
     struct ajj_value* obj , const struct ajj_value* key ) {
   UNUSE_ARG(a);
-  UNUSE_ARG(udata);
   assert( IS_A(obj,DICT_TYPE) );
   return DICT(obj)->len == 0;
 }
 
 static
 struct ajj_value
-dict_index( struct ajj* a , void* udata,
+dict_attr_get( struct ajj* a ,
     struct ajj_value* obj, const struct ajj_value* key ) {
-  struct string str;
-  int own;
-  if( vm_to_string(key,&str,&own) )
-    return AJJ_NONE;
-  else {
-    struct ajj_value* val;
-    val = map_find(DICT(obj),&str);
-    if(own) string_destroy(&str);
-    return val == NULL ? AJJ_NONE : *val;
-  }
+  struct ajj_value ret;
+  struct ajj_value arg = *key;
+  CHECK(dict_get(a,obj,&arg,1,&ret)==AJJ_EXEC_OK);
+  return ret;
+}
+
+static
+struct ajj_value
+dict_attr_set( struct ajj* a, struct ajj_value* obj,
+    const struct ajj_value* key,
+    const struct ajj_value* val ) {
+  struct ajj_value ret;
+  struct ajj_value arg[2] = { *key , *val };
+  CHECK(dict_set(a,obj,arg,2,&ret)==AJJ_EXEC_OK);
+  return ret;
 }
 
 static struct ajj_class DICT_CLASS = {
@@ -570,7 +591,9 @@ static struct ajj_class DICT_CLASS = {
     dict_length,
     dict_empty,
     dict_in,
-    dict_index
+    dict_attr_get,
+    dict_attr_set,
+    NULL
   },
   NULL
 }
@@ -616,18 +639,96 @@ int xlist_dtor( struct ajj* a, void* udata,
   return AJJ_EXEC_OK;
 }
 
+/* slots functions */
+static
+int xlist_iter_start( struct ajj* a,
+    struct ajj_value* obj ) {
+  UNUSE_ARG(a);
+  assert( IS_A(obj,XLIST_TYPE) );
+  return 0;
+}
 
+static
+int xlist_iter_has( struct ajj* a,
+    struct ajj_value* obj , int itr ) {
+  UNUSE_ARG(a);
+  assert( IS_A(obj,XLIST_TYPE) );
+  return itr < XLIST(obj)->len;
+}
 
+static
+int xlist_iter_move( struct ajj* a,
+    struct ajj_value* obj , int itr ) {
+  UNUSE_ARG(a);
+  assert( IS_A(obj,XLIST_TYPE) );
+  return ++itr;
+}
 
+static
+struct ajj_value
+xlist_iter_get_key( struct ajj* a,
+    struct ajj_value* obj , int itr ) {
+  UNUSE_ARG(a);
+  assert( IS_A(obj,XLIST_TYPE) );
+  return AJJ_NONE;
+}
 
+static
+struct ajj_value
+xlist_iter_get_val( struct ajj* a,
+    struct ajj_value* obj , int itr ) {
+  UNUSE_ARG(a);
+  assert( IS_A(obj,XLIST_TYPE) );
+  return AJJ_NONE;
+}
 
+static
+size_t xlist_length( struct ajj* a,
+    struct ajj_value* obj ) {
+  UNUSE_ARG(a);
+  assert( IS_A(obj,XLIST_TYPE) );
+  return XLIST(obj)->len;
+}
 
+static
+size_t xlist_empty( struct ajj* a ,
+    struct ajj_value* obj ) {
+  UNUSE_ARG(a);
+  assert( IS_A(obj,XLIST_TYPE) );
+  return XLIST(obj)->len == 0;
+}
 
+static
+struct ajj_class XLIST_CLASS = {
+  "xlist",
+  xlist_ctor,
+  xlist_dtor,
+  {},
+  0,
+  {
+    xlist_iter_start,
+    xlist_iter_move,
+    xlist_iter_has,
+    xlist_iter_get_key,
+    xlist_iter_get_val,
+    xlist_length,
+    xlist_empty,
+    NULL,
+    NULL,
+    NULL,
+    NULL
+  },
+  NULL,
+};
 
-
-
-
-
-
-
-
+void ajj_builtin_load( struct ajj* a ) {
+  /* list */
+  ajj_add_value(a,&(a->builtins),NULL,
+      AJJ_VALUE_CLASS,&LIST_CLASS);
+  /* dict */
+  ajj_add_value(a,&(a->builtins),NULL,
+      AJJ_VALUE_CLASS,&DICT_CLASS);
+  /* xlist */
+  ajj_add_value(a,&(a->builtins),NULL,
+      AJJ_VALUE_CLASS,&XLIST_CLASS);
+}

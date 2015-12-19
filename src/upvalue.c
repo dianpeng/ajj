@@ -140,25 +140,35 @@ upvalue_table_find_c( struct upvalue_table* tb,
   return NULL;
 }
 
-struct upvalue_table*
-upvalue_table_destroy_one( struct ajj* a ,
-    struct upvalue_table* m ) {
-  struct upvalue_table* r = m->prev;
+void
+upvalue_table_clear( struct ajj* a, struct upvalue_table* m ) {
   int itr;
-
   itr = map_iter_start(&(m->d));
   while( map_iter_has(&(m->d),itr) ) {
     struct map_pair p = map_iter_deref(&(m->d),itr);
     struct upvalue* uv = *(struct upvalue**)p.val;
     while( uv ) {
       struct upvalue* p = uv->prev;
+      if( p->type == UPVALUE_FUNCTION &&
+          p->gut.gfunc.tp == OBJECT_CTOR ) {
+        /* this slot is owned by upvalue , no one will track
+         * its usage except this upvalue table .*/
+        func_table_destroy(a,
+            GET_OBJECTCTOR(&(p->gut.gfunc)));
+      }
       slab_free(&(a->upval_slab),uv);
       uv = p;
     }
     itr = map_iter_move(&(m->d),itr);
   }
-
   map_destroy(&(m->d));
+}
+
+struct upvalue_table*
+upvalue_table_destroy_one( struct ajj* a ,
+    struct upvalue_table* m ) {
+  struct upvalue_table* r = m->prev;
+  upvalue_table_clear(a,m);
   free(m);
   return r;
 }

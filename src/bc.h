@@ -262,6 +262,7 @@ int bc_2nd_arg( const struct program* prg , size_t* pos ) {
 }
 
 /* dump program into human readable format */
-void dump_program( const char* src , const struct program* , struct ajj_io* output );
+void dump_program( const char* src , const struct program* ,
+    struct ajj_io* output );
 
 #endif /* _BC_H_ */

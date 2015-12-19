@@ -39,17 +39,17 @@ void dump_program_ctable( const struct program* prg , struct ajj_io* output ) {
   size_t i;
   ajj_io_printf(output,"Constant String Table======================\n\n");
   for( i = 0 ; i < prg->str_len ; ++i ) {
-    fprintf(output,"%zu: %s\n",i,prg->str_tbl[i].str);
+    ajj_io_printf(output,"%zu: %s\n",i,prg->str_tbl[i].str);
   }
   ajj_io_printf(output,"\nConstant Number Table======================\n\n");
   for( i = 0 ; i < prg->num_len ; ++i ) {
-    fprintf(output,"%zu: %f\n",i,prg->num_tbl[i]);
+    ajj_io_printf(output,"%zu: %f\n",i,prg->num_tbl[i]);
   }
   ajj_io_printf(output,"\nFunction Argument Table====================\n\n");
   for( i = 0 ; i < prg->par_size ; ++i ) {
-    fprintf(output,"%zu:%s:",i,prg->par_list[i].name.str);
+    ajj_io_printf(output,"%zu:%s:",i,prg->par_list[i].name.str);
     ajj_value_print(&(prg->par_list[i].def_val),
-        stdout,AJJ_VALUE_COMPACT);
+        output,AJJ_VALUE_COMPACT);
     ajj_io_printf(output,"\n");
   }
   ajj_io_printf(output,"\n");

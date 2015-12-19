@@ -118,12 +118,19 @@ int ajj_delete_template( struct ajj* a, const char* name ) {
   return 0;
 }
 
+/* This function is used to define an object into a specific
+ * table. It is usually used to define builtin inside of the
+ * builtins table */
+void ajj_add_value( struct ajj* a, struct upvalue_table* ut,
+    const char* name , int type , ... );
+
 /* Wipe out ALL the template is safe operation */
 void ajj_clear_template( struct ajj* );
 
 /* internal utility functions */
 char* ajj_aux_load_file( struct ajj* a, const char* , size_t* );
 
-int ajj_render( struct ajj* a , const char* , const char*  , FILE* );
+int ajj_render( struct ajj* a , const char* ,
+    const char*  , struct ajj_io* );
 
 #endif /* _AJJ_PRIV_H_ */

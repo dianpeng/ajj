@@ -930,25 +930,24 @@ static int
 parse_constseq( struct parser* p , int ltk , int rtk ,
     struct ajj_value* output ) {
   struct tokenizer* tk = &(p->tk);
-  struct list* l;
+  struct ajj_object* l;
+
   assert(tk->tk == ltk);
   tk_move(tk);
 
   /* set the output to a list */
-  *output = ajj_value_assign(
-      ajj_object_create_list(p->a,p->root_gc));
+  l = ajj_object_create_list(p->a,p->root_gc);
+  *output = ajj_value_assign(l);
 
   if( tk->tk == rtk ) {
     tk_move(tk);
     return 0;
   }
 
-  l = &(output->value.object->val.l);
-
   do {
     struct ajj_value val;
     CALLE(parse_constexpr(p,&val));
-    list_push(l,&val);
+    list_push(p->a,l,&val);
     if( tk->tk == TK_COMMA ) {
       tk_move(tk);
       continue;
@@ -980,19 +979,17 @@ parse_consttuple( struct parser* p , struct ajj_value* output ) {
 static int
 parse_constdict( struct parser* p , struct ajj_value* output ) {
   struct tokenizer* tk = &(p->tk);
-  struct map* d;
+  struct ajj_object* d;
   assert( tk->tk == TK_LBRA );
   tk_move(tk);
 
-  *output = ajj_value_assign(
-      ajj_object_create_dict(p->a,p->root_gc));
+  d = ajj_object_create_dict(p->a,p->root_gc);
+  *output = ajj_value_assign(d);
 
   if( tk->tk == TK_RBRA ) {
     tk_move(tk);
     return 0;
   }
-
-  d = &(output->value.object->val.d);
 
   do {
     struct ajj_value key , val;
@@ -1015,7 +1012,7 @@ parse_constdict( struct parser* p , struct ajj_value* output ) {
     CALLE(parse_constexpr(p,&val));
 
     /* insert the key into the list */
-    dict_insert_c(d,ajj_value_to_cstr(&key),&val);
+    dict_insert(p->a,d,&key,&val);
 
     /* delete a string promptly */
     ajj_value_delete_string(p->a,&key);

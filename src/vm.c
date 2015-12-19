@@ -166,7 +166,6 @@ void runtime_destroy( struct ajj* a , struct runtime* rt ) {
 /* =============================
  * Decoding
  * ===========================*/
-
 static
 int next_instr( struct ajj* a ) {
   struct func_frame* fr;
@@ -235,7 +234,6 @@ void del_upvalue( struct ajj* a, const struct string* name ) {
 /* =============================
  * Type conversions
  * ===========================*/
-
 static
 int is_int( double val ) {
   double i;
@@ -247,29 +245,53 @@ int is_int( double val ) {
 }
 
 static
-double str_to_number( struct ajj* a , const char* str , int* fail ) {
-  double val;
+int str_to_number( const char* str , double* val ) {
   char* pend;
   errno = 0;
-  val = strtod(str,&pend);
+  *val = strtod(str,&pend);
   if( errno || str == pend ) {
-    if(errno)
-      report_error(a,"Cannot convert str:%s to number because:%s",
-          str,
-          strerror(errno));
-    else
-      report_error(a,"Cannot convert str:%s to number!",str);
+    return -1;
+  }
+  return 0;
+}
+
+int vm_to_number( const struct ajj_value* val, double* d ) {
+  assert( val->type != AJJ_VALUE_NOT_USE );
+  switch(val->type) {
+    case AJJ_VALUE_BOOLEAN:
+      *d = ajj_value_to_boolean(val);
+      return 0;
+    case AJJ_VALUE_NUMBER:
+      *d = ajj_value_to_number(val);
+      return 0;
+    case AJJ_VALUE_STRING:
+      return str_to_number(ajj_value_to_cstr(val),d);
+    default:
+      return -1;
+  }
+}
+
+
+static
+double to_number( struct ajj* a , const struct ajj_value* val , int* fail ) {
+  double ret;
+  assert( val->type != AJJ_VALUE_NOT_USE );
+  if( vm_to_number(val,&ret) ) {
+    report_error(a,"Cannot convert to number!");
     *fail = 1;
     return 0;
+  } else {
+    *fail = 0;
+    return ret;
   }
-  *fail = 0;
-  return val;
 }
 
 static
 struct string
 to_display_string( struct ajj* a , const struct ajj_value* val ,
     int* own ) {
+  UNUSE_ARG(a);
+
   switch(val->type) {
     case AJJ_VALUE_BOOLEAN:
       *own = 0;
@@ -295,79 +317,73 @@ to_display_string( struct ajj* a , const struct ajj_value* val ,
   }
 }
 
-static
-struct string
-to_string( struct ajj* a , const struct ajj_value* val ,
-    int* own , int* fail ) {
+int vm_to_string( const struct ajj_value* val,
+    struct string* str, int* own ) {
   switch(val->type) {
     case AJJ_VALUE_BOOLEAN:
-      *own = 0; *fail = 0;
-      return ajj_value_to_boolean(val) ?
-        TRUE_STRING : FALSE_STRING;
+      *own = 0;
+      *str = (ajj_value_to_boolean(val) ?
+        TRUE_STRING : FALSE_STRING);
+      return 0;
     case AJJ_VALUE_NUMBER:
       {
         char buf[256];
         sprintf(buf,"%f",ajj_value_to_number(val));
-        *own = 1;*fail =0;
-        return string_dupc(buf);
+        *own = 1;
+        *str = string_dupc(buf);
+        return 0;
       }
     case AJJ_VALUE_STRING:
-      *own = 0; *fail = 0;
-      return *ajj_value_to_string(val);
+      *own = 0;
+      *str = *ajj_value_to_string(val);
     default:
-      report_error(a,"Cannot convert type:%s to string!",
-          ajj_value_get_type_name(val));
-      *fail = 1;
-      return NONE_STRING;
+      return -1;
   }
 }
 
 static
-double to_number( struct ajj* a , const struct ajj_value* val , int* fail ) {
-  assert( val->type != AJJ_VALUE_NOT_USE );
-
-  switch(val->type) {
-    case AJJ_VALUE_BOOLEAN:
-      *fail = 0;
-      return ajj_value_to_boolean(val);
-    case AJJ_VALUE_NUMBER:
-      *fail = 0;
-      return ajj_value_to_number(val);
-    case AJJ_VALUE_STRING:
-      *fail = 0;
-      return str_to_number(a,ajj_value_to_cstr(val),fail);
-    default:
-      *fail = 1;
-      report_error(a,"Cannot convert type from:%s to type:number!",
-          ajj_value_get_type_name(val));
-      return 0;
+struct string
+to_string( struct ajj* a , const struct ajj_value* val ,
+    int* own , int* fail ) {
+  struct string s;
+  if(vm_to_string(val,&s,own)) {
+    *fail = 1;
+    report_error(a,"Cannot convert to string!");
+    return EMPTY_STRING;
+  } else {
+    *fail = 0;
+    return s;
   }
 }
 
-static
-int to_integer( struct ajj* a, const struct ajj_value* val, int* fail ) {
+int vm_to_integer( const struct ajj_value* val , int* o ) {
   assert( val->type != AJJ_VALUE_NOT_USE );
   switch( val->type ) {
     case AJJ_VALUE_BOOLEAN:
-      *fail = 0;
       return ajj_value_to_boolean(val);
     case AJJ_VALUE_NUMBER:
       {
         double d = val->value.number;
         if( d > INT_MAX || d < INT_MIN ) {
-          report_error(a,"Cannot convert value:%f to integer, overflow!",
-              d);
-          *fail = 1;
           return -1;
         }
-        *fail =0;
-        return (int)(d);
+        *o = (int)(d);
+        return 0;
       }
     default:
-      report_error(a,"Cannot convert type:%s to integer!",
-          ajj_value_get_type_name(val));
-      *fail = 1;
       return -1;
+  }
+}
+
+static
+int to_integer( struct ajj* a, const struct ajj_value* val, int* fail ) {
+  int o;
+  if(vm_to_integer(val,&o)) {
+    report_error(a,"Cannot convert value to integer!");
+    *fail = 1;
+    return -1;
+  } else {
+    return o;
   }
 }
 
@@ -401,17 +417,21 @@ int is_false( const struct ajj_value* val ) {
   }
 }
 
-static
-int is_empty( struct ajj* a , const struct ajj_value* val , int* fail ) {
-  assert( val->type != AJJ_VALUE_NOT_USE );
+/* Public conversion API */
+int vm_to_number( const struct ajj_value* val , double* o ) {
   switch(val->type) {
-    case AJJ_VALUE_STRING:
-      *fail = 0;
-      return ajj_value_to_string(val)->len == 0;
-      /* TODO :: */
+    case AJJ_VALUE_NUMBER:
+      *o = val->value.number;
+      return 0;
+    case AJJ_VALUE_BOOLEAN:
+      *o = val->value.boolean;
+      return 0;
+    default:
       return -1;
   }
 }
+
+
 
 /* =============================
  * Specific instruction handler
@@ -551,6 +571,59 @@ struct ajj_value vm_neg(struct ajj* a, const struct ajj_value* val,
   return ajj_value_number(-v);
 }
 
+static
+struct ajj_value
+vm_in( struct ajj* a , struct ajj_value* obj ,
+    const struct ajj_value* val , int* fail ) {
+  if( val->type != AJJ_VALUE_OBJECT ) {
+    *fail = 1;
+    report_error(a,"Type:%s doesn't support in operator!",
+        ajj_value_get_type_name(val));
+    return AJJ_NONE;
+  } else {
+    struct object* o = &(val->value.object->val.obj);
+    if( o->fn_tb->slot.in ) {
+      *fail = 0;
+      return ajj_value_number(
+          o->fn_tb->slot.in(a,obj,val));
+    } else {
+      *fail = 1;
+      report_error(a,"Type:%s doesn't support in operator!",
+          o->fn_tb->name.str);
+      return AJJ_NONE;
+    }
+  }
+}
+
+static
+int
+is_empty( struct ajj* a , struct ajj_value* val , int* fail ) {
+  assert( val->type != AJJ_VALUE_NOT_USE );
+  switch(val->type) {
+    case AJJ_VALUE_STRING:
+      *fail = 0;
+      return ajj_value_to_string(val)->len == 0;
+    case AJJ_VALUE_OBJECT:
+      /* try to use empty slots here */
+      {
+        struct object* o = &(val->value.object->val.obj);
+        if( o->fn_tb->slot.empty != NULL ) {
+          return o->fn_tb->slot.empty(a,val);
+        } else {
+          *fail = 1;
+          report_error(a,"Type:%s doesn't support empty slot!",
+              o->fn_tb->name.str);
+          return -1;
+        }
+      }
+    default:
+      *fail = 1;
+      report_error(a,"Type:%s doesn't support test empty!",
+          ajj_value_get_type_name(val));
+      return -1;
+  }
+}
+
 /* For C users, we don't allow them to call a script function in their
  * registered C function easily, but we need it for execution in our
  * VM. */
@@ -616,6 +689,7 @@ vm_call(struct ajj* a, struct ajj_object* obj ,
     struct ajj_value* ret ) {
   int rval;
   struct func_frame* fr = cur_frame(a);
+  struct ajj_value v_obj = ajj_value_assign(obj);
 
   /* set up the upvalue */
   set_func_upvalue(a);
@@ -648,7 +722,7 @@ vm_call(struct ajj* a, struct ajj_object* obj ,
     } else {
       assert( obj != NULL );
       assert( IS_CMETHOD(fr->entry) );
-      rval = entry->f.c_mt(a,obj,par,par_sz,ret);
+      rval = entry->f.c_mt(a,&v_obj,par,par_sz,ret);
       assert( rval >= -1 && rval <= 1);
       return rval;
     }
@@ -741,63 +815,45 @@ static
 void vm_attrset( struct ajj* a , struct ajj_value* obj,
     const struct ajj_value* key , const struct ajj_value* val ,
     int* fail ) {
-  if( obj->type != AJJ_VALUE_DICT ) {
+  if( obj->type != AJJ_VALUE_OBJECT ) {
     *fail = 1;
-    report_error(a,"Cannot push key value pair into a object has type:%s",
-        ajj_value_get_type_name(obj));
+    report_error(a,"Cannot set attributes on type:%s which is not an "\
+        "object!",ajj_value_get_type_name(obj));
+    return;
   } else {
-    struct map* d = &(obj->value.object->val.d);
-    int own;
-    struct string k = to_string(a,key,&own,fail);
-    if(*fail) return;
-    *fail = dict_insert(d,&k,own,val);
-    if(*fail) {
-      report_error(a,"Cannot add key value pair to dictionary," \
-          "too many entries inside of the dictionary already!");
+    struct object* o = &(obj->value.object->val.obj);
+    if( o->fn_tb->slot.attr_set == NULL ) {
+      *fail = 1;
+      report_error(a,"Type:%s cannot support attribute set operation!",
+          o->fn_tb->name.str);
       return;
+    } else {
+      /* invoke the attributes set operation */
+      o->fn_tb->slot.attr_set(a,obj,key,val);
+      *fail = 0;
     }
-    *fail = 0;
   }
 }
 
 static
 struct ajj_value
-vm_attrget( struct ajj* a , const struct ajj_value* obj,
+vm_attrget( struct ajj* a , struct ajj_value* obj,
     const struct ajj_value* key , int* fail ) {
-  if( obj->type != AJJ_VALUE_DICT ||
-      obj->type != AJJ_VALUE_LIST ) {
+  if( obj->type != AJJ_VALUE_OBJECT ) {
     *fail = 1;
-    report_error(a,"Cannot lookup component on an object has type:%s",
-        ajj_value_get_type_name(obj));
+    report_error(a,"Cannot get attributes on type:%s which is not an "\
+        "object!",ajj_value_get_type_name(obj));
+    return AJJ_NONE;
   } else {
-    if( obj->type == AJJ_VALUE_LIST ) {
-      struct list* l = &(obj->value.object->val.l);
-      int idx = to_integer(a,key,fail);
-      if(*fail) return AJJ_NONE;
-      if( idx >= l->len ) {
-        *fail = 1;
-        report_error(a,"The index has size:%zu,but index is :%d." \
-            "Out of boundary of list!",l->len,idx);
-        return AJJ_NONE;
-      }
-      return *list_index(l,idx);
+    struct object* o = &(obj->value.object->val.obj);
+    if( o->fn_tb->slot.attr_get == NULL ) {
+      *fail = 1;
+      report_error(a,"Type:%s cannot support attribute get operation!",
+          o->fn_tb->name.str);
+      return AJJ_NONE;
     } else {
-      struct map* d = &(obj->value.object->val.d);
-      struct ajj_value ret;
-      const struct ajj_value* dict_ret;
-      int own;
-      struct string k = to_string(a,key,&own,fail);
-      if(*fail) return AJJ_NONE;
-      dict_ret = dict_find(d,&k);
-      if( dict_ret == NULL ) {
-        ret = AJJ_NONE;
-      } else {
-        ret = *dict_ret;
-      }
       *fail = 0;
-      if( own )
-        string_destroy(&k);
-      return ret;
+      return o->fn_tb->slot.attr_get(a,obj,key);
     }
   }
 }
@@ -805,22 +861,26 @@ vm_attrget( struct ajj* a , const struct ajj_value* obj,
 static
 void vm_attrpush( struct ajj* a , struct ajj_value* obj,
     const struct ajj_value* val , int* fail ) {
-  if( obj->type != AJJ_VALUE_LIST ) {
+  if( obj->type != AJJ_VALUE_OBJECT ) {
     *fail = 1;
-    report_error(a,"Cannot push a value into a none-list/tuple object." \
-        "The object has type:%s!",ajj_value_get_type_name(val));
-    return;
+    report_error(a,"Cannot push attributes on type:%s which is not an "\
+        "object!",ajj_value_get_type_name(obj));
   } else {
-    struct list* l = &(obj->value.object->val.l);
-    list_push(l,val);
-    *fail = 0;
-    return;
+    struct object* o = &(obj->value.object->val.obj);
+    if( o->fn_tb->slot.attr_push == NULL ) {
+      *fail = 1;
+      report_error(a,"Type:%s cannot support attribute push operation!",
+          o->fn_tb->name.str);
+    } else {
+      *fail = 0;
+      o->fn_tb->slot.attr_push(a,obj,val);
+    }
   }
 }
 
 static
 void vm_print( struct ajj* a , const struct string* str ) {
-  ajj_io_write(a->rt->output,str->str,1,str->len+1);
+  ajj_io_write(a->rt->output,str->str,str->len+1);
 }
 
 static
@@ -912,7 +972,8 @@ void vm_include( struct ajj* a , int type, int cnt , int* fail ) {
     setup_json_env(a,cnt,fail);
   }
   rt = a->rt;
-  if( ajj_render(a,fc,ajj_value_to_cstr(fn),a->rt->output) )
+  if( ajj_render(a,fc,ajj_value_to_cstr(
+          fn),a->rt->output) )
     goto fail;
   a->rt = rt;
   free(fc);
@@ -1237,6 +1298,12 @@ int vm_main( struct ajj* a ) {
         push(a,o);
       } vm_end(DIVTRUCT)
 
+      vm_beg(IN) {
+        struct ajj_value o = vm_in(a,top(a,2),top(a,1),RCHECK);
+        pop(a,2);
+        push(a,o);
+      } vm_end(IN)
+
       vm_beg(CALL) {
         int fn_idx= instr_1st_arg(c);
         int an = instr_2nd_arg(a);
@@ -1540,104 +1607,83 @@ int vm_main( struct ajj* a ) {
 
       /* ITERATORS ------------------ */
       vm_beg(ITER_START) {
+        int itr;
         struct ajj_value* obj = top(a,1);
-        if( obj->type == AJJ_VALUE_LIST ) {
-          struct list* l = &(obj->value.object->val.l);
-          struct ajj_value itr = ajj_value_iter(
-              list_iter_start(l));
-          push(a,itr);
-        } else if( obj->type == AJJ_VALUE_DICT ) {
-          struct map* d = &(obj->value.object->val.d);
-          struct ajj_value itr = ajj_value_iter(
-              dict_iter_start(d));
-          push(a,itr);
-        } else {
-          report_error(a,"Cannot iterate on object has type:%s!",
+        if(obj->type != AJJ_VALUE_OBJECT) {
+          report_error(a,"Type:%s doesn't support iterator!",
               ajj_value_get_type_name(obj));
-          return -1;
+          goto fail;
+        } else {
+          struct object* o = &(obj->value.object->val.obj);
+          if( o->fn_tb->slot.iter_start ) {
+            itr = o->fn_tb->slot.iter_start(
+                a,obj);
+          } else {
+            report_error(a,"Type:%s doesn't support iterator!",
+                o->fn_tb->name.str);
+            goto fail;
+          }
         }
+        /* do not pop the object out */
+        push(a,ajj_value_iter(itr));
       } vm_end(ITER_START)
 
       vm_beg(ITER_HAS) {
         struct ajj_value* itr = top(a,1);
         struct ajj_value* obj = top(a,2);
+        struct object* o;
+        int i_itr;
+
         assert( itr->type == AJJ_VALUE_ITERATOR );
-        assert( obj->type == AJJ_VALUE_LIST ||
-                obj->type == AJJ_VALUE_DICT );
-        if( obj->type == AJJ_VALUE_LIST ) {
-          if( list_iter_has(&(obj->value.object->val.l),
-                ajj_value_to_iter(itr)) ) {
-            push(a,AJJ_TRUE);
-          } else {
-            push(a,AJJ_FALSE);
-          }
-        } else {
-          if( dict_iter_has(&(obj->value.object->val.d),
-                ajj_value_to_iter(itr)) ) {
-            push(a,AJJ_TRUE);
-          } else {
-            push(a,AJJ_FALSE);
-          }
-        }
+        assert( obj->type == AJJ_VALUE_OBJECT );
+        o = &(obj->value.object->val.obj);
+        assert( o->fn_tb->slot.iter_has );
+        i_itr = o->fn_tb->slot.iter_has(
+            a,obj,i_itr);
+        /* re-push the iterator onto the stack */
+        pop(a,1);push(a,ajj_value_iter(i_itr));
       } vm_end(ITER_HAS)
 
       vm_beg(ITER_DEREF) {
         int arg = instr_1st_arg(c);
         struct ajj_value* obj = top(a,2);
         struct ajj_value* itr = top(a,1);
-        assert( obj->type == AJJ_VALUE_LIST ||
-                obj->type == AJJ_VALUE_DICT );
+        struct object* o;
         assert( itr->type == AJJ_VALUE_ITERATOR );
-        if( obj->type == AJJ_VALUE_LIST ) {
-          struct list* l = &(obj->value.object->val.l);
-          struct ajj_value val =
-            *list_iter_deref(l,ajj_value_to_iter(itr));
-          if( arg == 1 ) {
-            push(a,val);
-          } else {
-            assert( arg == 2 );
-            struct ajj_value idx =
-              ajj_value_number(ajj_value_to_iter(itr));
-            push(a,idx);
-            push(a,val);
-          }
-        } else {
-          struct map* d = &(obj->value.object->val.d);
-          struct map_pair entry =
-            dict_iter_deref(d,ajj_value_to_iter(itr));
-          if( arg == 1 ) {
-            struct ajj_value val = *(struct ajj_value*)entry.val;
-            push(a,val);
-          } else {
-            struct ajj_value val = *(struct ajj_value*)entry.val;
-            struct ajj_value key = ajj_value_assign(
-                ajj_object_create_const_string(
-                    a,a->rt->cur_gc,entry.val));
-            push(a,key);
-            push(a,val);
-          }
+        assert( obj->type == AJJ_VALUE_OBJECT );
+        o = &(obj->value.object->val.obj);
+        if( arg == 1 ) {
+          struct ajj_value v;
+          /* just push the value on to the stack */
+          assert( o->fn_tb->slot.iter_get_val );
+          v = o->fn_tb->slot.iter_get_val(a,
+              obj, ajj_value_to_iter(itr));
+          push(a,v);
+        } else if( arg == 2 ) {
+          struct ajj_value k , v;
+          assert( o->fn_tb->slot.iter_get_val );
+          assert( o->fn_tb->slot.iter_get_key );
+          k = o->fn_tb->slot.iter_get_key(a,obj,
+              ajj_value_to_itr(itr));
+          v = o->fn_tb->slot.iter_get_val(a,obj,
+              ajj_value_to_iter(itr));
+          push(a,k);
+          push(a,v);
         }
       }vm_end(ITER_DEREF)
 
       vm_beg(ITER_MOVE){
         struct ajj_value* obj = top(a,2);
         struct ajj_value* itr = top(a,1);
-        assert( obj->type == AJJ_VALUE_LIST ||
-                obj->type == AJJ_VALUE_DICT );
+        struct object* o ;
         assert( itr->type == AJJ_VALUE_ITERATOR );
-        if( obj->type == AJJ_VALUE_LIST ) {
-          struct list* l = &(obj->value.object->val.l);
-          struct ajj_value nitr =
-            ajj_value_iter(list_iter_move(l,ajj_value_to_iter(itr)));
-          pop(a,1);
-          push(a,nitr);
-        } else {
-          struct map* d = &(obj->value.object->val.d);
-          struct ajj_value nitr =
-            ajj_value_iter(dict_iter_move(d,ajj_value_to_iter(itr)));
-          pop(a,1);
-          push(a,nitr);
-        }
+        assert( obj->type == AJJ_VALUE_OBJECT );
+        o = &(obj->value.object->val.obj);
+        assert( o->fn_tb->slot.iter_move );
+        pop(a,1); /* pop the top iterator */
+        push( a , ajj_value_iter(
+            o->fn_tb->slot.iter_move(
+              a,obj,ajj_value_to_iter(itr))));
       } vm_end(ITER_MOVE)
 
       /* MISC -------------------------------------- */
@@ -1654,7 +1700,6 @@ int vm_main( struct ajj* a ) {
         int a2 = instr_2nd_arg(a);
         vm_include(a,a1,a2,RCHECK);
       } vm_end(INCLUDE)
-
 
       /* NOPS, should not exist after optimization */
       vm_beg(NOP0) {

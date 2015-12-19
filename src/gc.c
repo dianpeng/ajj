@@ -26,9 +26,6 @@ gc_scope_exit( struct ajj* a , struct gc_scope* scp ) {
         break; /* break since we don't delete const string */
       case AJJ_VALUE_OBJECT: /* user defined stuff */
 
-        /* delete the property list */
-        map_destroy(&(cur->val.obj.prop));
-
         /* call its destructor to delete this object */
         cur->val.obj.fn_tb->dtor(
             a,

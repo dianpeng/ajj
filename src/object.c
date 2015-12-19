@@ -1,37 +1,5 @@
 #include "ajj-priv.h"
 
-/* ========================
- * List implementation
- * ======================*/
-
-static
-void list_reserve( struct list* l ) {
-  void* mem;
-  assert( l->cap >= LIST_LOCAL_BUF_SIZE );
-  if( l->lbuf == l->entry ) {
-    mem = malloc(sizeof(struct ajj_value)*2*l->cap);
-    memcpy(mem,l->entry,l->len*sizeof(struct ajj_value));
-  } else {
-    mem = mem_grow(l->entry,sizeof(struct ajj_value),0,&(l->cap));
-  }
-  l->entry = mem;
-}
-
-void list_push( struct list* l , const struct ajj_value* val ) {
-  if( l->cap == l->len )
-    list_reserve(l);
-  l->entry[l->len] = *val;
-  ++(l->len);
-}
-
-void list_destroy( struct list* l ) {
-  if( l->lbuf != l->entry )
-    free(l->entry);
-  l->cap = LIST_LOCAL_BUF_SIZE;
-  l->entry = l->lbuf;
-  l->len = 0;
-}
-
 /* Function table */
 struct function*
 func_table_find_func( struct func_table* tb , const struct string* name ) {
@@ -83,7 +51,6 @@ ajj_object_jinja( struct ajj* a , struct ajj_object* obj ,
       NULL,NULL, /* slot and udata */
       &fn,
       1);
-  dict_create(&(obj->val.obj.prop));
   obj->tp = AJJ_VALUE_JINJA;
   obj->val.obj.data = NULL;
   obj->val.obj.fn_tb = ft;
@@ -106,11 +73,36 @@ ajj_object_create_list( struct ajj* a , struct gc_scope* scp ) {
 
   if(a->list->ctor( a,
       a->list->udata,
-      &udata,
       NULL,0,
+      &udata,
       &tp) == AJJ_EXEC_FAIL)
     return NULL;
-  return ajj_object_create_obj(a,scp,udata,tp);
+  return ajj_object_create_obj(a,scp,
+      a->list,udata,tp);
+}
+
+void
+list_push( struct ajj* a, struct ajj_object* obj,
+    const struct ajj_value* val ) {
+  struct object* o;
+  struct ajj_value v_obj = ajj_value_assign(obj);
+  assert( obj->tp == AJJ_VALUE_OBJECT );
+  o = &(obj->val.obj);
+  assert( o->fn_tb->slot.attr_push );
+  o->fn_tb->slot.attr_push(a,&v_obj,val);
+}
+
+struct ajj_value
+list_index( struct ajj* a, struct ajj_object* obj,
+    int index ) {
+  struct object* o;
+  struct ajj_value i;
+  struct ajj_value v_obj = ajj_value_assign(obj);
+  assert( obj->tp == AJJ_VALUE_OBJECT );
+  o = &(obj->val.obj);
+  assert( o->fn_tb->slot.attr_get );
+  i = ajj_value_number(index);
+  return o->fn_tb->slot.attr_get(a,&v_obj,&i);
 }
 
 struct ajj_object*
@@ -118,14 +110,32 @@ ajj_object_create_dict( struct ajj* a , struct gc_scope* scp ) {
   void* udata;
   int tp;
   assert(a->dict);
-
   if(a->dict->ctor(a,
         a->dict->udata,
-        &udata,
         NULL,0,
+        &udata,
         &tp) == AJJ_EXEC_FAIL)
     return NULL;
-  return ajj_object_create_obj(a,scp,udata,tp);
+  return ajj_object_create_obj(a,scp,a->list,udata,tp);
+}
+
+void dict_insert( struct ajj* a , struct ajj_object* obj,
+    const struct ajj_value* key, const struct ajj_value* val ) {
+  struct object* o = &(obj->val.obj);
+  struct ajj_value v_obj = ajj_value_assign(obj);
+  assert( obj->tp == AJJ_VALUE_OBJECT );
+  assert( o->fn_tb->slot.attr_set );
+  o->fn_tb->slot.attr_set(a,&v_obj,key,val);
+}
+
+struct ajj_value
+dict_find( struct ajj* a, struct ajj_object* obj,
+    const struct ajj_value* key ) {
+  struct object* o = &(obj->val.obj);
+  struct ajj_value v_obj = ajj_value_assign(obj);
+  assert( obj->tp == AJJ_VALUE_OBJECT );
+  assert( o->fn_tb->slot.attr_get );
+  return o->fn_tb->slot.attr_get(a,&v_obj,key);
 }
 
 /* Value */
@@ -155,7 +165,6 @@ ajj_object_move( struct gc_scope* scp , struct ajj_object* obj ) {
     obj->scp = scp;
   }
 }
-
 
 struct ajj_value
 ajj_value_move( struct gc_scope* scp, struct ajj_value* val ) {

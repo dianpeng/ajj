@@ -18,15 +18,16 @@ void test1() {
                        "{% endif %}\n";
     struct ajj_object* jinja;
     const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
     jinja = parse(a,"Hello World",src,0);
     assert(jinja);
     prg = ajj_object_jinja_main(jinja);
-    dump_program(src,prg,stdout);
-    assert(!vm_run_jinja(a,jinja,stdout));
+    dump_program(src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
 
     assert(!optimize(a,jinja));
-    dump_program(src,prg,stdout);
-    assert(!vm_run_jinja(a,jinja,stdout));
+    dump_program(src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
   }
   {
     struct ajj* a = ajj_create();
@@ -37,15 +38,16 @@ void test1() {
                       "{% if vb %} {{ 'TRUE' }} {% endif %}\n";
     struct ajj_object* jinja;
     const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
     jinja = parse(a,"Hello World",src,0);
     assert(jinja);
     prg = ajj_object_jinja_main(jinja);
-    dump_program(src,prg,stdout);
-    assert(!vm_run_jinja(a,jinja,stdout));
+    dump_program(src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
 
     assert(!optimize(a,jinja));
-    dump_program(src,prg,stdout);
-    assert(!vm_run_jinja(a,jinja,stdout));
+    dump_program(src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
   }
 }
 
@@ -61,14 +63,15 @@ void test_expr() {
     const char* src = "{{ 1+2*3/4 }}\n";
     struct ajj_object* jinja;
     const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
     jinja = parse(a,"_",src,0);
     assert(jinja);
     prg = ajj_object_jinja_main(jinja);
-    dump_program(src,prg,stdout);
-    assert(!vm_run_jinja(a,jinja,stdout));
+    dump_program(src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
     assert(!optimize(a,jinja));
-    dump_program(src,prg,stdout);
-    assert(!vm_run_jinja(a,jinja,stdout));
+    dump_program(src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
   }
 
   {
@@ -76,14 +79,15 @@ void test_expr() {
     const char* src = "{{ 1+2*3**4%3 }}\n";
     struct ajj_object* jinja;
     const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
     jinja = parse(a,"_",src,0);
     assert(jinja);
     prg = ajj_object_jinja_main(jinja);
-    dump_program(src,prg,stdout);
-    assert(!vm_run_jinja(a,jinja,stdout));
+    dump_program(src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
     assert(!optimize(a,jinja));
-    dump_program(src,prg,stdout);
-    assert(!vm_run_jinja(a,jinja,stdout));
+    dump_program(src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
   }
 
   {
@@ -91,42 +95,45 @@ void test_expr() {
     const char* src = "{{ 1+2*3**4%3 > 0 and 1>=1+2*3 or -9 < 0}}\n";
     struct ajj_object* jinja;
     const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
     jinja = parse(a,"_",src,0);
     assert(jinja);
     prg = ajj_object_jinja_main(jinja);
-    dump_program(src,prg,stdout);
-    assert(!vm_run_jinja(a,jinja,stdout));
+    dump_program(src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
     assert(!optimize(a,jinja));
-    dump_program(src,prg,stdout);
-    assert(!vm_run_jinja(a,jinja,stdout));
+    dump_program(src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
   }
   {
     struct ajj* a = ajj_create();
     const char* src = "{{ 3//4 if True == False else 4**2 }}";
     struct ajj_object* jinja;
     const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
     jinja = parse(a,"_",src,0);
     assert(jinja);
     prg = ajj_object_jinja_main(jinja);
-    dump_program(src,prg,stdout);
-    assert(!vm_run_jinja(a,jinja,stdout));
+    dump_program(src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
     assert(!optimize(a,jinja));
-    dump_program(src,prg,stdout);
-    assert(!vm_run_jinja(a,jinja,stdout));
+    dump_program(src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
   }
   {
     struct ajj* a = ajj_create();
     const char* src = "{{ 3//4 if not True == False else 4**2 }}\n";
     struct ajj_object* jinja;
     const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
     jinja = parse(a,"_",src,0);
     assert(jinja);
     prg = ajj_object_jinja_main(jinja);
-    dump_program(src,prg,stdout);
-    assert(!vm_run_jinja(a,jinja,stdout));
+    dump_program(src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
     assert(!optimize(a,jinja));
-    dump_program(src,prg,stdout);
-    assert(!vm_run_jinja(a,jinja,stdout));
+    dump_program(src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
   }
 #endif
   {
@@ -135,14 +142,15 @@ void test_expr() {
                       "{{ a + 'ppVV'*3 }}\n";
     struct ajj_object* jinja;
     const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
     jinja = parse(a,"_",src,0);
     assert(jinja);
     prg = ajj_object_jinja_main(jinja);
-    dump_program(src,prg,stdout);
-    assert(!vm_run_jinja(a,jinja,stdout));
+    dump_program(src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
     assert(!optimize(a,jinja));
-    dump_program(src,prg,stdout);
-    assert(!vm_run_jinja(a,jinja,stdout));
+    dump_program(src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
   }
 }
 

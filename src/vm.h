@@ -173,7 +173,6 @@ static
 int vm_is_false( const struct ajj_value* val ) {
   return vm_to_boolean(val) == 0;
 }
-static
 int vm_to_string( const struct ajj_value* val ,
         struct string* str , int* own );
 

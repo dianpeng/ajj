@@ -52,16 +52,22 @@ typedef void (*ajj_class_dtor)( struct ajj* ,
  * slot function implemented, an registered object is able to be interated in
  * the for loop */
 struct ajj_slot {
-  int (*iter_start) ( struct ajj* , void* , struct ajj_value* );
-  int (*iter_move ) ( struct ajj* , void* , struct ajj_value* , int );
-  int (*iter_has  ) ( struct ajj* , void* , struct ajj_value* , int );
-  struct ajj_value (*iter_get_key)( struct ajj* , void* , struct ajj_value* , int );
-  struct ajj_value (*iter_get_val)( struct ajj* , void* , struct ajj_value* , int );
-  size_t (*length) ( struct ajj* , void* , struct ajj_value* );
-  int (*empty)( struct ajj* , void* , struct ajj_value* );
-  int (*in) ( struct ajj* , void* , struct ajj_value* , const struct ajj_value* );
-  struct ajj_value (*index) ( struct ajj* , void* , struct ajj_value* ,
+  int (*iter_start) ( struct ajj* , struct ajj_value* );
+  int (*iter_move ) ( struct ajj* , struct ajj_value* , int );
+  int (*iter_has  ) ( struct ajj* , struct ajj_value* , int );
+  struct ajj_value (*iter_get_key)( struct ajj* , struct ajj_value* , int );
+  struct ajj_value (*iter_get_val)( struct ajj* , struct ajj_value* , int );
+  size_t (*length) ( struct ajj* , struct ajj_value* );
+  int (*empty)( struct ajj* , struct ajj_value* );
+  int (*in) ( struct ajj* , struct ajj_value* , const struct ajj_value* );
+  /* attributes modifier */
+  struct ajj_value (*attr_get) ( struct ajj* , struct ajj_value* ,
           const struct ajj_value* );
+  void (*attr_set)( struct ajj* , struct ajj_value* ,
+      const struct ajj_value* k , const struct ajj_value* v);
+  /* attributes push */
+  void (*attr_push)( struct ajj* , struct ajj_value* ,
+      const struct ajj_value* v );
 };
 
 struct ajj_class {
@@ -177,15 +183,13 @@ int ajj_env_del_value( struct ajj* a , const char* );
  * in memory output. However, since FILE*'s memory buffer version doesn't support dynamic
  * buffer growth so we have to roll our own wheels. This one is really just a very thing
  * warpper on top of the memory and FILE* */
-extern struct ajj_io* AJJ_IO_STDOUT;
-extern struct ajj_io* AJJ_IO_STDERR;
 
 struct ajj_io* ajj_io_create_file( struct ajj* a , FILE* );
 struct ajj_io* ajj_io_create_mem ( struct ajj* a , size_t size );
 void ajj_io_destroy( struct ajj_io* );
 int ajj_io_printf( struct ajj_io* , const char* fmt , ... );
 int ajj_io_vprintf( struct ajj_io* , const char* fmt , va_list );
-int ajj_io_write( struct ajj_io* , void* mem , size_t len );
+int ajj_io_write( struct ajj_io* , const void* mem , size_t len );
 void ajj_io_flush( struct ajj_io* );
 
 /* MISC ============================= */

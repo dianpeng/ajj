@@ -29,10 +29,11 @@ struct ajj* ajj_create() {
   map_create(&(r->tmpl_tbl),sizeof(struct ajj_object*),32);
   gc_init(&(r->gc_root));
   r->rt = NULL;
-  r->upval_tb = upvalue_table_create(NULL);
+  /* initiliaze the upvalue table */
+  upvalue_table_init(&(r->builtins),NULL);
+  r->upval_tb = upvalue_table_create(&(r->builtins));
   r->list = NULL;
   r->dict = NULL;
-  upvalue_table_init(&(r->builtins));
   /* lastly load the builtins into the ajj things */
   ajj_builtin_load(r);
   return r;
@@ -41,7 +42,8 @@ struct ajj* ajj_create() {
 void ajj_destroy( struct ajj* r ) {
   /* MUST delete upvalue_table at very first */
   upvalue_table_destroy(r,r->upval_tb,&(r->builtins));
-  ajj_builtin_destroy(r);
+  /* Destroy the builtins */
+  upvalue_table_clear(r,&(r->builtins));
   /* just exit the scope without deleting this scope
    * since it is not a pointer from the gc_slab */
   gc_scope_exit(r,&(r->gc_root));
@@ -54,12 +56,12 @@ void ajj_destroy( struct ajj* r ) {
 }
 
 static
-void ajj_env_add_class( struct ajj* a , const char* name ,
-    const struct ajj_class* cls ) {
+void ajj_add_class( struct ajj* a, const struct ajj_class* cls,
+    struct upvalue_table* ut ) {
   size_t i;
   struct func_table* tb = slab_malloc(&(a->ft_slab));
   struct upvalue* uv;
-  struct string n = string_dupc(name);
+  struct string n = string_dupc(cls->name);
 
   /* initialize the function table */
   func_table_init(tb,
@@ -67,23 +69,24 @@ void ajj_env_add_class( struct ajj* a , const char* name ,
       &(cls->slot),cls->udata,
       &n,0);
 
-  uv = upvalue_table_overwrite(a,a->upval_tb,&n,1);
+  uv = upvalue_table_overwrite(a,ut,&n,1);
   uv->gut.gfunc.tp = OBJECT_CTOR;
-  uv->gut.gfunc.f.obj_ctor = tb; /* owned by this slot */
+  uv->gut.gfunc.f.obj_ctor = tb; /* owned by this slot, it will be deleted
+                                  * by upvalue destroy function */
 
   for( i = 0 ; i < cls->mem_func_len ; ++i ) {
     struct string fn;
     fn.str = cls->mem_func[i].name;
     fn.len = strlen(cls->mem_func[i].name);
-    *func_table_add_c_method(tb,&fn,0) = cls->mem_func[i].method;
+    *func_table_add_c_method(tb,&fn,0) =
+      cls->mem_func[i].method;
   }
 }
 
-void ajj_env_add_value( struct ajj* a , const char* name , int type , ... ) {
-  va_list vl;
+static
+void ajj_add_val( struct ajj* a , struct upvalue_table* ut,
+    const char* name , int type , va_list vl ) {
   struct string n;
-
-  va_start(vl,type);
 
   switch(type) {
     case AJJ_VALUE_NUMBER:
@@ -91,7 +94,7 @@ void ajj_env_add_value( struct ajj* a , const char* name , int type , ... ) {
         double val = va_arg(vl,double);
         struct upvalue* uv;
         n = string_dupc(name);
-        uv = upvalue_table_overwrite(a,a->upval_tb,&n,1);
+        uv = upvalue_table_overwrite(a,ut,&n,1);
         uv->type = UPVALUE_VALUE;
         uv->gut.val = ajj_value_number(val);
         break;
@@ -101,7 +104,7 @@ void ajj_env_add_value( struct ajj* a , const char* name , int type , ... ) {
         int val = va_arg(vl,int);
         struct upvalue* uv;
         n = string_dupc(name);
-        uv = upvalue_table_overwrite(a,a->upval_tb,&n,1);
+        uv = upvalue_table_overwrite(a,ut,&n,1);
         uv->type = UPVALUE_VALUE;
         uv->gut.val = ajj_value_boolean(val);
         break;
@@ -110,7 +113,7 @@ void ajj_env_add_value( struct ajj* a , const char* name , int type , ... ) {
       {
         struct upvalue* uv;
         n = string_dupc(name);
-        uv = upvalue_table_overwrite(a,a->upval_tb,&n,1);
+        uv = upvalue_table_overwrite(a,ut,&n,1);
         uv->type = UPVALUE_VALUE;
         uv->gut.val = AJJ_NONE;
         break;
@@ -120,9 +123,10 @@ void ajj_env_add_value( struct ajj* a , const char* name , int type , ... ) {
         struct upvalue* uv;
         const char* str = va_arg(vl,const char*);
         n = string_dupc(name);
-        uv = upvalue_table_overwrite(a,a->upval_tb,&n,1);
+        uv = upvalue_table_overwrite(a,ut,&n,1);
         uv->gut.val = ajj_value_assign(
-            ajj_object_create_string(a,&(a->gc_root),str,strlen(str),0));
+            ajj_object_create_string(a,
+              &(a->gc_root),str,strlen(str),0));
         break;
       }
     case AJJ_VALUE_OBJECT:
@@ -130,7 +134,7 @@ void ajj_env_add_value( struct ajj* a , const char* name , int type , ... ) {
         struct upvalue* uv;
         struct ajj_value* val = va_arg(vl,struct ajj_value*);
         n = string_dupc(name);
-        uv = upvalue_table_overwrite(a,a->upval_tb,&n,1);
+        uv = upvalue_table_overwrite(a,ut,&n,1);
         uv->gut.val = ajj_value_move(&(a->gc_root),val);
         break;
       }
@@ -139,12 +143,26 @@ void ajj_env_add_value( struct ajj* a , const char* name , int type , ... ) {
         const struct ajj_class* cls;
         struct upvalue* uv;
         cls = va_arg(vl,const struct ajj_class*);
-        ajj_env_add_class(a,name,cls);
+        ajj_add_class(a,cls,ut);
         break;
       }
     default:
       UNREACHABLE();
   }
+}
+
+void ajj_add_value( struct ajj* a , struct upvalue_table* ut,
+    const char* name , int type , ... ) {
+  va_list vl;
+  va_start(vl,type);
+  ajj_add_val(a,ut,name,type,vl);
+}
+
+void ajj_env_add_value( struct ajj* a , const char* name ,
+    int type , ... ) {
+  va_list vl;
+  va_start(vl,type);
+  ajj_add_val(a,a->upval_tb,name,type,vl);
 }
 
 int ajj_env_del_value( struct ajj* a , const char* name ) {
@@ -154,17 +172,6 @@ int ajj_env_del_value( struct ajj* a , const char* name ) {
 /* =======================================================
  * IO
  * =====================================================*/
-static struct ajj_io IO_STDOUT = {
-  stdout,
-  AJJ_IO_FILE
-};
-struct ajj_io* AJJ_IO_STDOUT = &IO_STDOUT;
-
-static struct ajj_io IO_STDERR = {
-  stderr,
-  AJJ_IO_FILE
-};
-struct ajj_io* AJJ_IO_STDERR = &IO_STDERR;
 
 struct ajj_io*
 ajj_io_create_file( struct ajj* a , FILE* f ) {
@@ -217,7 +224,7 @@ int io_mem_vprintf( struct ajj_io* io , const char* fmt , va_list vl ) {
 }
 
 static
-void io_mem_write( struct ajj_io* io , void* mem , size_t len ) {
+void io_mem_write( struct ajj_io* io , const void* mem , size_t len ) {
   if( io->out.m.cap < io->out.m.len + len ) {
     io->out.m.mem = mem_grow(io->out.m.mem,
         sizeof(char),
@@ -230,11 +237,11 @@ void io_mem_write( struct ajj_io* io , void* mem , size_t len ) {
 
 static
 int io_file_vprintf( struct ajj_io* io , const char* fmt , va_list vl ) {
-  return vprintf(io->out.f,fmt,vl);
+  return vfprintf(io->out.f,fmt,vl);
 }
 
 static
-void io_file_write( struct ajj_io* io , void* mem , size_t len ) {
+void io_file_write( struct ajj_io* io , const void* mem , size_t len ) {
   fwrite(mem,sizeof(char),len,io->out.f);
 }
 
@@ -256,7 +263,7 @@ int ajj_io_vprintf( struct ajj_io* io , const char* fmt , va_list vl ) {
   }
 }
 
-int ajj_io_write( struct ajj_io* io , void* mem , size_t len ) {
+int ajj_io_write( struct ajj_io* io , const void* mem , size_t len ) {
   if(io->tp == AJJ_IO_FILE) {
     io_file_write(io,mem,len);
   } else {
@@ -303,6 +310,10 @@ escape_string( const struct string* val ) {
 }
 
 static
+void ajj_object_print( struct object*,struct ajj_io*,
+    int , int );
+
+static
 void ajj_value_print_priv( const struct ajj_value* val,
     struct ajj_io* output , int opt , int level ) {
   struct string str;
@@ -338,19 +349,10 @@ void ajj_value_print_priv( const struct ajj_value* val,
 }
 
 static
-void ajj_object_print( struct object* obj , struct ajj_io* output ,
+void ajj_object_print( struct object* obj ,
+    struct ajj_io* output ,
     int opt, int level ) {
-  if( opt == AJJ_VALUE_PRETTY ) {
-    ajj_io_printf(output,"{\n");
-    DOINDENT();
-    fprintf(output,"object:%s\n",obj->fn_tb->name.str);
-    DOINDENT();
-    ajj_io_printf(output,"property \n");
-    DOINDENT();
-  } else {
-    fprintf(output,"{ object:%s property ",obj->fn_tb->name.str);
-  }
-  ajj_dict_print(&(obj->prop),output,opt,level+1);
+  size_t i;
   if( opt == AJJ_VALUE_PRETTY ) {
     ajj_io_printf(output,"\n");
     DOINDENT();
@@ -359,30 +361,27 @@ void ajj_object_print( struct object* obj , struct ajj_io* output ,
   } else {
     ajj_io_printf(output,"method { ");
   }
-  { /* dump the method for this object */
-    size_t i;
-    for( i = 0 ; i < obj->fn_tb->func_len; ++i ) {
-      struct function* f = obj->fn_tb->func_tb+i;
-      if( opt == AJJ_VALUE_PRETTY ) {
-        DOINDENT();
-        fprintf(output,"%s:%s",f->name.str,
-            function_get_type_name(f->tp));
-        if( i != obj->fn_tb->func_len - 1 ) {
-          ajj_io_printf(output,",\n");
-        }
-      } else {
-        fprintf(output,"%s:%s",f->name.str,
-            function_get_type_name(f->tp));
-        if( i != obj->fn_tb->func_len - 1 ) {
-          ajj_io_printf(output,",");
-        }
+  for( i = 0 ; i < obj->fn_tb->func_len; ++i ) {
+    struct function* f = obj->fn_tb->func_tb+i;
+    if( opt == AJJ_VALUE_PRETTY ) {
+      DOINDENT();
+      ajj_io_printf(output,"%s:%s",f->name.str,
+          function_get_type_name(f->tp));
+      if( i != obj->fn_tb->func_len - 1 ) {
+        ajj_io_printf(output,",\n");
+      }
+    } else {
+      ajj_io_printf(output,"%s:%s",f->name.str,
+          function_get_type_name(f->tp));
+      if( i != obj->fn_tb->func_len - 1 ) {
+        ajj_io_printf(output,",");
       }
     }
-    if( opt == AJJ_VALUE_PRETTY ) {
-      ajj_io_printf(output,"}\n");
-    } else {
-      ajj_io_printf(output,"}");
-    }
+  }
+  if( opt == AJJ_VALUE_PRETTY ) {
+    ajj_io_printf(output,"}\n");
+  } else {
+    ajj_io_printf(output,"}");
   }
   if( opt == AJJ_VALUE_PRETTY ) {
     ajj_io_printf(output,"}\n");
@@ -422,7 +421,7 @@ char* ajj_aux_load_file( struct ajj* a , const char* fname ,
 }
 
 int ajj_render( struct ajj* a , const char* src ,
-    const char* key , FILE* output ) {
+    const char* key , struct ajj_io* output ) {
   struct ajj_object* obj = parse(a,key,src,0);
   if(!obj) return -1;
 #if 0
