@@ -167,7 +167,7 @@ ajj_object_move( struct gc_scope* scp , struct ajj_object* obj ) {
 }
 
 struct ajj_value
-ajj_value_move( struct gc_scope* scp, struct ajj_value* val ) {
+ajj_value_move( struct gc_scope* scp, const struct ajj_value* val ) {
   if(AJJ_IS_PRIMITIVE(val)) {
     return *val;
   } else {

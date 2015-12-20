@@ -3,7 +3,7 @@ LINK := -lm
 
 vm-test:
 	cd src; \
-	gcc $(GCC_PROFILE_FLAGS) -g ajj.c opt.c util.c gc.c bc.c lex.c parse.c object.c upvalue.c vm.c vm-test.c $(LINK) -o vm-test
+	gcc $(GCC_PROFILE_FLAGS) -g ajj.c opt.c util.c gc.c bc.c lex.c parse.c object.c upvalue.c vm.c builtin.c vm-test.c $(LINK) -o vm-test
 
 opt-test2:
 	cd src; \

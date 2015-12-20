@@ -70,16 +70,16 @@ struct ajj_slot {
       const struct ajj_value* v );
 };
 
+struct ajj_class_method {
+  ajj_method method;
+  char name[AJJ_SYMBOL_NAME_MAX_SIZE];
+};
+
 struct ajj_class {
   char name[ AJJ_SYMBOL_NAME_MAX_SIZE ]; /* name of the symbol */
-
   ajj_class_ctor ctor;
   ajj_class_dtor dtor;
-
-  struct {
-    ajj_method method;
-    char name[AJJ_SYMBOL_NAME_MAX_SIZE];
-  } * mem_func;
+  struct ajj_class_method* mem_func;
   size_t mem_func_len; /* length of member function */
   struct ajj_slot slot;
   void* udata; /* user data shared by all the functions */

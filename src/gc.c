@@ -24,22 +24,18 @@ gc_scope_exit( struct ajj* a , struct gc_scope* scp ) {
         break;
       case AJJ_VALUE_CONST_STRING:
         break; /* break since we don't delete const string */
-      case AJJ_VALUE_OBJECT: /* user defined stuff */
-
-        /* call its destructor to delete this object */
-        cur->val.obj.fn_tb->dtor(
-            a,
-            cur->val.obj.fn_tb->udata, /* user data */
-            cur->val.obj.data
-            );
-        break;
       case AJJ_VALUE_JINJA:
         UNREACHABLE(); /* we should never have jinja template here
                         * since jinja template are not managed by
                         * gc_scope */
         return;
       default:
-        UNREACHABLE();
+        /* call its destructor to delete this object */
+        cur->val.obj.fn_tb->dtor(
+            a,
+            cur->val.obj.fn_tb->udata, /* user data */
+            cur->val.obj.data
+            );
         return;
     }
     /* delete this object slots */

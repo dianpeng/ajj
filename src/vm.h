@@ -165,14 +165,17 @@ int vm_to_number( const struct ajj_value* , double* );
 int vm_to_integer( const struct ajj_value* , int* );
 /* boolean conversion will NEVER fail */
 int vm_to_boolean( const struct ajj_value* );
+
 static
 int vm_is_true( const struct ajj_value* val ) {
   return vm_to_boolean(val) == 1;
 }
+
 static
 int vm_is_false( const struct ajj_value* val ) {
   return vm_to_boolean(val) == 0;
 }
+
 int vm_to_string( const struct ajj_value* val ,
         struct string* str , int* own );
 

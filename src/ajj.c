@@ -44,6 +44,8 @@ void ajj_destroy( struct ajj* r ) {
   upvalue_table_destroy(r,r->upval_tb,&(r->builtins));
   /* Destroy the builtins */
   upvalue_table_clear(r,&(r->builtins));
+  r->list = NULL;
+  r->dict = NULL;
   /* just exit the scope without deleting this scope
    * since it is not a pointer from the gc_slab */
   gc_scope_exit(r,&(r->gc_root));
@@ -55,8 +57,16 @@ void ajj_destroy( struct ajj* r ) {
   free(r);
 }
 
+struct gc_scope*
+ajj_cur_gc_scope( struct ajj* a ) {
+  if(a->rt)
+    return a->rt->cur_gc;
+  else
+    return &(a->gc_root);
+}
+
 static
-void ajj_add_class( struct ajj* a, const struct ajj_class* cls,
+void* ajj_add_class( struct ajj* a, const struct ajj_class* cls,
     struct upvalue_table* ut ) {
   size_t i;
   struct func_table* tb = slab_malloc(&(a->ft_slab));
@@ -70,9 +80,11 @@ void ajj_add_class( struct ajj* a, const struct ajj_class* cls,
       &n,0);
 
   uv = upvalue_table_overwrite(a,ut,&n,1);
+  uv->type = UPVALUE_FUNCTION;
   uv->gut.gfunc.tp = OBJECT_CTOR;
   uv->gut.gfunc.f.obj_ctor = tb; /* owned by this slot, it will be deleted
                                   * by upvalue destroy function */
+  uv->gut.gfunc.name = tb->name;
 
   for( i = 0 ; i < cls->mem_func_len ; ++i ) {
     struct string fn;
@@ -81,10 +93,11 @@ void ajj_add_class( struct ajj* a, const struct ajj_class* cls,
     *func_table_add_c_method(tb,&fn,0) =
       cls->mem_func[i].method;
   }
+  return tb;
 }
 
 static
-void ajj_add_val( struct ajj* a , struct upvalue_table* ut,
+void* ajj_add_val( struct ajj* a , struct upvalue_table* ut,
     const char* name , int type , va_list vl ) {
   struct string n;
 
@@ -141,21 +154,20 @@ void ajj_add_val( struct ajj* a , struct upvalue_table* ut,
     case AJJ_VALUE_CLASS:
       {
         const struct ajj_class* cls;
-        struct upvalue* uv;
         cls = va_arg(vl,const struct ajj_class*);
-        ajj_add_class(a,cls,ut);
-        break;
+        return ajj_add_class(a,cls,ut);
       }
     default:
       UNREACHABLE();
   }
+  return NULL;
 }
 
-void ajj_add_value( struct ajj* a , struct upvalue_table* ut,
+void* ajj_add_value( struct ajj* a , struct upvalue_table* ut,
     const char* name , int type , ... ) {
   va_list vl;
   va_start(vl,type);
-  ajj_add_val(a,ut,name,type,vl);
+  return ajj_add_val(a,ut,name,type,vl);
 }
 
 void ajj_env_add_value( struct ajj* a , const char* name ,
@@ -209,7 +221,7 @@ int io_mem_vprintf( struct ajj_io* io , const char* fmt , va_list vl ) {
     io->out.m.mem = mem_grow(io->out.m.mem,sizeof(char),0,&(io->out.m.len));
   }
   do {
-    int ret = vnsprintf(io->out.m.mem+io->out.m.len,
+    int ret = vsnprintf(io->out.m.mem+io->out.m.len,
         io->out.m.cap-io->out.m.len,
         fmt,
         vl);
@@ -418,6 +430,12 @@ char* ajj_aux_load_file( struct ajj* a , const char* fname ,
   *size = rsz;
   fclose(f);
   return r;
+}
+
+void ajj_error( struct ajj* a , const char* format , ... ) {
+  va_list vl;
+  va_start(vl,format);
+  vsnprintf(a->err,ERROR_BUFFER_SIZE,format,vl);
 }
 
 int ajj_render( struct ajj* a , const char* src ,

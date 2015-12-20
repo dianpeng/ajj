@@ -138,8 +138,10 @@ void test_expr() {
 #endif
   {
     struct ajj* a = ajj_create();
-    const char* src = "{% set a = 'UUVV' %}\n" \
-                      "{{ a + 'ppVV'*3 }}\n";
+    const char* src = "{% for index,val in xlist(10) %}\n" \
+                      "{{ index }}\n" \
+                      "{{ 'asdasd' }}\n" \
+                      "{% endfor %}\n";
     struct ajj_object* jinja;
     const struct program* prg;
     struct ajj_io* output = ajj_io_create_file(a,stdout);
@@ -157,36 +159,3 @@ void test_expr() {
 int main() {
   test_expr();
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -10,27 +10,22 @@ struct object;
 
 extern struct string MAIN; /* For __main__ */
 
-/* Internally we separete a const string or a heap based string by
- * using this tag. Since if it is a AJJ_VALUE_CONST_STRING, then we
- * will never need to release the string memory */
-#define AJJ_VALUE_CONST_STRING (AJJ_VALUE_SIZE+1)
-
 /* Internal representation of iterators */
 #define AJJ_VALUE_ITERATOR     (AJJ_VALUE_SIZE+2)
-
-/* Internal representation of JINJA template */
-#define AJJ_VALUE_JINJA  (AJJ_VALUE_SIZE+3)
-
 #define AJJ_IS_PRIMITIVE(V) \
   ((V)->type==AJJ_VALUE_NUMBER||\
    (V)->type==AJJ_VALUE_NONE|| \
    (V)->type==AJJ_VALUE_NONE||\
    (V)->type==AJJ_VALUE_ITERATOR|| \
    (V)->type==AJJ_VALUE_BOOLEAN)
-
 #define AJJ_IS_REFERENCE(V) (!(AJJ_IS_PRIMITIVE(V)))
-
 #define DEFAULT_PROPERTY_SIZE 8
+
+enum {
+  AJJ_VALUE_CONST_STRING = AJJ_VALUE_SIZE + 3,
+  AJJ_VALUE_JINJA = AJJ_VALUE_SIZE + 4,
+  AJJ_VALUE_EXTENSION = AJJ_VALUE_SIZE + 5
+};
 
 struct c_closure {
   void* udata; /* user data */
@@ -478,15 +473,10 @@ ajj_value_iter( int itr ) {
 static
 struct ajj_value ajj_value_assign( struct ajj_object* obj ) {
   struct ajj_value val;
-  assert(obj->tp != AJJ_VALUE_NOT_USE);
-  val.type = obj->tp;
-
-  /* rewrite the internal object type into public type */
-  if( val.type == AJJ_VALUE_CONST_STRING )
+  if(obj->tp == AJJ_VALUE_CONST_STRING)
     val.type = AJJ_VALUE_STRING;
-  else if( val.type == AJJ_VALUE_JINJA )
+  else
     val.type = AJJ_VALUE_OBJECT;
-
   val.value.object = obj;
   return val;
 }
@@ -497,7 +487,7 @@ struct ajj_value ajj_value_assign( struct ajj_object* obj ) {
  * then this value is escaped and it means no gc_scope will hold it
  * The typical usage is for assigning to upvalue */
 struct ajj_value
-ajj_value_move( struct gc_scope* , struct ajj_value* );
+ajj_value_move( struct gc_scope* , const struct ajj_value* );
 
 /* This allow user to delete a string promptly without waiting for the
  * corresponding gc scope exit */

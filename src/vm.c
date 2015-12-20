@@ -271,7 +271,6 @@ int vm_to_number( const struct ajj_value* val, double* d ) {
   }
 }
 
-
 static
 double to_number( struct ajj* a , const struct ajj_value* val , int* fail ) {
   double ret;
@@ -291,7 +290,6 @@ struct string
 to_display_string( struct ajj* a , const struct ajj_value* val ,
     int* own ) {
   UNUSE_ARG(a);
-
   switch(val->type) {
     case AJJ_VALUE_BOOLEAN:
       *own = 0;
@@ -336,6 +334,7 @@ int vm_to_string( const struct ajj_value* val,
     case AJJ_VALUE_STRING:
       *own = 0;
       *str = *ajj_value_to_string(val);
+      return 0;
     default:
       return -1;
   }
@@ -387,50 +386,17 @@ int to_integer( struct ajj* a, const struct ajj_value* val, int* fail ) {
   }
 }
 
-static
-int is_true( const struct ajj_value* val ) {
+int vm_to_boolean( const struct ajj_value* val ) {
   assert( val->type != AJJ_VALUE_NOT_USE );
-  switch(val->type){
+  switch(val->type) {
     case AJJ_VALUE_NUMBER:
-      return ajj_value_to_number(val) !=0;
+      return ajj_value_to_number(val) != 0;
     case AJJ_VALUE_BOOLEAN:
       return ajj_value_to_boolean(val);
-    case AJJ_VALUE_NONE:
-      return 0;
-    default:
-      return 1;
-  }
-}
-
-static
-int is_false( const struct ajj_value* val ) {
-  assert( val->type != AJJ_VALUE_NOT_USE );
-  switch(val->type) {
-    case AJJ_VALUE_NUMBER:
-      return ajj_value_to_number(val) == 0;
-    case AJJ_VALUE_BOOLEAN:
-      return !ajj_value_to_boolean(val);
-    case AJJ_VALUE_NONE:
-      return 1;
     default:
       return 0;
   }
 }
-
-/* Public conversion API */
-int vm_to_number( const struct ajj_value* val , double* o ) {
-  switch(val->type) {
-    case AJJ_VALUE_NUMBER:
-      *o = val->value.number;
-      return 0;
-    case AJJ_VALUE_BOOLEAN:
-      *o = val->value.boolean;
-      return 0;
-    default:
-      return -1;
-  }
-}
-
 
 
 /* =============================
@@ -560,7 +526,7 @@ struct ajj_value vm_not(struct ajj* a , const struct ajj_value* val ,
     int* fail ) {
   UNUSE_ARG(a);
   *fail = 0;
-  return is_true(val) ? AJJ_FALSE : AJJ_TRUE;
+  return vm_is_true(val) ? AJJ_FALSE : AJJ_TRUE;
 }
 
 static
@@ -689,7 +655,8 @@ vm_call(struct ajj* a, struct ajj_object* obj ,
     struct ajj_value* ret ) {
   int rval;
   struct func_frame* fr = cur_frame(a);
-  struct ajj_value v_obj = ajj_value_assign(obj);
+  struct ajj_value v_obj = 
+    (obj?ajj_value_assign(obj):AJJ_NONE);
 
   /* set up the upvalue */
   set_func_upvalue(a);
@@ -747,6 +714,7 @@ vm_call(struct ajj* a, struct ajj_object* obj ,
       assert( IS_OBJECTCTOR(fr->entry) );
       assert( obj == NULL );
       ft = fr->entry->f.obj_ctor;
+      return call_ctor(a,ft,ret);
     }
   }
 }
@@ -1028,7 +996,7 @@ resolve_method( struct ajj* a , struct ajj_object** val ,
       *val = tmpl;
       return f;
     }
-    if( p < (*val)->parent_len )
+    if( (size_t)(p) < (*val)->parent_len )
       tmpl = (*val)->parent[ p++ ];
     else
       break;
@@ -1101,26 +1069,26 @@ void enter_function( struct ajj* a , const struct function* f,
 }
 
 static
-int exit_function( struct ajj* a , const struct ajj_value* ret ,
-    int* fail ) {
-  struct func_frame* fr = cur_frame(a);
+int exit_function( struct ajj* a , const struct ajj_value* ret ) {
+  struct func_frame* fr; 
   struct runtime* rt = a->rt;
-  int par_cnt = fr->par_cnt;
+  int par_cnt = cur_frame(a)->par_cnt;
   assert(rt->cur_call_stk >0);
   --rt->cur_call_stk;
-  if(fr->obj && rt->cur_call_stk >0)
-    fr->esp -= 1 + par_cnt;
-  else
-    fr->esp -= par_cnt;
-  assert( fr->esp >= fr->ebp );
-  /* ugly hack to use push macro since it can exit, so we
-   * set up fail to 1 in case it exit the function */
-  *fail = 1;
-  push(a,*ret);
-  *fail = 0;
-
-  /* udpate the rt->cur_obj */
-  a->rt->cur_obj = cur_frame(a)->obj;
+  if( rt->cur_call_stk >0  ) {
+    fr = cur_frame(a); /* must be assigned AFTER cur_all_stk changed */
+    if(fr->obj && rt->cur_call_stk > 1)
+      fr->esp -= 1 + par_cnt; /* skip the main function which doesn't
+                               * have a object on stack */
+    else
+      fr->esp -= par_cnt;
+    assert( fr->esp >= fr->ebp );
+    /* ugly hack to use push macro since it can exit, so we
+     * set up fail to 1 in case it exit the function */
+    push(a,*ret);
+    /* udpate the rt->cur_obj */
+    a->rt->cur_obj = cur_frame(a)->obj;
+  }
   return 0;
 }
 
@@ -1209,7 +1177,8 @@ int vm_main( struct ajj* a ) {
       } vm_end(DIV)
 
       vm_beg(MUL) {
-        struct ajj_value o = vm_mul(a,top(a,2),top(a,1),RCHECK);
+        struct ajj_value o = vm_mul(a,
+            top(a,2),top(a,1),RCHECK);
         pop(a,2);
         push(a,o);
       } vm_end(MUL)
@@ -1235,49 +1204,57 @@ int vm_main( struct ajj* a ) {
       } vm_end(MOD)
 
       vm_beg(EQ) {
-        struct ajj_value o = vm_eq(a,top(a,2),top(a,1),RCHECK);
+        struct ajj_value o = vm_eq(a,
+            top(a,2),top(a,1),RCHECK);
         pop(a,2);
         push(a,o);
       } vm_end(EQ)
 
       vm_beg(NE) {
-        struct ajj_value o = vm_ne(a,top(a,2),top(a,1),RCHECK);
+        struct ajj_value o = vm_ne(a,
+            top(a,2),top(a,1),RCHECK);
         pop(a,2);
         push(a,o);
       } vm_end(NE)
 
       vm_beg(LT) {
-        struct ajj_value o = vm_lt(a,top(a,2),top(a,1),RCHECK);
+        struct ajj_value o = vm_lt(a,
+            top(a,2),top(a,1),RCHECK);
         pop(a,2);
         push(a,o);
       } vm_end(LT)
 
       vm_beg(LE) {
-        struct ajj_value o = vm_le(a,top(a,2),top(a,1),RCHECK);
+        struct ajj_value o = vm_le(a,
+            top(a,2),top(a,1),RCHECK);
         pop(a,2);
         push(a,o);
       } vm_end(LE)
 
       vm_beg(GT) {
-        struct ajj_value o = vm_gt(a,top(a,2),top(a,1),RCHECK);
+        struct ajj_value o = vm_gt(a,
+            top(a,2),top(a,1),RCHECK);
         pop(a,2);
         push(a,o);
       } vm_end(GT)
 
       vm_beg(GE) {
-        struct ajj_value o = vm_ge(a,top(a,2),top(a,1),RCHECK);
+        struct ajj_value o = vm_ge(a,
+            top(a,2),top(a,1),RCHECK);
         pop(a,2);
         push(a,o);
       } vm_end(GE)
 
       vm_beg(NOT) {
-        struct ajj_value o = vm_not(a,top(a,1),RCHECK);
+        struct ajj_value o = vm_not(a,
+            top(a,1),RCHECK);
         pop(a,1);
         push(a,o);
       } vm_end(NOT)
 
       vm_beg(NEG) {
-        double val = to_number(a,top(a,1),RCHECK);
+        double val = to_number(a,
+            top(a,1),RCHECK);
         struct ajj_value o = ajj_value_number(-val);
         pop(a,1);
         push(a,o);
@@ -1324,14 +1301,14 @@ int vm_main( struct ajj* a ) {
           if( r < 0 )
             goto fail;
           else if( r == 0 ) {
-            assert( IS_C(f) );
+            assert( IS_C(f) || IS_OBJECTCTOR(f) );
             /* We need to handle return value based on the function types,
              * if it is a jinja side function calling, we don't need to do
              * anything, but just return, since the VM_RET will take care
              * of everything. However, if we are calling a C functions, then
              * we need to exit the current function calling frame and also
              * push the return value on to the stack */
-            exit_function(a,&ret,RCHECK);
+            exit_function(a,&ret);
           }
         }
       } vm_end(CALL)
@@ -1358,7 +1335,7 @@ int vm_main( struct ajj* a ) {
             goto fail;
           } else if( r == 0 ) {
             if( IS_C(f) ) {
-              exit_function(a,&ret,RCHECK);
+              exit_function(a,&ret);
             }
           }
         }
@@ -1377,7 +1354,7 @@ int vm_main( struct ajj* a ) {
                             * return value in this situations */
         }
         /* do clean up things */
-        exit_function(a,&ret,RCHECK);
+        exit_function(a,&ret);
         /* check the current function frame to see whether we previously
          * had a c function directly calls into a script function. If so,
          * we just pop that c function again, looks like one return pops
@@ -1387,7 +1364,7 @@ int vm_main( struct ajj* a ) {
           if( IS_C(fr->entry) ) {
             /* do a consecutive pop here */
             pop(a,1); /* pop the original return value on stack */
-            exit_function(a,&ret,RCHECK); /* exit the current function again */
+            exit_function(a,&ret);
           }
         } else {
           /* We unwind the last function frame, so we can return :) */
@@ -1397,7 +1374,8 @@ int vm_main( struct ajj* a ) {
 
       vm_beg(PRINT) {
         int own;
-        struct string text = to_display_string(a,top(a,1),&own);
+        struct string text = to_display_string(
+            a,top(a,1),&own);
         vm_print(a,&text);
         pop(a,1);
         if(own) string_destroy(&text);
@@ -1493,7 +1471,7 @@ int vm_main( struct ajj* a ) {
         struct ajj_value key = *top(a,2);
         struct ajj_value val = *top(a,1);
         vm_attrset(a,&obj,&key,&val,RCHECK);
-        pop(a,3);
+        pop(a,2);
       } vm_end(ATTRSET)
 
       vm_beg(ATTR_GET) {
@@ -1509,7 +1487,7 @@ int vm_main( struct ajj* a ) {
         struct ajj_value obj = *top(a,2);
         struct ajj_value val = *top(a,1);
         vm_attrpush(a,&obj,&val,RCHECK);
-        pop(a,2);
+        pop(a,1);
       } vm_end(ATTR_PUSH)
 
       vm_beg(UPVALUE_SET) {
@@ -1554,7 +1532,7 @@ int vm_main( struct ajj* a ) {
       vm_beg(JT) {
         int pos = instr_1st_arg(c);
         struct ajj_value cond = *top(a,1);
-        if( is_true(&cond) ) {
+        if( vm_is_true(&cond) ) {
           cur_frame(a)->pc = pos;
         }
         pop(a,1);
@@ -1563,7 +1541,7 @@ int vm_main( struct ajj* a ) {
       vm_beg(JF) {
         int pos = instr_1st_arg(c);
         struct ajj_value cond = *top(a,1);
-        if( is_false(&cond) ) {
+        if( vm_is_false(&cond) ) {
           cur_frame(a)->pc = pos;
         }
         pop(a,1);
@@ -1572,7 +1550,7 @@ int vm_main( struct ajj* a ) {
       vm_beg(JLT) {
         int pos = instr_1st_arg(c);
         struct ajj_value cond = *top(a,1);
-        if( is_true(&cond) ) {
+        if( vm_is_true(&cond) ) {
           cur_frame(a)->pc = pos;
         } else {
           pop(a,1);
@@ -1582,7 +1560,7 @@ int vm_main( struct ajj* a ) {
       vm_beg(JLF) {
         int pos = instr_1st_arg(c);
         struct ajj_value cond = *top(a,1);
-        if( is_false(&cond) ) {
+        if( vm_is_false(&cond) ) {
           cur_frame(a)->pc = pos;
         } else {
           pop(a,1);
@@ -1632,16 +1610,16 @@ int vm_main( struct ajj* a ) {
         struct ajj_value* itr = top(a,1);
         struct ajj_value* obj = top(a,2);
         struct object* o;
-        int i_itr;
+        int has;
 
         assert( itr->type == AJJ_VALUE_ITERATOR );
         assert( obj->type == AJJ_VALUE_OBJECT );
         o = &(obj->value.object->val.obj);
         assert( o->fn_tb->slot.iter_has );
-        i_itr = o->fn_tb->slot.iter_has(
-            a,obj,i_itr);
+        has = o->fn_tb->slot.iter_has(
+            a,obj,ajj_value_to_iter(itr));
         /* re-push the iterator onto the stack */
-        pop(a,1);push(a,ajj_value_iter(i_itr));
+        push(a,ajj_value_boolean(has));
       } vm_end(ITER_HAS)
 
       vm_beg(ITER_DEREF) {
@@ -1664,7 +1642,7 @@ int vm_main( struct ajj* a ) {
           assert( o->fn_tb->slot.iter_get_val );
           assert( o->fn_tb->slot.iter_get_key );
           k = o->fn_tb->slot.iter_get_key(a,obj,
-              ajj_value_to_itr(itr));
+              ajj_value_to_iter(itr));
           v = o->fn_tb->slot.iter_get_val(a,obj,
               ajj_value_to_iter(itr));
           push(a,k);
