@@ -290,124 +290,63 @@ void ajj_io_flush( struct ajj_io* io ) {
 }
 
 /* =======================================
- * PRINT
+ * MISC
  * =====================================*/
-
-#define DOINDENT() \
-  do { \
-    if( opt == AJJ_VALUE_PRETTY ) { \
-      int i; \
-      for( i = 0 ; i < level ; ++i ) \
-        ajj_io_printf(output,"%s",PRETTY_PRINT_INDENT); \
-    } \
-  } while(0)
-
-static
-struct string
-escape_string( const struct string* val ) {
-  struct strbuf buf;
-  size_t i;
-  strbuf_init(&buf);
-  for( i = 0 ; i < val->len ; ++i ) {
-    int c = val->str[i];
-    int ec = tk_string_reescape_char(c);
-    if(ec) {
-      strbuf_push(&buf,'\\');
-      strbuf_push(&buf,ec);
-    } else {
-      strbuf_push(&buf,c);
-    }
-  }
-  return strbuf_tostring(&buf);
-}
-
-static
-void ajj_object_print( struct object*,struct ajj_io*,
-    int , int );
-
-static
-void ajj_value_print_priv( const struct ajj_value* val,
-    struct ajj_io* output , int opt , int level ) {
-  struct string str;
-
+const char*
+ajj_display( struct ajj* a, const struct ajj_value* val,
+    size_t* len , int* own ) {
+  struct ajj_object* obj;
   switch(val->type) {
-    case AJJ_VALUE_NONE:
-      ajj_io_printf(output,"%s",NONE_STRING.str);
-      break;
-    case AJJ_VALUE_BOOLEAN:
-      if( val->value.boolean ) {
-        ajj_io_printf(output,"%s",TRUE_STRING.str);
-      } else {
-        ajj_io_printf(output,"%s",FALSE_STRING.str);
-      }
-      break;
-    case AJJ_VALUE_NUMBER:
-      ajj_io_printf(output,"%f",val->value.number);
-      break;
     case AJJ_VALUE_STRING:
-      str = escape_string(ajj_value_to_string(val));
-      ajj_io_printf(output,"\"%s\"",str.str);
-      string_destroy(&str);
-      break;
+      obj = val->value.object;
+      *own = 0;
+      *len = obj->val.str.len;
+      return obj->val.str.str;
+    case AJJ_VALUE_NONE:
+      *own = 0;
+      *len = NONE_STRING.len;
+      return NONE_STRING.str;
+    case AJJ_VALUE_BOOLEAN:
+      *own = 0;
+      if(val->value.boolean) {
+        *len = TRUE_STRING.len;
+        return TRUE_STRING.str;
+      } else {
+        *len = FALSE_STRING.len;
+        return FALSE_STRING.str;
+      }
+    case AJJ_VALUE_NUMBER:
+      {
+        char buf[256];
+        int l;
+        *own = 1;
+        if( is_int(val->value.number) ) {
+          l = sprintf(buf,"%d",(int)val->value.number);
+        } else {
+          l = sprintf(buf,"%f",val->value.number);
+        }
+        *len = (size_t)l;
+        return strdup(buf);
+      }
     case AJJ_VALUE_OBJECT:
-      DOINDENT();
-      ajj_object_print(&(val->value.object->val.obj),
-          output,opt,level);
-      break;
+      {
+        struct object* o = &(val->value.object->val.obj);
+        if(o->fn_tb->slot.display) {
+          *own = 1;
+          return o->fn_tb->slot.display(a,val,len);
+        } else {
+          *own = 0;
+          *len = EMPTY_STRING.len;
+          return EMPTY_STRING.str;
+        }
+      }
     default:
       UNREACHABLE();
-      break;
+      return NULL;
   }
 }
 
-static
-void ajj_object_print( struct object* obj ,
-    struct ajj_io* output ,
-    int opt, int level ) {
-  size_t i;
-  if( opt == AJJ_VALUE_PRETTY ) {
-    ajj_io_printf(output,"\n");
-    DOINDENT();
-    ajj_io_printf(output,"method { \n");
-    DOINDENT();
-  } else {
-    ajj_io_printf(output,"method { ");
-  }
-  for( i = 0 ; i < obj->fn_tb->func_len; ++i ) {
-    struct function* f = obj->fn_tb->func_tb+i;
-    if( opt == AJJ_VALUE_PRETTY ) {
-      DOINDENT();
-      ajj_io_printf(output,"%s:%s",f->name.str,
-          function_get_type_name(f->tp));
-      if( i != obj->fn_tb->func_len - 1 ) {
-        ajj_io_printf(output,",\n");
-      }
-    } else {
-      ajj_io_printf(output,"%s:%s",f->name.str,
-          function_get_type_name(f->tp));
-      if( i != obj->fn_tb->func_len - 1 ) {
-        ajj_io_printf(output,",");
-      }
-    }
-  }
-  if( opt == AJJ_VALUE_PRETTY ) {
-    ajj_io_printf(output,"}\n");
-  } else {
-    ajj_io_printf(output,"}");
-  }
-  if( opt == AJJ_VALUE_PRETTY ) {
-    ajj_io_printf(output,"}\n");
-  } else {
-    ajj_io_printf(output,"}");
-  }
-}
-
-void ajj_value_print( const struct ajj_value* val ,
-    struct ajj_io* output, int opt ) {
-  return ajj_value_print_priv(val,output,opt,0);
-}
-
-char* ajj_aux_load_file( struct ajj* a , const char* fname ,
+void* ajj_load_file( struct ajj* a , const char* fname ,
     size_t* size) {
   FILE* f = fopen(fname,"r");
   long int start;

@@ -256,13 +256,14 @@ int bc_1st_arg( int c ) {
 
 static
 int bc_2nd_arg( const struct program* prg , size_t* pos ) {
-  int ret;
   assert( prg->len > *pos );
   return prg->codes[(*pos)++];
 }
 
 /* dump program into human readable format */
-void dump_program( const char* src , const struct program* ,
+void dump_program( struct ajj* a,
+    const char* src ,
+    const struct program* ,
     struct ajj_io* output );
 
 #endif /* _BC_H_ */

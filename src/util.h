@@ -6,6 +6,8 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <math.h>
+#include <limits.h>
 
 #ifndef UNREACHABLE
 #define UNREACHABLE() assert(!"UNREACHABLE!")
@@ -370,5 +372,14 @@ void slab_free( struct slab* , void* );
  * After calling this function, the input mem will be freeed */
 
 void* mem_grow( void* , size_t obj_sz , size_t append, size_t* old_cap );
+
+static int is_int( double val ) {
+  double i;
+  modf(val,&i);
+  if( i < INT_MAX && i > INT_MIN )
+    return i == val;
+  else
+    return 0;
+}
 
 #endif /* _UTIL_H_ */

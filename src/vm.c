@@ -234,15 +234,6 @@ void del_upvalue( struct ajj* a, const struct string* name ) {
 /* =============================
  * Type conversions
  * ===========================*/
-static
-int is_int( double val ) {
-  double i;
-  modf(val,&i);
-  if( i < INT_MAX && i > INT_MIN )
-    return i == val;
-  else
-    return 0;
-}
 
 static
 int str_to_number( const char* str , double* val ) {
@@ -285,36 +276,6 @@ double to_number( struct ajj* a , const struct ajj_value* val , int* fail ) {
   }
 }
 
-static
-struct string
-to_display_string( struct ajj* a , const struct ajj_value* val ,
-    int* own ) {
-  UNUSE_ARG(a);
-  switch(val->type) {
-    case AJJ_VALUE_BOOLEAN:
-      *own = 0;
-      return ajj_value_to_boolean(val) ?
-        TRUE_STRING : FALSE_STRING;
-    case AJJ_VALUE_NUMBER:
-      {
-        char buf[256];
-        if(is_int(ajj_value_to_number(val))) {
-          sprintf(buf,"%d",(int)ajj_value_to_number(val));
-        } else {
-          sprintf(buf,"%f",ajj_value_to_number(val));
-        }
-        *own = 1;
-        return string_dupc(buf);
-      }
-    case AJJ_VALUE_STRING:
-      *own = 0;
-      return *ajj_value_to_string(val);
-    default:
-      *own = 0;
-      return EMPTY_STRING;
-  }
-}
-
 int vm_to_string( const struct ajj_value* val,
     struct string* str, int* own ) {
   switch(val->type) {
@@ -326,7 +287,12 @@ int vm_to_string( const struct ajj_value* val,
     case AJJ_VALUE_NUMBER:
       {
         char buf[256];
-        sprintf(buf,"%f",ajj_value_to_number(val));
+        double num = ajj_value_to_number(val);
+        if( is_int(num) ) {
+          sprintf(buf,"%d",(int)(num));
+        } else {
+          sprintf(buf,"%f",num);
+        }
         *own = 1;
         *str = string_dupc(buf);
         return 0;
@@ -397,7 +363,6 @@ int vm_to_boolean( const struct ajj_value* val ) {
       return 0;
   }
 }
-
 
 /* =============================
  * Specific instruction handler
@@ -907,7 +872,7 @@ char* load_template( struct ajj* a , const struct ajj_value* fn ) {
     report_error(a,"Include file name is not a string!");
     return NULL;
   }
-  if((fc = ajj_aux_load_file(a,ajj_value_to_cstr(fn),NULL))==NULL){
+  if((fc = ajj_load_file(a,ajj_value_to_cstr(fn),NULL))==NULL){
     return NULL;
   }
   return fc;
@@ -1374,11 +1339,15 @@ int vm_main( struct ajj* a ) {
 
       vm_beg(PRINT) {
         int own;
-        struct string text = to_display_string(
-            a,top(a,1),&own);
-        vm_print(a,&text);
+        size_t l;
+        struct string t;
+        const char* text = ajj_display(
+            a,top(a,1),&l,&own);
+        t.str = text;
+        t.len = l;
+        vm_print(a,&t);
         pop(a,1);
-        if(own) string_destroy(&text);
+        if(own) free((void*)text);
       } vm_end(PRINT)
 
       vm_beg(POP) {

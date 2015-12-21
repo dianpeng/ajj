@@ -22,11 +22,11 @@ void test1() {
     jinja = parse(a,"Hello World",src,0);
     assert(jinja);
     prg = ajj_object_jinja_main(jinja);
-    dump_program(src,prg,output);
+    dump_program(a,src,prg,output);
     assert(!vm_run_jinja(a,jinja,output));
 
     assert(!optimize(a,jinja));
-    dump_program(src,prg,output);
+    dump_program(a,src,prg,output);
     assert(!vm_run_jinja(a,jinja,output));
   }
   {
@@ -42,11 +42,11 @@ void test1() {
     jinja = parse(a,"Hello World",src,0);
     assert(jinja);
     prg = ajj_object_jinja_main(jinja);
-    dump_program(src,prg,output);
+    dump_program(a,src,prg,output);
     assert(!vm_run_jinja(a,jinja,output));
 
     assert(!optimize(a,jinja));
-    dump_program(src,prg,output);
+    dump_program(a,src,prg,output);
     assert(!vm_run_jinja(a,jinja,output));
   }
 }
@@ -67,10 +67,10 @@ void test_expr() {
     jinja = parse(a,"_",src,0);
     assert(jinja);
     prg = ajj_object_jinja_main(jinja);
-    dump_program(src,prg,output);
+    dump_program(a,src,prg,output);
     assert(!vm_run_jinja(a,jinja,output));
     assert(!optimize(a,jinja));
-    dump_program(src,prg,output);
+    dump_program(a,src,prg,output);
     assert(!vm_run_jinja(a,jinja,output));
   }
 
@@ -83,10 +83,10 @@ void test_expr() {
     jinja = parse(a,"_",src,0);
     assert(jinja);
     prg = ajj_object_jinja_main(jinja);
-    dump_program(src,prg,output);
+    dump_program(a,src,prg,output);
     assert(!vm_run_jinja(a,jinja,output));
     assert(!optimize(a,jinja));
-    dump_program(src,prg,output);
+    dump_program(a,src,prg,output);
     assert(!vm_run_jinja(a,jinja,output));
   }
 
@@ -99,10 +99,10 @@ void test_expr() {
     jinja = parse(a,"_",src,0);
     assert(jinja);
     prg = ajj_object_jinja_main(jinja);
-    dump_program(src,prg,output);
+    dump_program(a,src,prg,output);
     assert(!vm_run_jinja(a,jinja,output));
     assert(!optimize(a,jinja));
-    dump_program(src,prg,output);
+    dump_program(a,src,prg,output);
     assert(!vm_run_jinja(a,jinja,output));
   }
   {
@@ -114,10 +114,10 @@ void test_expr() {
     jinja = parse(a,"_",src,0);
     assert(jinja);
     prg = ajj_object_jinja_main(jinja);
-    dump_program(src,prg,output);
+    dump_program(a,src,prg,output);
     assert(!vm_run_jinja(a,jinja,output));
     assert(!optimize(a,jinja));
-    dump_program(src,prg,output);
+    dump_program(a,src,prg,output);
     assert(!vm_run_jinja(a,jinja,output));
   }
   {
@@ -129,29 +129,46 @@ void test_expr() {
     jinja = parse(a,"_",src,0);
     assert(jinja);
     prg = ajj_object_jinja_main(jinja);
-    dump_program(src,prg,output);
+    dump_program(a,src,prg,output);
     assert(!vm_run_jinja(a,jinja,output));
     assert(!optimize(a,jinja));
-    dump_program(src,prg,output);
+    dump_program(a,src,prg,output);
     assert(!vm_run_jinja(a,jinja,output));
   }
-#endif
   {
     struct ajj* a = ajj_create();
-    const char* src = "{% for index,val in xlist(10) %}\n" \
-                      "{{ index }}\n" \
-                      "{{ 'asdasd' }}\n" \
-                      "{% endfor %}\n";
+    const char* src = "{% for index,val in xlist(1000) %}" \
+                      "{{ ':'+index }}\n"\
+                      "{{ False }}\n" \
+                      "{% endfor %}";
     struct ajj_object* jinja;
     const struct program* prg;
     struct ajj_io* output = ajj_io_create_file(a,stdout);
     jinja = parse(a,"_",src,0);
     assert(jinja);
     prg = ajj_object_jinja_main(jinja);
-    dump_program(src,prg,output);
+    dump_program(a,src,prg,output);
     assert(!vm_run_jinja(a,jinja,output));
     assert(!optimize(a,jinja));
-    dump_program(src,prg,output);
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+  }
+#endif
+  {
+    struct ajj* a = ajj_create();
+    const char* src = "{% for a in [1,2,3,4,5,100,1000] %}" \
+                      "{{ (a,a,a,a*a) }}\n" \
+                      "{% endfor %}";
+    struct ajj_object* jinja;
+    const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+    jinja = parse(a,"_",src,0);
+    assert(jinja);
+    prg = ajj_object_jinja_main(jinja);
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+    assert(!optimize(a,jinja));
+    dump_program(a,src,prg,output);
     assert(!vm_run_jinja(a,jinja,output));
   }
 }

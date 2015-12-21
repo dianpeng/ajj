@@ -473,9 +473,10 @@ ajj_value_iter( int itr ) {
 static
 struct ajj_value ajj_value_assign( struct ajj_object* obj ) {
   struct ajj_value val;
-  if(obj->tp == AJJ_VALUE_CONST_STRING)
+  if(obj->tp == AJJ_VALUE_CONST_STRING ||
+     obj->tp == AJJ_VALUE_STRING )
     val.type = AJJ_VALUE_STRING;
-  else
+  else /* else are all categorized as object */
     val.type = AJJ_VALUE_OBJECT;
   val.value.object = obj;
   return val;

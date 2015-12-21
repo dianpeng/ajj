@@ -68,6 +68,8 @@ struct ajj_slot {
   /* attributes push */
   void (*attr_push)( struct ajj* , struct ajj_value* ,
       const struct ajj_value* v );
+  /* for print */
+  const char* (*display)(struct ajj*, const struct ajj_value*,size_t*);
 };
 
 struct ajj_class_method {
@@ -193,10 +195,11 @@ int ajj_io_write( struct ajj_io* , const void* mem , size_t len );
 void ajj_io_flush( struct ajj_io* );
 
 /* MISC ============================= */
-enum {
-  AJJ_VALUE_PRETTY,
-  AJJ_VALUE_COMPACT
-};
-void ajj_value_print( const struct ajj_value* , struct ajj_io* , int );
+const char* ajj_display( struct ajj* a,
+    const struct ajj_value* v ,
+    size_t* length ,
+    int* own );
+
+void* ajj_load_file( struct ajj* , const char* , size_t* );
 
 #endif /* _AJJ_H_ */

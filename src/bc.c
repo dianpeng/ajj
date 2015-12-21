@@ -35,7 +35,9 @@ int bc_get_argument_num( instructions instr ) {
 
 /* dump the constant table of a program */
 static
-void dump_program_ctable( const struct program* prg , struct ajj_io* output ) {
+void dump_program_ctable( struct ajj* a,
+    const struct program* prg ,
+    struct ajj_io* output ) {
   size_t i;
   ajj_io_printf(output,"Constant String Table======================\n\n");
   for( i = 0 ; i < prg->str_len ; ++i ) {
@@ -47,10 +49,15 @@ void dump_program_ctable( const struct program* prg , struct ajj_io* output ) {
   }
   ajj_io_printf(output,"\nFunction Argument Table====================\n\n");
   for( i = 0 ; i < prg->par_size ; ++i ) {
+    const char* c;
+    size_t l;
+    int own;
     ajj_io_printf(output,"%zu:%s:",i,prg->par_list[i].name.str);
-    ajj_value_print(&(prg->par_list[i].def_val),
-        output,AJJ_VALUE_COMPACT);
-    ajj_io_printf(output,"\n");
+    c = ajj_display(a,
+        &(prg->par_list[i].def_val),
+        &l,&own);
+    ajj_io_printf(output,"%s\n",c);
+    if(own) free((void*)c);
   }
   ajj_io_printf(output,"\n");
 }
@@ -81,11 +88,14 @@ void dump_program_ctable( const struct program* prg , struct ajj_io* output ) {
 
 #define DO(A,B,C) case A: DO##B(C);
 
-void dump_program( const char* src , const struct program* prg , struct ajj_io* output ) {
+void dump_program( struct ajj* a ,
+    const char* src ,
+    const struct program* prg ,
+    struct ajj_io* output ) {
   size_t i = 0;
   int a1,a2;
   int cnt = 0;
-  dump_program_ctable(prg,output);
+  dump_program_ctable(a,prg,output);
   ajj_io_printf(output,"Code=======================================\n\n");
   while(1) {
     int sref = prg->spos[i];

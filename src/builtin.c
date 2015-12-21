@@ -269,10 +269,37 @@ void list_attr_set( struct ajj* a, struct ajj_value* obj,
 static
 void list_attr_push( struct ajj* a, struct ajj_value* obj,
     const struct ajj_value* val ) {
-  assert( IS_A(obj,LIST_TYPE) );
   struct ajj_value arg = *val;
   struct ajj_value ret;
+  assert( IS_A(obj,LIST_TYPE) );
   CHECK(list_append(a,obj,&arg,1,&ret) == AJJ_EXEC_OK);
+}
+
+static
+const char*
+list_to_display( struct ajj* a , const struct ajj_value* obj,
+    size_t* len ) {
+  struct list* lst;
+  size_t i;
+  struct strbuf sbuf;
+
+  assert( IS_A(obj,LIST_TYPE) );
+  lst = LIST(obj);
+  strbuf_init(&sbuf);
+  for( i = 0 ; i < lst->len ; ++i ) {
+    struct ajj_value* val = lst->entry + i;
+    int own;
+    size_t l;
+    const char* c;
+    c = ajj_display(a,val,&l,&own);
+    if(!c) continue; /* skip */
+    strbuf_append(&sbuf,c,l);
+    if(own) free((void*)c); /* free the memory */
+    if( i < lst->len-1 )
+      strbuf_append(&sbuf," ",1);
+  }
+  *len = sbuf.len;
+  return sbuf.str;
 }
 
 /* list class */
@@ -301,7 +328,8 @@ static struct ajj_class LIST_CLASS  = {
     list_in,
     list_attr_get,
     list_attr_set,
-    list_attr_push
+    list_attr_push,
+    list_to_display
   },
   NULL
 };
@@ -573,6 +601,46 @@ dict_attr_set( struct ajj* a, struct ajj_value* obj,
   CHECK(dict_set(a,obj,arg,2,&ret)==AJJ_EXEC_OK);
 }
 
+static
+const char*
+dict_display( struct ajj* a , const struct ajj_value* obj,
+    size_t* len ) {
+  struct strbuf sbuf;
+  size_t i;
+  struct map* mp;
+  int itr;
+
+  assert( IS_A(obj,DICT_TYPE) );
+  strbuf_init(&sbuf);
+  mp = DICT(obj);
+
+  /* loop to dump all the content out */
+  i = 0 ; itr = map_iter_start(mp);
+  while( map_iter_has(mp,itr) ) {
+    struct map_pair ret = map_iter_deref(mp,itr);
+    size_t l;
+    int own;
+    const char* c;
+
+    c = ajj_display(a,
+        (struct ajj_value*)(ret.val),&l,&own);
+    if(c) {
+      /* append key */
+      strbuf_append(&sbuf,ret.key->str,ret.key->len);
+      strbuf_append(&sbuf,"=",1);
+      strbuf_append(&sbuf,c,l);
+
+      if(own) free((void*)(c));
+      if( i < mp->len-1 ) {
+        strbuf_append(&sbuf," ",1);
+      }
+    }
+    ++i; itr = map_iter_move(mp,itr);
+  }
+  *len = sbuf.len;
+  return sbuf.str;
+}
+
 static struct ajj_class_method DICT_METHOD[] = {
   { dict_set , "set" },
   { dict_get , "get" },
@@ -598,7 +666,8 @@ static struct ajj_class DICT_CLASS = {
     dict_in,
     dict_attr_get,
     dict_attr_set,
-    NULL
+    NULL,
+    dict_display
   },
   NULL
 };
@@ -703,6 +772,16 @@ int xlist_empty( struct ajj* a ,
 }
 
 static
+const char*
+xlist_display( struct ajj* a , const struct ajj_value* val,
+    size_t* len ) {
+  UNUSE_ARG(a);
+  assert( IS_A(val,XLIST_TYPE) );
+  *len = 1;
+  return "";
+}
+
+static
 struct ajj_class XLIST_CLASS = {
   "xlist",
   xlist_ctor,
@@ -720,7 +799,8 @@ struct ajj_class XLIST_CLASS = {
     NULL,
     NULL,
     NULL,
-    NULL
+    NULL,
+    xlist_display
   },
   NULL,
 };

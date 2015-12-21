@@ -127,9 +127,6 @@ void* ajj_add_value( struct ajj* a, struct upvalue_table* ut,
 /* Wipe out ALL the template is safe operation */
 void ajj_clear_template( struct ajj* );
 
-/* internal utility functions */
-char* ajj_aux_load_file( struct ajj* a, const char* , size_t* );
-
 int ajj_render( struct ajj* a , const char* ,
     const char*  , struct ajj_io* );
 
