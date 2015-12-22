@@ -86,7 +86,6 @@ list_push( struct ajj* a, struct ajj_object* obj,
     const struct ajj_value* val ) {
   struct object* o;
   struct ajj_value v_obj = ajj_value_assign(obj);
-  assert( obj->tp == AJJ_VALUE_OBJECT );
   o = &(obj->val.obj);
   assert( o->fn_tb->slot.attr_push );
   o->fn_tb->slot.attr_push(a,&v_obj,val);
@@ -98,7 +97,6 @@ list_index( struct ajj* a, struct ajj_object* obj,
   struct object* o;
   struct ajj_value i;
   struct ajj_value v_obj = ajj_value_assign(obj);
-  assert( obj->tp == AJJ_VALUE_OBJECT );
   o = &(obj->val.obj);
   assert( o->fn_tb->slot.attr_get );
   i = ajj_value_number(index);
@@ -116,14 +114,13 @@ ajj_object_create_dict( struct ajj* a , struct gc_scope* scp ) {
         &udata,
         &tp) == AJJ_EXEC_FAIL)
     return NULL;
-  return ajj_object_create_obj(a,scp,a->list,udata,tp);
+  return ajj_object_create_obj(a,scp,a->dict,udata,tp);
 }
 
 void dict_insert( struct ajj* a , struct ajj_object* obj,
     const struct ajj_value* key, const struct ajj_value* val ) {
   struct object* o = &(obj->val.obj);
   struct ajj_value v_obj = ajj_value_assign(obj);
-  assert( obj->tp == AJJ_VALUE_OBJECT );
   assert( o->fn_tb->slot.attr_set );
   o->fn_tb->slot.attr_set(a,&v_obj,key,val);
 }
@@ -133,7 +130,6 @@ dict_find( struct ajj* a, struct ajj_object* obj,
     const struct ajj_value* key ) {
   struct object* o = &(obj->val.obj);
   struct ajj_value v_obj = ajj_value_assign(obj);
-  assert( obj->tp == AJJ_VALUE_OBJECT );
   assert( o->fn_tb->slot.attr_get );
   return o->fn_tb->slot.attr_get(a,&v_obj,key);
 }

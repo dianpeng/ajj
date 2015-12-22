@@ -646,6 +646,28 @@ token_id tk_move( struct tokenizer* tk ) {
   return tk_lex(tk);
 }
 
+#define HANDLE_KEYWORD(A,B) case A: \
+  do { \
+    strbuf_reset(&(tk->lexeme)); \
+    strbuf_append(&(tk->lexeme),B,ARRAY_SIZE(B)-1); \
+    tk->tk_len = ARRAY_SIZE(B)-1; \
+    tk->tk = TK_VARIABLE; \
+    return 0; \
+  } while(0);
+
+int tk_expect_id( struct tokenizer* tk ) {
+  token_id t = tk->tk; /* we don't do tk_move */
+  switch(t) {
+    case TK_VARIABLE:
+      return 0;
+    TOKEN_KEYWORD_LIST(HANDLE_KEYWORD)
+    default:
+      return -1;
+  }
+}
+
+#undef HANDLE_KEYWORD
+
 const char* tk_get_name( int tk ) {
   switch(tk) {
 #define X(A,B) case A: return B;

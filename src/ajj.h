@@ -109,10 +109,13 @@ enum {
   AJJ_VALUE_STRING,
   AJJ_VALUE_OBJECT,
 
-
   /* always the last one to define */
   AJJ_VALUE_SIZE
 };
+
+/* Any user defined object's type should be larger than
+ * this extension tag value */
+#define AJJ_USER_DEFINE_EXTENSION (AJJ_VALUE_SIZE+100)
 
 /* AJJ VALUE ============================== */
 

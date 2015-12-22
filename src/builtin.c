@@ -277,7 +277,7 @@ void list_attr_push( struct ajj* a, struct ajj_value* obj,
 
 static
 const char*
-list_to_display( struct ajj* a , const struct ajj_value* obj,
+list_display( struct ajj* a , const struct ajj_value* obj,
     size_t* len ) {
   struct list* lst;
   size_t i;
@@ -329,7 +329,7 @@ static struct ajj_class LIST_CLASS  = {
     list_attr_get,
     list_attr_set,
     list_attr_push,
-    list_to_display
+    list_display
   },
   NULL
 };
@@ -503,7 +503,7 @@ int dict_iter_has( struct ajj* a ,
   UNUSE_ARG(a);
 
   assert( IS_A(obj,DICT_TYPE) );
-  return map_iter_start(DICT(obj));
+  return map_iter_has(DICT(obj),itr);
 }
 
 static
@@ -752,7 +752,7 @@ xlist_iter_get_val( struct ajj* a,
     struct ajj_value* obj , int itr ) {
   UNUSE_ARG(a);
   assert( IS_A(obj,XLIST_TYPE) );
-  return AJJ_NONE;
+  return ajj_value_number(itr);
 }
 
 static

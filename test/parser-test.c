@@ -351,7 +351,7 @@ void test_expr() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
   }
 }
 

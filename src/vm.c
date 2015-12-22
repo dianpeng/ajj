@@ -14,7 +14,6 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-
 /* This FUNC_CALL actually means we want a TAIL call of a
  * new script functions. The return from the LOWEST script function
  * will end up its caller been poped as well. We don't return the
@@ -620,7 +619,7 @@ vm_call(struct ajj* a, struct ajj_object* obj ,
     struct ajj_value* ret ) {
   int rval;
   struct func_frame* fr = cur_frame(a);
-  struct ajj_value v_obj = 
+  struct ajj_value v_obj =
     (obj?ajj_value_assign(obj):AJJ_NONE);
 
   /* set up the upvalue */
@@ -813,7 +812,7 @@ void vm_attrpush( struct ajj* a , struct ajj_value* obj,
 
 static
 void vm_print( struct ajj* a , const struct string* str ) {
-  ajj_io_write(a->rt->output,str->str,str->len+1);
+  ajj_io_write(a->rt->output,str->str,str->len);
 }
 
 static
@@ -823,9 +822,10 @@ void vm_enter( struct ajj* a) {
 
 static
 void vm_exit( struct ajj* a , int loops ) {
+  assert( a->rt->cur_gc != &(a->gc_root) );
   while( loops-- ) {
     struct gc_scope* p = a->rt->cur_gc->parent;
-    assert(p != NULL);
+    assert(p);
     gc_scope_destroy(a,a->rt->cur_gc);
     a->rt->cur_gc = p;
   }
@@ -1035,21 +1035,20 @@ void enter_function( struct ajj* a , const struct function* f,
 
 static
 int exit_function( struct ajj* a , const struct ajj_value* ret ) {
-  struct func_frame* fr; 
+  struct func_frame* fr = cur_frame(a);
   struct runtime* rt = a->rt;
-  int par_cnt = cur_frame(a)->par_cnt;
+  int par_cnt = fr->par_cnt;
   assert(rt->cur_call_stk >0);
+  /* test whether we need to update our par_cnt
+   * because we are a call for a method which means
+   * we have an object on stack */
+  par_cnt = fr->obj ? par_cnt + 1 : par_cnt;
   --rt->cur_call_stk;
   if( rt->cur_call_stk >0  ) {
     fr = cur_frame(a); /* must be assigned AFTER cur_all_stk changed */
-    if(fr->obj && rt->cur_call_stk > 1)
-      fr->esp -= 1 + par_cnt; /* skip the main function which doesn't
-                               * have a object on stack */
-    else
-      fr->esp -= par_cnt;
+    fr->esp -= par_cnt;
     assert( fr->esp >= fr->ebp );
-    /* ugly hack to use push macro since it can exit, so we
-     * set up fail to 1 in case it exit the function */
+    /* push the return value onto the stack */
     push(a,*ret);
     /* udpate the rt->cur_obj */
     a->rt->cur_obj = cur_frame(a)->obj;
@@ -1261,7 +1260,7 @@ int vm_main( struct ajj* a ) {
         } else {
           struct ajj_value ret;
           int r;
-          enter_function(a,f,an,0,RCHECK);
+          enter_function(a,f,an,obj,RCHECK);
           r = vm_call(a,obj,&ret);
           if( r < 0 )
             goto fail;
@@ -1286,10 +1285,14 @@ int vm_main( struct ajj* a ) {
         struct ajj_value argnum = ajj_value_number(an);
         const struct string* fn = const_str(a,fn_idx);
         struct ajj_object* o = obj.value.object;
-
         const struct function* f = resolve_obj_method(a,o,fn);
+        assert( obj.type == AJJ_VALUE_OBJECT );
+
         if( f == NULL ) {
-          report_error(a,"Cannot find object method:%s!",fn->str);
+          report_error(a,"Cannot find object method:%s \
+              for object:%s!",
+              fn->str,
+              o->val.obj.fn_tb->name.str);
           goto fail;
         } else {
           struct ajj_value ret;
@@ -1370,7 +1373,6 @@ int vm_main( struct ajj* a ) {
       vm_beg(MOVE) {
         int l = instr_1st_arg(c);
         int r = instr_2nd_arg(a);
-
         struct ajj_value temp = *bot(a,l);
         *bot(a,l) = *bot(a,r);
         *bot(a,r) = temp;
@@ -1599,23 +1601,43 @@ int vm_main( struct ajj* a ) {
         assert( itr->type == AJJ_VALUE_ITERATOR );
         assert( obj->type == AJJ_VALUE_OBJECT );
         o = &(obj->value.object->val.obj);
-        if( arg == 1 ) {
-          struct ajj_value v;
-          /* just push the value on to the stack */
-          assert( o->fn_tb->slot.iter_get_val );
-          v = o->fn_tb->slot.iter_get_val(a,
-              obj, ajj_value_to_iter(itr));
-          push(a,v);
-        } else if( arg == 2 ) {
-          struct ajj_value k , v;
-          assert( o->fn_tb->slot.iter_get_val );
-          assert( o->fn_tb->slot.iter_get_key );
-          k = o->fn_tb->slot.iter_get_key(a,obj,
-              ajj_value_to_iter(itr));
-          v = o->fn_tb->slot.iter_get_val(a,obj,
-              ajj_value_to_iter(itr));
-          push(a,k);
-          push(a,v);
+        switch(arg) {
+          case ITERATOR_VAL:
+            {
+              struct ajj_value v;
+              /* just push the value on to the stack */
+              assert( o->fn_tb->slot.iter_get_val );
+              v = o->fn_tb->slot.iter_get_val(a,
+                  obj, ajj_value_to_iter(itr));
+              push(a,v);
+            }
+            break;
+          case ITERATOR_KEYVAL:
+            {
+              struct ajj_value k , v;
+              assert( o->fn_tb->slot.iter_get_val );
+              assert( o->fn_tb->slot.iter_get_key );
+              k = o->fn_tb->slot.iter_get_key(a,obj,
+                  ajj_value_to_iter(itr));
+              v = o->fn_tb->slot.iter_get_val(a,obj,
+                  ajj_value_to_iter(itr));
+              push(a,k);
+              push(a,v);
+            }
+            break;
+          case ITERATOR_KEY:
+            {
+              struct ajj_value k;
+              /* just push the value on to the stack */
+              assert( o->fn_tb->slot.iter_get_key );
+              k = o->fn_tb->slot.iter_get_key(a,
+                  obj, ajj_value_to_iter(itr));
+              push(a,k);
+            }
+            break;
+          default:
+            UNREACHABLE();
+            break;
         }
       }vm_end(ITER_DEREF)
 

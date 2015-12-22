@@ -19,9 +19,9 @@ void test0() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
     assert(!optimize(a,obj));
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
   }
 }
 
@@ -43,9 +43,9 @@ void test_for() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
     assert(!optimize(a,obj));
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
   }
 
   {
@@ -60,9 +60,9 @@ void test_for() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
     assert(!optimize(a,obj));
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
   }
 
   {
@@ -78,9 +78,9 @@ void test_for() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
     assert( !optimize(a,obj) );
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
   }
 
   {
@@ -95,11 +95,11 @@ void test_for() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
     assert( !optimize(a,obj) );
     prg =ajj_object_jinja_main(obj);
     assert(prg);
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
   }
 
   {
@@ -113,9 +113,9 @@ void test_for() {
     assert(obj);
     prg =ajj_object_jinja_main(obj);
     assert(prg);
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
     assert( !optimize(a,obj) );
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
   }
 
   {
@@ -130,9 +130,9 @@ void test_for() {
     assert(obj);
     prg =ajj_object_jinja_main(obj);
     assert(prg);
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
     assert( !optimize(a,obj) );
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
   }
 #endif
 
@@ -149,9 +149,9 @@ void test_for() {
     jinja = parse(a,"Hello World",src,0);
     assert(jinja);
     prg = ajj_object_jinja_main(jinja);
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
     assert( !optimize(a,jinja) );
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
   }
 
 #if 0
@@ -169,9 +169,9 @@ void test_for() {
     assert(obj);
     prg =ajj_object_jinja_main(obj);
     assert(prg);
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
     assert( !optimize(a,obj) );
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
 
   }
 

@@ -9,13 +9,7 @@ enum {
   TOKENIZE_SCRIPT
 };
 
-#define TOKEN_LIST(X) \
-  X(TK_TEXT,"<text>") \
-  X(TK_COMMENT,"<comment>") \
-  X(TK_LSTMT,"{%") \
-  X(TK_RSTMT,"%}") \
-  X(TK_LEXP,"{{") \
-  X(TK_REXP,"}}") \
+#define TOKEN_KEYWORD_LIST(X) \
   X(TK_IF,"if") \
   X(TK_ELIF,"elif") \
   X(TK_ELSE,"else") \
@@ -49,7 +43,15 @@ enum {
   X(TK_ENDUPVALUE,"endupvalue") \
   X(TK_JSON,"json") \
   X(TK_OVERRIDE,"override") \
-  X(TK_FIX,"fix") \
+  X(TK_FIX,"fix")
+
+#define TOKEN_LIST(X) \
+  X(TK_TEXT,"<text>") \
+  X(TK_COMMENT,"<comment>") \
+  X(TK_LSTMT,"{%") \
+  X(TK_RSTMT,"%}") \
+  X(TK_LEXP,"{{") \
+  X(TK_REXP,"}}") \
   X(TK_LPAR,"(") \
   X(TK_RPAR,")") \
   X(TK_LSQR,"[") \
@@ -85,6 +87,7 @@ enum {
   X(TK_TRUE,"<true>") \
   X(TK_FALSE,"<false>") \
   X(TK_NONE,"<none>") \
+  TOKEN_KEYWORD_LIST(X) \
   X(TK_EOF,"<eof>") \
   X(TK_UNKNOWN,"<unknown>")
 
@@ -110,6 +113,12 @@ const char* tk_get_name( int );
 
 token_id tk_lex( struct tokenizer* tk );
 token_id tk_move( struct tokenizer* tk );
+
+/* Use to rewrite a keyword to a identifier when doing parsing. This is only
+ * used when the parsing phase knows he expect a VARIABLE but not a keyword,
+ * then user could call this function to rewrite the last keyword , if it has,
+ * to a variable and return it back. */
+int tk_expect_id( struct tokenizer* tk );
 
 /* Use to get a human readable code snippet for diagnose information.
  * The snippet is the source line that contains the position "pos".

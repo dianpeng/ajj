@@ -18,10 +18,10 @@ void test1() {
     const struct program* prg;
     assert(obj);
     prg = ajj_object_jinja_main(obj);
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
     assert( !optimize(a,obj) );
     prg = ajj_object_jinja_main(obj);
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
   }
 
   {
@@ -31,10 +31,10 @@ void test1() {
     const struct program* prg;
     assert(obj);
     prg = ajj_object_jinja_main(obj);
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
     assert( !optimize(a,obj) );
     prg = ajj_object_jinja_main(obj);
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
   }
 #endif
 
@@ -49,10 +49,10 @@ void test1() {
     const struct program* prg;
     assert(obj);
     prg = ajj_object_jinja_main(obj);
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
     assert( !optimize(a,obj) );
     prg = ajj_object_jinja_main(obj);
-    dump_program(src,prg,stdout);
+    dump_program(a,src,prg,stdout);
   }
 }
 

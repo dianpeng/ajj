@@ -347,7 +347,12 @@ int to_string( struct opt* o , const struct ajj_value* v,
     case AJJ_VALUE_NUMBER:
       {
         char buf[256];
-        sprintf(buf,"%f",ajj_value_to_number(v));
+        double d = ajj_value_to_number(v);
+        if( is_int(d) ) {
+          sprintf(buf,"%d",(int)(d));
+        } else {
+          sprintf(buf,"%f",ajj_value_to_number(v));
+        }
         val->s = strdup(buf);
         val->own = 1;
         return 0;
@@ -672,7 +677,7 @@ int fold_bin( struct opt* o , instructions instr ) {
         struct string val;
         int i_val;
         int sref = old_sref(o);
-        if( to_string(o,&l,&ls) || to_string(o,&l,&rs) ) {
+        if( to_string(o,&l,&ls) || to_string(o,&r,&rs) ) {
           str_destroy(&ls);
           str_destroy(&rs);
           return -1;
@@ -1016,7 +1021,6 @@ int opt_program( struct opt* o , struct program* prg ) {
   prg->codes = o->o_buf;
   prg->spos = o->o_sref;
   prg->len = o->o_buf_len;
-
 
   o->o_buf = NULL;
   o->o_sref = NULL;

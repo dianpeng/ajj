@@ -9,11 +9,9 @@ struct ajj_object;
 struct func_table;
 struct gc_scope;
 
-
 /* A program is a structure represents the code compiled from Jinja template.
  * It is the concrete entity that VM gonna execute. A program is alwyas held
  * by an object's function table objects. */
-
 struct program {
   int* codes;
   int* spos;

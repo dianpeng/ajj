@@ -631,9 +631,9 @@ void test_include() {
   }
   { /* upvalue */
     const char* src = "{% include 'file.html' upvalue %}\n" \
-                      "{% key1 my_key+2 %}\n" \
-                      "{% key2 my_key+3 fix %}\n" \
-                      "{% key3 my_key+4 override %}\n" \
+                      "{% set key=my_key+2 %}\n" \
+                      "{% set key2=my_key+3 fix %}\n" \
+                      "{% set key3=my_key+4 override %}\n" \
                       "{% endinclude %}\n";
     struct ajj* a = ajj_create();
     struct ajj_object* obj = parse(a,"Hello World",src,0);
@@ -656,9 +656,9 @@ void test_include() {
   }
   { /* json */
     const char* src = "{% include 'file.html' json 'json.file'+json_path %}\n" \
-                      "{% key1 my_key2 %} \n" \
-                      "{% key2 my_key3 override %}\n" \
-                      "{% key3 my_key4 fix %}\n" \
+                      "{% set key1=my_key2 %} \n" \
+                      "{% set key2=my_key3 override %}\n" \
+                      "{% set key3=my_key4 fix %}\n" \
                       "{% endinclude %}";
     struct ajj* a = ajj_create();
     struct ajj_object* obj = parse(a,"Whoha",src,0);
@@ -708,9 +708,9 @@ void test_import() {
 
   { /* basic import */
     const char* src = "{% import 'file.name'+1 as uuvv upvalue %}\n" \
-                      "{% key1 my_key1 %}\n" \
-                      "{% key2 my_key2 fix %}\n" \
-                      "{% key3 my_key3 override %}\n" \
+                      "{% set key1=my_key1 %}\n" \
+                      "{% set key2=my_key2 fix %}\n" \
+                      "{% set key3=my_key3 override %}\n" \
                       "{% endimport %}";
     struct ajj* a = ajj_create();
     struct ajj_object* obj = parse(a,"Whoha",src,0);

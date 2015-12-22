@@ -21,11 +21,10 @@
 
 #define STRING_HASH_SEED 1771
 #define DICT_MAX_SIZE (1<<29)
-#define STRBUF_INIT_SIZE 64
 
 #define ARRAY_SIZE(X) (sizeof(X)/sizeof((X)[0]))
 
-#define INITIAL_MEMORY_SIZE 512
+#define INITIAL_MEMORY_SIZE 128
 #define BOUNDED_MEMORY_SIZE 1024*64
 
 #ifndef NDEBUG
@@ -61,6 +60,15 @@
     (X)->next->prev = (X)->prev; \
   } while(0)
 
+
+/* grow a piece of memory to a new memory. The size_t obj_sz is used represent
+ * the length for each elements and the length is the size of the current array,
+ * the new_cap is used to indicate the target capacity of the memory.
+ * assert new_cap > len
+ * and the size for the new memory is obj_sz * length
+ * After calling this function, the input mem will be freeed */
+
+void* mem_grow( void* , size_t obj_sz , size_t append, size_t* old_cap );
 
 /* =======================================================
  * String
@@ -175,9 +183,9 @@ void strbuf_reserve( struct strbuf* buf , size_t cap ) {
 
 static
 void strbuf_init( struct strbuf* buf ) {
-  buf->str = NULL;
   buf->len = 0;
-  strbuf_reserve(buf,STRBUF_INIT_SIZE);
+  buf->cap = 0;
+  buf->str = mem_grow(NULL,sizeof(char),0,&(buf->cap));
 }
 
 static
@@ -191,8 +199,7 @@ void strbuf_init_cap( struct strbuf* buf , size_t cap ) {
 static
 void strbuf_push( struct strbuf* buf , char c ) {
   if( buf->cap == 0 || buf->cap == buf->len+1 ) {
-    size_t c = buf->cap == 0 ? STRBUF_INIT_SIZE : buf->cap*2;
-    strbuf_reserve( buf , c );
+    buf->str = mem_grow(buf->str,sizeof(char),0,&(buf->cap));
   }
   buf->str[buf->len] = c;
   ++(buf->len);
@@ -201,10 +208,8 @@ void strbuf_push( struct strbuf* buf , char c ) {
 
 static
 void strbuf_append( struct strbuf* buf , const char* str , size_t len ) {
-  if( buf->cap == 0 || buf->cap == buf->len + len + 1 ) {
-    size_t c = buf->cap == 0 ? len + 1 + STRBUF_INIT_SIZE :
-      (buf->len+len+1)*2;
-    strbuf_reserve( buf, c );
+  if( buf->cap == 0 || buf->cap <= buf->len + len + 1 ) {
+    buf->str = mem_grow(buf->str,sizeof(0),len,&(buf->cap));
   }
   memcpy(buf->str+buf->len,str,len);
   buf->len += len;
@@ -364,14 +369,6 @@ void slab_free( struct slab* , void* );
  * Other helper functions
  * =======================================*/
 
-/* grow a piece of memory to a new memory. The size_t obj_sz is used represent
- * the length for each elements and the length is the size of the current array,
- * the new_cap is used to indicate the target capacity of the memory.
- * assert new_cap > len
- * and the size for the new memory is obj_sz * length
- * After calling this function, the input mem will be freeed */
-
-void* mem_grow( void* , size_t obj_sz , size_t append, size_t* old_cap );
 
 static int is_int( double val ) {
   double i;

@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 
+/* used to do tokenizer forwarding for all the none TK_VARIABLE */
 #define EXPECT(TK) \
   do { \
     if( p->tk.tk != (TK) ) { \
@@ -19,6 +20,18 @@
       return -1; \
     } \
   } while(0)
+
+/* used to do tokenizer forwarding for all TK_VARIABLE */
+#define EXPECT_VARIABLE() \
+  do { \
+    if( tk_expect_id(&(p->tk)) ) { \
+      report_error(p,"Unexpected token :%s expect :%s", \
+          tk_get_name(p->tk.tk), \
+          tk_get_name(TK_VARIABLE)); \
+      return -1; \
+    } \
+  } while(0)
+
 
 #define CONSUME(TK) \
   do { \
@@ -240,6 +253,8 @@ struct lex_scope* lex_scope_exit( struct parser*  p ) {
   scp = PTOP()->parent;
   if( PTOP()->is_loop ) {
     free(PTOP()->lctrl);
+  } else if( PTOP()->in_loop ) {
+    --PTOP()->lctrl->cur_enter;
   }
   free( PTOP() );
   if( scp == NULL ) {
@@ -352,7 +367,8 @@ int parse_expr( struct parser* , struct emitter* );
  * List literal are like this [ expr , expr , expr ].
  * The problem is how to generate code that create the list for you, to do this
  * we will use instruction VM_ATTR_PUSH */
-static int parse_seq( struct parser* p , struct emitter* em , int rtk ) {
+static
+int parse_seq( struct parser* p , struct emitter* em , int rtk ) {
   struct tokenizer* tk = &(p->tk);
   /* check if it is an empty list */
   if( tk->tk == rtk ) {
@@ -579,7 +595,7 @@ int parse_attr_or_methodcall( struct parser* p, struct emitter* em ,
     struct string comp;
     int idx;
 
-    EXPECT(TK_VARIABLE);
+    EXPECT_VARIABLE();
     CALLE(symbol(p,&comp));
     idx=program_const_str(em->prg,&comp,1);
     tk_move(tk);
@@ -656,7 +672,7 @@ int parse_prefix( struct parser* p, struct emitter* em ) {
       CALLE(parse_attr_or_methodcall(p,em,&NULL_STRING));
     } else if( tk->tk == TK_PIPE ) {
       tk_move(tk);
-      EXPECT(TK_VARIABLE);
+      EXPECT_VARIABLE();
       CALLE(symbol(p,&prefix));
       tk_move(tk);
       if( tk->tk == TK_LPAR ) {
@@ -677,6 +693,8 @@ int parse_atomic( struct parser* p, struct emitter* em ) {
   int idx;
   struct string str;
 
+  tk_expect_id(tk); /* rewrite the tokenizer to get more
+                          * keyword candidate */
   switch(tk->tk) {
     case TK_VARIABLE:
       return parse_prefix(p,em);
@@ -1297,7 +1315,7 @@ parse_func_prototype( struct parser* p , struct program* prg ) {
       struct string par_name;
       struct ajj_value def_val = AJJ_NONE;
       /* Building prototype of function */
-      EXPECT(TK_VARIABLE);
+      EXPECT_VARIABLE();
       CALLE(symbol(p,&par_name));
       tk_move(tk);
       if( tk->tk == TK_ASSIGN ) {
@@ -1333,7 +1351,7 @@ parse_macro( struct parser* p , struct emitter* em ) {
   tk_move(tk);
   /* We need the name of the macro then we can get a new
    * program objects */
-  EXPECT(TK_VARIABLE);
+  EXPECT_VARIABLE();
   CALLE(symbol(p,&name));
   assert(p->tpl->val.obj.fn_tb);
   /* Add a new function into the table */
@@ -1365,7 +1383,7 @@ parse_block( struct parser* p , struct emitter* em ) {
 
   assert(tk->tk == TK_BLOCK);
   tk_move(tk);
-  EXPECT(TK_VARIABLE);
+  EXPECT_VARIABLE();
   CALLE(symbol(p,&name));
   tk_move(tk);
   CONSUME(TK_RSTMT); /* eat }% */
@@ -1421,7 +1439,7 @@ parse_call( struct parser* p , struct emitter* em ) {
   emit1(em,VM_UPVALUE_SET,caller_idx); /* set the value into caller_idx */
 
   /* generate call stub here  */
-  EXPECT(TK_VARIABLE);
+  EXPECT_VARIABLE();
   strbuf_move(&(tk->lexeme),&macro_name);
   tk_move(tk);
   EXPECT(TK_LPAR); /* must be a function call */
@@ -1477,6 +1495,7 @@ static int parse_for_body( struct parser* p ,
   int itr_idx;
   int obj_idx;
   int deref_tp;
+  int poped_num;
   size_t i;
   struct string obj_name;
   struct string itr_name;
@@ -1588,9 +1607,18 @@ static int parse_for_body( struct parser* p ,
         emitter_label(em));
   }
 
-  /* pop the temporary key/value pair */
-  if( deref_tp > 0 )
-    emit1(em,VM_POP,deref_tp);
+  /* resume the stack status , we need to pop
+   * the following value out from stack :
+   * 1. All the local variable that is inside of
+   * this lexical scope. We don't need to pop it
+   * in other scope but only here because the loop
+   * scope doesn't exit and enter gc scope for each
+   * loop.
+   * 2. All the key value pair */
+  assert(scp->len>=2);
+  poped_num = scp->len -2;
+  if( poped_num )
+    emit1(em,VM_POP,poped_num);
 
   /* move the iterator */
   emit0(em,VM_ITER_MOVE);
@@ -1600,11 +1628,11 @@ static int parse_for_body( struct parser* p ,
 
   /* here is the jump position that is corresponding to
    * loop condition test failure */
-  emit1_at(em,loop_jmp,VM_JF,emitter_label(em)); /* patch the jmp */
+  emit1_at(em,loop_jmp,VM_JF,
+      emitter_label(em)); /* patch the jmp */
 
   /* patch the break jump table here */
-
-  if( PTOP()->lctrl->brks_len && deref_tp > 0 ) {
+  if( PTOP()->lctrl->brks_len && poped_num > 0 ) {
     /* generate a jump here to make sure normal execution flow
      * will skip the following ONE pop instruction */
     brk_jmp = emit_put(em,1);
@@ -1617,7 +1645,7 @@ static int parse_for_body( struct parser* p ,
         emitter_label(em));
   }
 
-  if( i && deref_tp > 0 ) {
+  if( i && poped_num > 0 ) {
     /* it means we do see break inside of the loop scope.
      * we need to generate some other stub code here to pop
      * the dereferenced value on stack. Currently there are
@@ -1626,8 +1654,8 @@ static int parse_for_body( struct parser* p ,
      * values as well when we patch the break. Otherwise they
      * will not be cleared since the code for pop these values
      * actually resides inside of the loop body , not here */
-    emit1(em,VM_POP,deref_tp); /* pop the value if the break control
-                                * reaches here */
+    emit1(em,VM_POP,poped_num); /* pop the value if the break control
+                                 * reaches here */
     assert( brk_jmp >0 );
     emit1_at(em,brk_jmp,VM_JMP,emitter_label(em)); /* patch the jump to skip
                                                     * the POP instruction above */
@@ -1691,12 +1719,12 @@ int parse_for( struct parser* p , struct emitter* em ) {
    * _,value
    * key,_
    * So at most 2 symbols can be provided here */
-  EXPECT(TK_VARIABLE);
+  EXPECT_VARIABLE();
   strbuf_move(&(tk->lexeme),&key);
   tk_move(tk);
   if( tk->tk == TK_COMMA ) {
     tk_move(tk);
-    EXPECT(TK_VARIABLE);
+    EXPECT_VARIABLE();
     strbuf_move(&(tk->lexeme),&val);
     tk_move(tk);
   } else {
@@ -1767,8 +1795,9 @@ int parse_set( struct parser* p, struct emitter* em ) {
   assert( tk->tk == TK_SET );
   tk_move(tk);
 
-  EXPECT(TK_VARIABLE);
-  CALLE((var_idx=lex_scope_set(p,strbuf_tostring(&(tk->lexeme)).str))==-2);
+  EXPECT_VARIABLE();
+  CALLE((var_idx=lex_scope_set(p,
+          strbuf_tostring(&(tk->lexeme)).str))==-2);
   tk_move(tk); /* Move forward */
 
   /* check if we have an pending expression or just end of the SET scope*/
@@ -1832,7 +1861,7 @@ parse_move( struct parser* p , struct emitter* em ) {
   assert(tk->tk == TK_MOVE);
   tk_move(tk);
 
-  EXPECT(TK_VARIABLE); /* dest variable */
+  EXPECT_VARIABLE(); /* dest variable */
 
   if( (dst_idx=lex_scope_get(p,
           strbuf_tostring(&(tk->lexeme)).str,
@@ -1843,7 +1872,7 @@ parse_move( struct parser* p , struct emitter* em ) {
   }
   tk_move(tk);
 
-  EXPECT(TK_VARIABLE); /* target variable */
+  EXPECT_VARIABLE(); /* target variable */
 
   if( (src_idx=lex_scope_get(p,
           strbuf_tostring(&(tk->lexeme)).str,
@@ -1915,7 +1944,7 @@ static int
 parse_with( struct parser* p , struct emitter* em ) {
   struct tokenizer* tk = &(p->tk);
   assert(tk->tk == TK_WITH);
-  tk_move(tk);
+  tk_move(tk); tk_expect_id(tk);
 
   if( tk->tk == TK_VARIABLE ) {
     int idx;
@@ -1948,8 +1977,8 @@ parse_with( struct parser* p , struct emitter* em ) {
  * This is useful when you want to customize the behavior of the engine. We support
  * context in include and extends statements by allowing user to set up a context
  * scope to setup the upvalue. The genenral grammar is like this:
- * {% key value (fix)/(override) %}
- * {% key value (fix)/(override) %}
+ * {% set key=value (fix)/(override) %}
+ * {% set key=value (fix)/(override) %}
  * ...
  * The context are pushed on to stack and the correpsonding include/extends instruction
  * should take care of these values */
@@ -1964,13 +1993,16 @@ parse_context_body( struct parser* p , struct emitter* em ) {
       tk_move(tk); /* skip the text */
 
     CONSUME(TK_LSTMT);
-    if( tk->tk == TK_VARIABLE ) {
+    if( tk->tk == TK_SET ) {
+      CONSUME(TK_SET);
+      EXPECT_VARIABLE();
       int var_idx;
       int opt = UPVALUE_OVERRIDE;
       struct string str;
       /* this is a context statment */
       strbuf_move(&(tk->lexeme),&str);
       tk_move(tk); /* move the variable name */
+      CONSUME(TK_ASSIGN); /* skip the assignment */
       var_idx = program_const_str(em->prg,&str,1);
       /* for each context value, 3 corresponding attributes will
        * be pushed onto the stack. They are:
@@ -2011,12 +2043,12 @@ parse_context_body( struct parser* p , struct emitter* em ) {
  * {% include template %}
  *
  * {% include template upvalue %}
- *   {% name value (fix)/(override) %}
- *   {% name value (fix)/(override) %}
+ *   {% set name=value (fix)/(override) %}
+ *   {% set name=value (fix)/(override) %}
  * {% endinclude %}
  *
  * {% include template json jsonfile %}
- *   {% name value (fix)/(override) %}
+ *   {% set name=value (fix)/(override) %}
  * {% endinclude %}
  *
  */
@@ -2067,9 +2099,9 @@ parse_include( struct parser* p , struct emitter* em ) {
  * EG:
  * {% import template_path as object %}
  * {% import template_path as object upvalue %}
- *   {% key value %}
- *   {% key value %}
- *   {% key value %}
+ *   {% set key=value %}
+ *   {% set key=value %}
+ *   {% set key=value %}
  * {% endextends %}
  *
  * Import will be parsed as follow, the bottom 2 elements of the stack are

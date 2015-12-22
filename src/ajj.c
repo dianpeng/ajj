@@ -254,7 +254,7 @@ int io_file_vprintf( struct ajj_io* io , const char* fmt , va_list vl ) {
 
 static
 void io_file_write( struct ajj_io* io , const void* mem , size_t len ) {
-  fwrite(mem,sizeof(char),len,io->out.f);
+  int ret = fwrite(mem,sizeof(char),len,io->out.f);
 }
 
 int ajj_io_printf( struct ajj_io* io , const char* fmt , ... ) {
