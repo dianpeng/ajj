@@ -49,6 +49,18 @@
  * After all the optimization pass finished, the second/last pass will kick
  * in to finish those patch for all the jump instructions.
  *
+ * RISK:
+ * We are not allowed to remove some very *TRIVIAL* but dangerouse codes
+ * even they are *like* some good fish to catch. Example:
+ * POP 1
+ * POP 2
+ *
+ * The POP instruction is typically emitted cross the the sentence boundary,
+ * although our byte code doesn't make this explicit.So without CFG analysing
+ * we cannot remove those code. Because it is very likely that some other
+ * code will JUMP into the second POP then skip the first POP so we cannot
+ * fold the above 2 instructions into one single POP safely. Actually in our
+ * loop body the code generation has such pattern.
  */
 
 struct offset_buffer {

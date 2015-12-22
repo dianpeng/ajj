@@ -274,7 +274,6 @@ void test_loop() {
     dump_program(a,src,prg,output);
     assert(!vm_run_jinja(a,jinja,output));
   }
-#endif
   {
     struct ajj* a = ajj_create();
     const char* src = "{% set a = { 'UUV':123 , 'VVU':456 } %}"\
@@ -302,6 +301,28 @@ void test_loop() {
     dump_program(a,src,prg,output);
     assert(!vm_run_jinja(a,jinja,output));
   }
+#endif
+  {
+    struct ajj* a = ajj_create();
+    const char* src = "{% set i = 0 %}" \
+                      "{% for x in xlist(10) %}" \
+                      "{% set idx = i+1 %}" \
+                      "{% move i idx %}" \
+                      "{{ idx }}\n"\
+                      "{% endfor %}";
+    struct ajj_object* jinja;
+    const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+    jinja = parse(a,"_",src,0);
+    assert(jinja);
+    prg = ajj_object_jinja_main(jinja);
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+    assert(!optimize(a,jinja));
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+  }
+
 }
 
 int main() {
