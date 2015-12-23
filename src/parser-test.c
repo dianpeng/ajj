@@ -757,7 +757,7 @@ void test_move() {
   { /* same scope move , should fail */
     const char* src = "{% set U = 1 %}\n" \
                       "{% set V = 2 %}\n" \
-                      "{% move U V %}\n";
+                      "{% move U=V %}\n";
     struct ajj* a = ajj_create();
     struct ajj_object* obj = parse(a,"Whoha",src,0);
     const struct program* prg;
@@ -770,7 +770,7 @@ void test_move() {
   { /* different scope */
     const char* src = "{% set U = 1 %}\n" \
                       "{% with V = 2 %} \n" \
-                      "{% move U V %}\n" \
+                      "{% move U=V %}\n" \
                       "{% endwith %}";
     struct ajj* a = ajj_create();
     struct ajj_object* obj = parse(a,"Whoha",src,0);
@@ -782,7 +782,7 @@ void test_move() {
   { /* different scope */
     const char* src = "{% set U = 1 %}\n" \
                       "{% with V = 2 %} \n" \
-                      "{% move V U %}\n" \
+                      "{% move V = U %}\n" \
                       "{% endwith %}";
     struct ajj* a = ajj_create();
     struct ajj_object* obj = parse(a,"Whoha",src,0);

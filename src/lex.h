@@ -62,6 +62,7 @@ enum {
   X(TK_SUB,"-") \
   X(TK_MUL,"*") \
   X(TK_DIV,"/") \
+  X(TK_LEN,"#") \
   X(TK_DIVTRUCT,"//") \
   X(TK_MOD,"%") \
   X(TK_POW,"**") \

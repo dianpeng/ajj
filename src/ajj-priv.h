@@ -111,10 +111,7 @@ int ajj_delete_template( struct ajj* a, const char* name ) {
   if( map_remove_c(&(a->tmpl_tbl),name,&obj))
     return -1;
   LREMOVE(obj); /* remove it from gc scope */
-  assert(obj->tp == AJJ_VALUE_JINJA);
-  func_table_destroy(a,obj->val.obj.fn_tb);
-  free((void*)obj->val.obj.src); /* always owned by us */
-  slab_free(&(a->obj_slab),obj);
+  ajj_object_destroy_jinja(a,obj);
   return 0;
 }
 

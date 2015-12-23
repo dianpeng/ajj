@@ -222,7 +222,6 @@ struct string str_mul( const struct str* l , int times ) {
 
 /* The following function reemit the instructions accordingly
  * and also it build the reverse link on the fly */
-
 static
 void emit0( struct opt* o , int pos , int bc ) {
   reserve_buf(o,o_rlink,0,int);
@@ -286,6 +285,13 @@ void emit2( struct opt* o , int pos , int bc , int a1, int a2 ) {
   o->o_buf[o->o_buf_len++] = a2;
 }
 
+/* ==========================================================
+ * Type conversion
+ * We jave to use customized version instead of reusing
+ * vm_to_XXX function. The reason is because we carry the string
+ * constant into the __private__ pointer inside of the struct
+ * ajj_value which is opaque to all the vm_to_XXX function
+ * ==========================================================*/
 static
 int to_number( struct opt* o , const struct ajj_value* v,
     double* val ) {
@@ -508,7 +514,6 @@ done:
 fail:
   return -1;
 }
-
 
 /* Find the new value for old jump target. During the constant
  * folding and NOP operation remove we build a offset buffer,

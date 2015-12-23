@@ -70,7 +70,7 @@ int unwind_stack( struct ajj* a , char* buf ) {
     } else {
       const char* obj_name;
       obj_name = fr[i].obj->val.obj.fn_tb->name.str;
-      buf += snprintf(buf,end-buf,"%d %s:%s %d\n",i,
+      buf += snprintf(buf,end-buf,"%d <%s>:%s arg-num:%d\n",i,
           obj_name,
           fr[i].name.str,
           fr[i].par_cnt);
@@ -160,6 +160,25 @@ void runtime_destroy( struct ajj* a , struct runtime* rt ) {
     c = n;
   }
   free(rt);
+}
+
+/* =============================
+ * Program
+ * ===========================*/
+void program_destroy( struct program* prg ) {
+  int i;
+  for( i = 0 ; i < prg->str_len ; ++i ) {
+    string_destroy(prg->str_tbl+i);
+  }
+
+  for( i = 0 ; i < prg->par_size ; ++i ) {
+    string_destroy(&(prg->par_list[i].name));
+  }
+
+  free(prg->codes);
+  free(prg->spos);
+  free(prg->str_tbl);
+  free(prg->num_tbl);
 }
 
 /* =============================
@@ -284,21 +303,17 @@ int vm_to_string( const struct ajj_value* val,
         TRUE_STRING : FALSE_STRING);
       return 0;
     case AJJ_VALUE_NUMBER:
-      {
-        char buf[256];
-        double num = ajj_value_to_number(val);
-        if( is_int(num) ) {
-          sprintf(buf,"%d",(int)(num));
-        } else {
-          sprintf(buf,"%f",num);
-        }
-        *own = 1;
-        *str = string_dupc(buf);
-        return 0;
-      }
+      *own = 1;
+      str->str = dtoc(val->value.number,
+          &(str->len));
+      return 0;
     case AJJ_VALUE_STRING:
       *own = 0;
       *str = *ajj_value_to_string(val);
+      return 0;
+    case AJJ_VALUE_NONE:
+      *own = 0;
+      *str = EMPTY_STRING;
       return 0;
     default:
       return -1;
@@ -347,6 +362,7 @@ int to_integer( struct ajj* a, const struct ajj_value* val, int* fail ) {
     *fail = 1;
     return -1;
   } else {
+    *fail = 0;
     return o;
   }
 }
@@ -502,6 +518,32 @@ struct ajj_value vm_neg(struct ajj* a, const struct ajj_value* val,
 }
 
 static
+struct ajj_value vm_len(struct ajj* a, const struct ajj_value* val ) {
+  switch(val->type) {
+    case AJJ_VALUE_NONE:
+    case AJJ_VALUE_NUMBER:
+    case AJJ_VALUE_BOOLEAN:
+      return ajj_value_number(1);
+    case AJJ_VALUE_STRING:
+      return ajj_value_number(
+          val->value.object->val.str.len);
+    case AJJ_VALUE_OBJECT:
+      {
+        struct object* o = &(val->value.object->val.obj);
+        if( o->fn_tb->slot.length ) {
+          return ajj_value_number(
+              o->fn_tb->slot.length(a,val));
+        } else {
+          return AJJ_NONE;
+        }
+      }
+    default:
+      UNREACHABLE();
+      return AJJ_NONE;
+  }
+}
+
+static
 struct ajj_value
 vm_in( struct ajj* a , struct ajj_value* obj ,
     const struct ajj_value* val , int* fail ) {
@@ -572,8 +614,9 @@ int call_ctor( struct ajj* a , struct func_table* ft,
   struct ajj_object* obj;
   struct ajj_value par[AJJ_FUNC_ARG_MAX_SIZE];
   if( pc >= AJJ_FUNC_ARG_MAX_SIZE ) {
-    report_error(a,"Too much prameters passing into a object CTOR. We \
-        only allow at most :%d function arguments!",AJJ_FUNC_ARG_MAX_SIZE);
+    report_error(a,"Too much prameters passing "
+        "into a object CTOR. We  only allow at most "
+        ":%d function arguments!",AJJ_FUNC_ARG_MAX_SIZE);
     return -1;
   }
 
@@ -634,8 +677,9 @@ vm_call(struct ajj* a, struct ajj_object* obj ,
      * pass parameter on a stack ? While, I guess having an array
      * of parameters making user feel less painful. */
     if( fr->par_cnt > AJJ_FUNC_ARG_MAX_SIZE ) {
-      report_error(a,"Too much parameters passing into a c function/method.We \
-          only allow %d function arguments!",AJJ_FUNC_ARG_MAX_SIZE);
+      report_error(a,"Too much parameters passing into "
+          "a c function/method.We only allow %d function "
+          "arguments!",AJJ_FUNC_ARG_MAX_SIZE);
       return -1;
     }
 
@@ -665,8 +709,9 @@ vm_call(struct ajj* a, struct ajj_object* obj ,
       assert( obj != NULL );
       if( fr->par_cnt > AJJ_FUNC_ARG_MAX_SIZE ||
           fr->par_cnt > prg->par_size ) {
-        report_error(a,"Too much parameters passing into a jinja function "\
-            "expect :%zu but get:%zu",prg->par_size,fr->par_cnt);
+        report_error(a,"Too much parameters passing "
+            "into a jinja function expect :%zu but "
+            "get:%zu",prg->par_size,fr->par_cnt);
         return -1;
       }
       for( i = fr->par_cnt ; i < prg->par_size ; ++i ) {
@@ -699,7 +744,8 @@ struct ajj_value vm_lstr( struct ajj* a, int idx ) {
   struct ajj_object* obj;
   assert(IS_JINJA(fr->entry));
   assert(prg->str_len > idx);
-  obj = ajj_object_create_const_string(a,a->rt->cur_gc,cstr);
+  obj = ajj_object_create_const_string(\
+      a,a->rt->cur_gc,cstr);
   return ajj_value_assign(obj);
 }
 
@@ -749,8 +795,8 @@ void vm_attrset( struct ajj* a , struct ajj_value* obj,
     int* fail ) {
   if( obj->type != AJJ_VALUE_OBJECT ) {
     *fail = 1;
-    report_error(a,"Cannot set attributes on type:%s which is not an "\
-        "object!",ajj_value_get_type_name(obj));
+    report_error(a,"Cannot set attributes on type:%s "
+        "which is not an object!",ajj_value_get_type_name(obj));
     return;
   } else {
     struct object* o = &(obj->value.object->val.obj);
@@ -771,21 +817,52 @@ static
 struct ajj_value
 vm_attrget( struct ajj* a , struct ajj_value* obj,
     const struct ajj_value* key , int* fail ) {
-  if( obj->type != AJJ_VALUE_OBJECT ) {
+  if( obj->type != AJJ_VALUE_OBJECT &&
+      obj->type != AJJ_VALUE_STRING ) {
     *fail = 1;
-    report_error(a,"Cannot get attributes on type:%s which is not an "\
-        "object!",ajj_value_get_type_name(obj));
+    report_error(a,"Cannot get attributes on type:%s which is not an "
+        "object or string!",ajj_value_get_type_name(obj));
     return AJJ_NONE;
   } else {
-    struct object* o = &(obj->value.object->val.obj);
-    if( o->fn_tb->slot.attr_get == NULL ) {
-      *fail = 1;
-      report_error(a,"Type:%s cannot support attribute get operation!",
-          o->fn_tb->name.str);
-      return AJJ_NONE;
+    if( obj->type == AJJ_VALUE_OBJECT ) {
+      struct object* o = &(obj->value.object->val.obj);
+      if( o->fn_tb->slot.attr_get == NULL ) {
+        *fail = 1;
+        report_error(a,"Type:%s cannot support attribute get operation!",
+            o->fn_tb->name.str);
+        return AJJ_NONE;
+      } else {
+        *fail = 0;
+        return o->fn_tb->slot.attr_get(a,obj,key);
+      }
     } else {
-      *fail = 0;
-      return o->fn_tb->slot.attr_get(a,obj,key);
+      int k = to_integer(a,key,fail);
+      if( *fail ) {
+        return AJJ_NONE;
+      } else {
+        struct string* str = &(obj->value.object->val.str);
+        if(str->len <= (size_t)k) {
+          report_error(a,"Cannot get character from string with index:%d,"
+              "the string length is:%zu!",k,str->len);
+          *fail = 1;
+          return AJJ_NONE;
+        } else {
+          struct string buf;
+          *fail = 0;
+          buf.str = const_cstr( str->str[k] );
+          buf.len = 1;
+          /* TODO::
+           * Optimize this with const_string instead of dynamic string,
+           * to achieve this a static table must be created for each
+           * charaters. This is not hard at all */
+          return ajj_value_assign(
+              ajj_object_create_const_string(
+                a,
+                a->rt->cur_gc,
+                &buf)
+              );
+        }
+      }
     }
   }
 }
@@ -795,7 +872,7 @@ void vm_attrpush( struct ajj* a , struct ajj_value* obj,
     const struct ajj_value* val , int* fail ) {
   if( obj->type != AJJ_VALUE_OBJECT ) {
     *fail = 1;
-    report_error(a,"Cannot push attributes on type:%s which is not an "\
+    report_error(a,"Cannot push attributes on type:%s which is not an "
         "object!",ajj_value_get_type_name(obj));
   } else {
     struct object* o = &(obj->value.object->val.obj);
@@ -872,14 +949,16 @@ char* load_template( struct ajj* a , const struct ajj_value* fn ) {
     report_error(a,"Include file name is not a string!");
     return NULL;
   }
-  if((fc = ajj_load_file(a,ajj_value_to_cstr(fn),NULL))==NULL){
+  if((fc = ajj_load_file(a,
+          ajj_value_to_cstr(fn),NULL))==NULL){
     return NULL;
   }
   return fc;
 }
 
 static
-void vm_include( struct ajj* a , int type, int cnt , int* fail ) {
+void vm_include( struct ajj* a , int type,
+    int cnt , int* fail ) {
   struct ajj_value* fn;
   char* fc = NULL;
   struct runtime* rt;
@@ -1001,12 +1080,17 @@ resolve_free_function( struct ajj* a, const struct string* name ,
 }
 
 /* helpers */
+
+/* method field is used to indicate whether this function call
+ * has an object put on the stack. It will ONLY emitted by ATTR_CALL
+ * instructions which will have such object on the stack */
 static
 void enter_function( struct ajj* a , const struct function* f,
-    int par_cnt , struct ajj_object* obj , int* fail ) {
+    int par_cnt , int method ,
+    struct ajj_object* obj , int* fail ) {
   struct runtime* rt = a->rt;
   if( rt->cur_call_stk == AJJ_MAX_CALL_STACK ) {
-    report_error(a,"Function recursive call too much," \
+    report_error(a,"Function recursive call too much,"
         "frame stack overflow!");
     *fail = 1;
   } else {
@@ -1024,6 +1108,7 @@ void enter_function( struct ajj* a , const struct function* f,
     fr->ebp = ebp;
     fr->pc = 0;
     fr->par_cnt = par_cnt;
+    fr->method = method;
     fr->obj = obj;
     /* only update the rt->cur_obj when we enter into a function
      * call that really has a object, otherwise just don't update*/
@@ -1042,7 +1127,7 @@ int exit_function( struct ajj* a , const struct ajj_value* ret ) {
   /* test whether we need to update our par_cnt
    * because we are a call for a method which means
    * we have an object on stack */
-  par_cnt = fr->obj ? par_cnt + 1 : par_cnt;
+  par_cnt = fr->method ? fr->par_cnt + 1 : fr->par_cnt;
   --rt->cur_call_stk;
   if( rt->cur_call_stk >0  ) {
     fr = cur_frame(a); /* must be assigned AFTER cur_all_stk changed */
@@ -1080,7 +1165,7 @@ int call_script_func( struct ajj* a , const char* name,
     push(a,par[i]);
   }
 
-  enter_function(a,f,par_cnt,root_obj,fail);
+  enter_function(a,f,par_cnt,0,root_obj,fail);
   if(!*fail) return -1;
 
   /* notify the VM to execute the current script function */
@@ -1240,10 +1325,17 @@ int vm_main( struct ajj* a ) {
       } vm_end(DIVTRUCT)
 
       vm_beg(IN) {
-        struct ajj_value o = vm_in(a,top(a,2),top(a,1),RCHECK);
+        struct ajj_value o = vm_in(a,
+            top(a,2),top(a,1),RCHECK);
         pop(a,2);
         push(a,o);
       } vm_end(IN)
+
+      vm_beg(LEN) {
+        struct ajj_value o = vm_len(a,top(a,1));
+        pop(a,1);
+        push(a,o);
+      } vm_end(LEN)
 
       vm_beg(CALL) {
         int fn_idx= instr_1st_arg(c);
@@ -1260,7 +1352,7 @@ int vm_main( struct ajj* a ) {
         } else {
           struct ajj_value ret;
           int r;
-          enter_function(a,f,an,obj,RCHECK);
+          enter_function(a,f,an,0,obj,RCHECK);
           r = vm_call(a,obj,&ret);
           if( r < 0 )
             goto fail;
@@ -1280,24 +1372,34 @@ int vm_main( struct ajj* a ) {
       vm_beg(ATTR_CALL) {
         int fn_idx = instr_1st_arg(c);
         int an = instr_2nd_arg(a);
-
         struct ajj_value obj = *top(a,an+1);
-        struct ajj_value argnum = ajj_value_number(an);
-        const struct string* fn = const_str(a,fn_idx);
-        struct ajj_object* o = obj.value.object;
-        const struct function* f = resolve_obj_method(a,o,fn);
-        assert( obj.type == AJJ_VALUE_OBJECT );
+        struct ajj_value argnum;
+        const struct string* fn;
+        struct ajj_object* o;
+        const struct function* f;
+
+        if( obj.type != AJJ_VALUE_OBJECT ) {
+          report_error(a,"Cannot call a member function on type:%s!",
+              ajj_value_get_type_name(&obj));
+          goto fail;
+        }
+
+        argnum = ajj_value_number(an);
+        fn = const_str(a,fn_idx);
+        o = obj.value.object;
+        f = resolve_obj_method(a,o,fn);
 
         if( f == NULL ) {
-          report_error(a,"Cannot find object method:%s \
-              for object:%s!",
+          report_error(a,"Cannot find object method:%s for object:%s!",
               fn->str,
               o->val.obj.fn_tb->name.str);
           goto fail;
         } else {
           struct ajj_value ret;
           int r;
-          enter_function(a,f,an,o,RCHECK);
+          /* We have an object on stack, so set the method field
+           * of function enter_function to 1 */
+          enter_function(a,f,an,1,o,RCHECK);
           r = vm_attrcall(a,o,&ret);
           if( r < 0 ) {
             goto fail;
@@ -1700,12 +1802,16 @@ int vm_run_jinja( struct ajj* a , struct ajj_object* jj,
   const struct function* main;
   int fail;
   a->rt = rt;
-  /* let's enter the main function now */
+  /* get the main function */
   main = ajj_object_jinja_main_func(jj);
-  enter_function(a,main,0,jj,&fail);
+  /* set up main function stack frame */
+  enter_function(a,main,0,0,jj,&fail);
   assert(!fail);
+  /* set up builtin upvalue */
   set_func_upvalue(a);
+  /* let's rock */
   fail = vm_main(a);
+  /* finish some crap then we are done */
   runtime_destroy(a,rt);
   a->rt = NULL;
   return fail;

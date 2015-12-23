@@ -49,6 +49,8 @@ void ajj_destroy( struct ajj* r ) {
   /* just exit the scope without deleting this scope
    * since it is not a pointer from the gc_slab */
   gc_scope_exit(r,&(r->gc_root));
+
+  /* Now destroy rest of the data structure */
   map_destroy(&(r->tmpl_tbl));
   slab_destroy(&(r->upval_slab));
   slab_destroy(&(r->obj_slab));
@@ -316,18 +318,8 @@ ajj_display( struct ajj* a, const struct ajj_value* val,
         return FALSE_STRING.str;
       }
     case AJJ_VALUE_NUMBER:
-      {
-        char buf[256];
-        int l;
-        *own = 1;
-        if( is_int(val->value.number) ) {
-          l = sprintf(buf,"%d",(int)val->value.number);
-        } else {
-          l = sprintf(buf,"%f",val->value.number);
-        }
-        *len = (size_t)l;
-        return strdup(buf);
-      }
+      *own = 1;
+      return dtoc(val->value.number,len);
     case AJJ_VALUE_OBJECT:
       {
         struct object* o = &(val->value.object->val.obj);

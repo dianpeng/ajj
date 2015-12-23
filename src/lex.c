@@ -454,6 +454,8 @@ int tk_lex_script( struct tokenizer* tk ) {
         RETURN(TK_SEMICOLON,1);
       case '?':
         RETURN(TK_QUESTION,1);
+      case '#':
+        RETURN(TK_LEN,1);
       case '\'':
         return tk_lex_str(tk);
       case '0':case '1':case '2':case '3':case '4':

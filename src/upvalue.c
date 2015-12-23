@@ -14,6 +14,7 @@ upvalue_table_add( struct ajj* a,
   if( (slot = map_find(&(tb->d),key)) == NULL ) {
     /* store the pointer */
     CHECK( !map_insert(&(tb->d),key,own,&ret) );
+    ret->prev = NULL;
   } else {
     ret->prev = *slot;
     (*slot) = ret;
@@ -30,6 +31,7 @@ upvalue_table_add_c( struct ajj* a,
   struct upvalue** slot;
   if( (slot = map_find_c(&(tb->d),key)) == NULL ) {
     CHECK( !map_insert_c(&(tb->d),key,&ret) );
+    ret->prev = NULL;
   } else {
     ret->prev = *slot;
     (*slot) = ret;
@@ -46,6 +48,7 @@ upvalue_table_overwrite( struct ajj* a ,
   if( (slot = map_find(&(tb->d),key)) == NULL ) {
     struct upvalue* ret = slab_malloc(&(a->upval_slab));
     CHECK( !map_insert(&(tb->d),key,own,&ret));
+    ret->prev = NULL;
     return ret;
   } else {
     assert(*slot);
@@ -61,6 +64,7 @@ upvalue_table_overwrite_c( struct ajj* a ,
   if( (slot = map_find_c(&(tb->d),key)) == NULL ) {
     struct upvalue* ret = slab_malloc(&(a->upval_slab));
     CHECK( !map_insert_c(&(tb->d),key,&ret));
+    ret->prev = NULL;
     return ret;
   } else {
     assert(*slot);
@@ -149,12 +153,12 @@ upvalue_table_clear( struct ajj* a, struct upvalue_table* m ) {
     struct upvalue* uv = *(struct upvalue**)p.val;
     while( uv ) {
       struct upvalue* p = uv->prev;
-      if( p->type == UPVALUE_FUNCTION &&
-          p->gut.gfunc.tp == OBJECT_CTOR ) {
+      if( uv->type == UPVALUE_FUNCTION &&
+          uv->gut.gfunc.tp == OBJECT_CTOR ) {
         /* this slot is owned by upvalue , no one will track
          * its usage except this upvalue table .*/
         func_table_destroy(a,
-            GET_OBJECTCTOR(&(p->gut.gfunc)));
+            GET_OBJECTCTOR(&(uv->gut.gfunc)));
       }
       slab_free(&(a->upval_slab),uv);
       uv = p;

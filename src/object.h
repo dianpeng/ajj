@@ -348,6 +348,9 @@ struct ajj_object*
 ajj_object_create_jinja( struct ajj* a , const char* name ,
     const char* src , int own );
 
+void ajj_object_destroy_jinja( struct ajj* a,
+    struct ajj_object* obj );
+
 static
 const struct function*
 ajj_object_jinja_main_func( const struct ajj_object* obj ) {

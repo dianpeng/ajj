@@ -52,16 +52,16 @@ typedef void (*ajj_class_dtor)( struct ajj* ,
  * slot function implemented, an registered object is able to be interated in
  * the for loop */
 struct ajj_slot {
-  int (*iter_start) ( struct ajj* , struct ajj_value* );
-  int (*iter_move ) ( struct ajj* , struct ajj_value* , int );
-  int (*iter_has  ) ( struct ajj* , struct ajj_value* , int );
-  struct ajj_value (*iter_get_key)( struct ajj* , struct ajj_value* , int );
-  struct ajj_value (*iter_get_val)( struct ajj* , struct ajj_value* , int );
-  size_t (*length) ( struct ajj* , struct ajj_value* );
-  int (*empty)( struct ajj* , struct ajj_value* );
-  int (*in) ( struct ajj* , struct ajj_value* , const struct ajj_value* );
+  int (*iter_start) ( struct ajj* , const struct ajj_value* );
+  int (*iter_move ) ( struct ajj* , const struct ajj_value* , int );
+  int (*iter_has  ) ( struct ajj* , const struct ajj_value* , int );
+  struct ajj_value (*iter_get_key)( struct ajj* , const struct ajj_value* , int );
+  struct ajj_value (*iter_get_val)( struct ajj* , const struct ajj_value* , int );
+  size_t (*length) ( struct ajj* , const struct ajj_value* );
+  int (*empty)( struct ajj* , const struct ajj_value* );
+  int (*in) ( struct ajj* , const struct ajj_value* , const struct ajj_value* );
   /* attributes modifier */
-  struct ajj_value (*attr_get) ( struct ajj* , struct ajj_value* ,
+  struct ajj_value (*attr_get) ( struct ajj* , const struct ajj_value* ,
           const struct ajj_value* );
   void (*attr_set)( struct ajj* , struct ajj_value* ,
       const struct ajj_value* k , const struct ajj_value* v);

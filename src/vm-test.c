@@ -6,6 +6,31 @@
 #include "bc.h"
 #include "opt.h"
 
+static void do_test( const char* src ) {
+    struct ajj* a = ajj_create();
+    struct ajj_object* jinja;
+    const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+    jinja = parse(a,"Hello World",src,0);
+    if(!jinja) {
+      fprintf(stderr,"%s",a->err);
+      assert(0);
+    }
+    prg = ajj_object_jinja_main(jinja);
+    dump_program(a,src,prg,output);
+    if(vm_run_jinja(a,jinja,output)) {
+      fprintf(stderr,"%s",a->err);
+      assert(0);
+    }
+
+    assert(!optimize(a,jinja));
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+
+    ajj_io_destroy(output);
+    ajj_destroy(a); /* all memory should gone */
+}
+
 static
 void test1() {
   {
@@ -301,13 +326,12 @@ void test_loop() {
     dump_program(a,src,prg,output);
     assert(!vm_run_jinja(a,jinja,output));
   }
-#endif
   {
     struct ajj* a = ajj_create();
     const char* src = "{% set i = 0 %}" \
-                      "{% for x in xlist(10) %}" \
+                      "{% for x in xlist(99999) %}" \
                       "{% set idx = i+1 %}" \
-                      "{% move i idx %}" \
+                      "{% move i=idx %}" \
                       "{{ idx }}\n"\
                       "{% endfor %}";
     struct ajj_object* jinja;
@@ -322,9 +346,301 @@ void test_loop() {
     dump_program(a,src,prg,output);
     assert(!vm_run_jinja(a,jinja,output));
   }
+  { /* nested loop */
+    struct ajj* a = ajj_create();
+    const char* src = "{% for a in xlist(10) %}" \
+                        "{% for b in xlist(10) %}" \
+                          "{{ (a,'+',b,'=',a+b) }}\n" \
+                        "{% endfor %}" \
+                      "{% endfor %}";
+    struct ajj_object* jinja;
+    const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+    jinja = parse(a,"_",src,0);
+    assert(jinja);
+    prg = ajj_object_jinja_main(jinja);
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+    assert(!optimize(a,jinja));
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+  }
+  { /* nested loop with control */
+    struct ajj* a = ajj_create();
+    const char* src = "{% for a in xlist(10) %}" \
+                      "{% if a % 3 %}{% continue %}{% endif %}" \
+                        "{% for b in xlist(10) %}" \
+                          "{% if b > 6 %}{% break %} {% endif %}" \
+                          "{% if b % 2 %}{% continue %}{% endif %}" \
+                          "{{ (a,'+',b,'=',a+b) }}\n" \
+                        "{% endfor %}" \
+                      "{% endfor %}";
+    struct ajj_object* jinja;
+    const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+    jinja = parse(a,"_",src,0);
+    assert(jinja);
+    prg = ajj_object_jinja_main(jinja);
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+    assert(!optimize(a,jinja));
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+  }
+  { /* nested loop with some move semantic and local variable */
+    struct ajj* a = ajj_create();
+    const char* src = "{% set outside = 0 %}" \
+                      "{% for a in xlist(10) %}" \
+                      "{% set invar = 100 %}" \
+                        "{% for b in xlist(10) %}" \
+                          "{% set i2 = outside+1 %}" \
+                          "{% move outside=i2 %}" \
+                          "{{ (a,'+',b,'=',a+b) }}\n" \
+                        "{% endfor %}" \
+                        "{{ ('L',l1,'\n') }}" \
+                      "{% endfor %}"\
+                      "{{ outside }}\n";
+    struct ajj_object* jinja;
+    const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+    jinja = parse(a,"_",src,0);
+    assert(jinja);
+    prg = ajj_object_jinja_main(jinja);
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+    assert(!optimize(a,jinja));
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+  }
+  /* other misc member functions testing */
+  {
+    struct ajj* a = ajj_create();
+    const char* src = "{% set arr = [1,2,3,4,{'A':[123,45],'B':'Hell','C':[]}] %}" \
+                      "{% for a in arr %}" \
+                      "{{ 'Length'+'='+ #arr}}\n" \
+                      "{{ a }}\n" \
+                      "{% endfor %}";
+    struct ajj_object* jinja;
+    const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+    jinja = parse(a,"_",src,0);
+    assert(jinja);
+    prg = ajj_object_jinja_main(jinja);
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+    assert(!optimize(a,jinja));
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+  }
+  {
+    struct ajj* a = ajj_create();
+    const char* src = "static const char* STRING_TABLE[] = {\n" \
+                      "{% for i in xlist(256) %}" \
+                      "{ {{ i }},{{ 0 }} },\n" \
+                      "{% endfor %}"\
+                      "};";
+    struct ajj_object* jinja;
+    const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+    jinja = parse(a,"_",src,0);
+    assert(jinja);
+    prg = ajj_object_jinja_main(jinja);
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+    assert(!optimize(a,jinja));
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+  }
+#endif
+  {
+    struct ajj* a = ajj_create();
+    const char* src = "{% set str = 'AbcdEfgHIJK' %}" \
+                      "{% for a in xlist(#str) %}" \
+                      "{{ str[a] }}\n" \
+                      "{% endfor %}";
+    struct ajj_object* jinja;
+    const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+    jinja = parse(a,"_",src,0);
+    assert(jinja);
+    prg = ajj_object_jinja_main(jinja);
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+    assert(!optimize(a,jinja));
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+  }
+}
 
+void test_branch() {
+#if 0
+  {
+    struct ajj* a = ajj_create();
+    const char* src = "{% if 101+123 >= 245 %}" \
+                      "{{ True }}\n" \
+                      "{% else %}" \
+                      "{{ False }}\n" \
+                      "{% endif %}";
+    struct ajj_object* jinja;
+    const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+    jinja = parse(a,"_",src,0);
+    assert(jinja);
+    prg = ajj_object_jinja_main(jinja);
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+    assert(!optimize(a,jinja));
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+  }
+#endif
+  {
+    struct ajj* a = ajj_create();
+    const char* src = "{% set l = xlist(100) %}" \
+                      "{% for a in l %}" \
+                      "{{ 'List='+#l }}\n" \
+                      "{% if a % 10 == 0 %}" \
+                      "{{ '1'+':'+a }}\n" \
+                      "{% elif a % 10 == 1 %}" \
+                      "{{ '2'+':'+a }}\n" \
+                      "{% elif a % 10 == 3 %}" \
+                      "{{ '3'+':'+a }}\n" \
+                      "{% elif a % 10 == 4 %}" \
+                      "{{ '4'+':'+a }}\n" \
+                      "{% elif a % 10 == 5 %}" \
+                      "{{ '5'+':'+a }}\n" \
+                      "{% elif a % 10 == 6 %}" \
+                      "{{ '6'+':'+a }}\n" \
+                      "{% else %}" \
+                      "{{ 'Rest'+':'+a }}\n" \
+                      "{% endif %}" \
+                      "{% endfor %}";
+    struct ajj_object* jinja;
+    const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+    jinja = parse(a,"_",src,0);
+    assert(jinja);
+    prg = ajj_object_jinja_main(jinja);
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+    assert(!optimize(a,jinja));
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+  }
+}
+
+/* MOVE operations */
+void test_move() {
+  {
+    struct ajj* a = ajj_create();
+    const char* src = "{% set L = 0 %}" \
+                      "{{ 'L='+L }}\n" \
+                      "{% with %}"
+                      "{% with %}" \
+                      "{% set MyVar = [1,2,3,4] %}" \
+                      "{% move L = MyVar %}" \
+                      "{% endwith %}" \
+                      "{% endwith %}"
+                      "{{ 'L=' }}{{ L }}\n";
+    struct ajj_object* jinja;
+    const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+    jinja = parse(a,"_",src,0);
+    assert(jinja);
+    prg = ajj_object_jinja_main(jinja);
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+    assert(!optimize(a,jinja));
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+  }
+  { /* move within same scope/lexical scope */
+    struct ajj* a = ajj_create();
+    const char* src = "{% set L = 0 %}" \
+                      "{{ 'L='+L }}\n" \
+                      "{% set MyVar = [1,2,3,4] %}" \
+                      "{% move L = MyVar %}" \
+                      "{{ 'L=' }}{{ L }}\n";
+    struct ajj_object* jinja;
+    const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+    jinja = parse(a,"_",src,0);
+    assert(jinja);
+    prg = ajj_object_jinja_main(jinja);
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+    assert(!optimize(a,jinja));
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+  }
+}
+
+/* WITH */
+void test_with() {
+  { /* move within same scope/lexical scope */
+    struct ajj* a = ajj_create();
+    const char* src = "{% with L = None %}" \
+                      "{% with L = 200 %}" \
+                        "{{ 'InnerL'+L }}\n" \
+                      "{% endwith %}" \
+                      "{{ 'OuterL'+L }}\n" \
+                      "{% endwith %}";
+    struct ajj_object* jinja;
+    const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+    jinja = parse(a,"_",src,0);
+    assert(jinja);
+    prg = ajj_object_jinja_main(jinja);
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+    assert(!optimize(a,jinja));
+    dump_program(a,src,prg,output);
+    assert(!vm_run_jinja(a,jinja,output));
+  }
+}
+
+/* ============================
+ * Function/Macro
+ * ==========================*/
+
+void test_macro() {
+#if 0
+  /* simple macro */
+  do_test("{% macro User(Name,Value) %}" \
+            "Name={{Name}};Value={{Value}}\n"\
+          "{% endmacro %}"\
+          "{% for a in xlist(100) %}" \
+          "{% do User('YourName',100) %}"
+          "{% endfor %}"
+          );
+  do_test("{% macro User(Name,Value,Def=['123',456],UUVV='345') %}" \
+          "Name={{Name}}\nValue={{Value}}\nDef={{Def}}\nUUVV={{UUVV}}\n" \
+          "{% endmacro %}" \
+          "{% for a in xlist(2) %}" \
+          "{% do User('Hulu'+a,a) %}\n"\
+          "{% endfor %}");
+#endif
+  do_test(
+      "{% macro Foo(my_foo,bar='123') %}" \
+      "ARGNUM:{{__argnum__}}\n" \
+      "FUNC:{{__func__}}\n" \
+      "{% for a in xlist(2) %}" \
+      "my_foo:{{a}}={{my_foo}}\n"\
+      "{% do Bar(a,bar) %}"\
+      "{% endfor %}" \
+      "{% endmacro %}" \
+      "{% macro Bar(arg,def={'abc':[1,2,3,[123123123,23]],'A':'B'}) %}"\
+      "ARGNUM:{{__argnum__}}\n" \
+      "FUNC:{{__func__}}\n" \
+      "{% for p in xlist(2) %}" \
+      "arg:{{p}}={{arg}}\n" \
+      "def={{def}}\n"\
+      "{% endfor %}" \
+      "{% endmacro %}"\
+      "{% do Foo('Hi') %}"
+      );
 }
 
 int main() {
-  test_loop();
+  test_macro();
 }

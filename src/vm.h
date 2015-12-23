@@ -59,10 +59,10 @@ struct func_frame {
   struct string name; /* function name , a pointer that just points to the
                        * name inside of entry */
 
-  int par_cnt ;  /* parameter count when calling this function */
-
   struct ajj_object* obj; /* if it is an object call, then the object pointer
                            * to the corresponding caller object */
+  int par_cnt : 31;  /* parameter count when calling this function */
+  int method  : 1 ;  /* indicate whether this call is a method call or not */
 };
 
 

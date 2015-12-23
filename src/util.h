@@ -305,7 +305,7 @@ struct map {
 
 struct map_pair {
   const struct string* key;
-  const void* val;
+  void* val;
 };
 
 void map_create( struct map* d , size_t obj_sz ,
@@ -378,5 +378,9 @@ static int is_int( double val ) {
   else
     return 0;
 }
+
+char* dtoc( double val , size_t* len );
+
+const char* const_cstr( char c );
 
 #endif /* _UTIL_H_ */

@@ -21,9 +21,8 @@ void func_table_destroy( struct ajj* a , struct func_table* tb ) {
     struct function* f = tb->func_tb + i;
     string_destroy(&(f->name));
     if(IS_JINJA(f)) {
-      /* TODO:: delete this program through program_destroy
-       * program_destroy(&(f->fn.jj_fn));
-       */
+      /* destroy scripted function */
+      program_destroy(&(f->f.jj_fn));
     }
   }
   if( tb->func_tb != tb->func_buf )
@@ -63,6 +62,14 @@ ajj_object_create_jinja( struct ajj* a , const char* name ,
     const char* src , int own ) {
   struct ajj_object* obj = ajj_object_create(a,&(a->gc_root));
   return ajj_object_jinja(a,obj,name,src,own);
+}
+
+void
+ajj_object_destroy_jinja( struct ajj* a , struct ajj_object* obj ) {
+  assert( obj->tp == AJJ_VALUE_JINJA );
+  func_table_destroy(a,obj->val.obj.fn_tb);
+  free((void*)obj->val.obj.src);
+  slab_free(&(a->obj_slab),obj);
 }
 
 struct ajj_object*
