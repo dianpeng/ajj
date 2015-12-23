@@ -70,6 +70,7 @@ extern struct string ITER;
   X(VM_MOD,0,"mod") \
   X(VM_POW,0,"pow") \
   X(VM_IN,0,"in") \
+  X(VM_NIN,0,"notin") \
   X(VM_LEN,0,"len") \
   X(VM_EQ,0,"eq") \
   X(VM_NE,0,"ne") \

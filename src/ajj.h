@@ -70,6 +70,19 @@ struct ajj_slot {
       const struct ajj_value* v );
   /* for print */
   const char* (*display)(struct ajj*, const struct ajj_value*,size_t*);
+  /* comparison */
+  int (*eq)(struct ajj* , const struct ajj_value* ,
+      const struct ajj_value* );
+  int (*ne)(struct ajj* , const struct ajj_value* ,
+      const struct ajj_value* );
+  int (*lt)(struct ajj* , const struct ajj_value* ,
+      const struct ajj_value* );
+  int (*le)(struct ajj* , const struct ajj_value* ,
+      const struct ajj_value* );
+  int (*gt)(struct ajj* , const struct ajj_value* ,
+      const struct ajj_value* );
+  int (*ge)(struct ajj* , const struct ajj_value* ,
+      const struct ajj_value* );
 };
 
 struct ajj_class_method {

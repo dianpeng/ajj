@@ -298,9 +298,26 @@ token_id tk_lex_keyword_or_id( struct tokenizer* tk ) {
           tk_not_id_rchar(tk->src[i+4]))
         RETURN(TK_NONE,4);
       else if( (len=tk_keyword_check(tk,"ot",i+1))==2 &&
-          tk_not_id_rchar(tk->src[i+3]))
+          tk_not_id_rchar(tk->src[i+3])) {
+        size_t k = i+3;
+        int c;
+        /* probing forward to see whether we have another
+         * in since we treat not ... in as a single token */
+        for( ; (c=tk->src[k]) ; ++k ) {
+          if(c==' '||c=='\t'||c=='\r')
+            continue;
+          else
+            break;
+        }
+        if(c) {
+          /* try to check whether this value is IN or not */
+          if((len = tk_keyword_check(tk,"in",k))==2 &&
+              tk_not_id_rchar(tk->src[k+2])) {
+            RETURN(TK_NIN,(k-tk->pos));
+          }
+        }
         RETURN(TK_NOT,3);
-      else
+      } else
         return tk_lex_keyword(tk,len+1);
     case 'N':
       if( (len = tk_keyword_check(tk,"one",i+1)) == 3 &&

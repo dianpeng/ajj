@@ -35,7 +35,6 @@ enum {
   X(TK_ENDIMPORT,"endimport") \
   X(TK_INCLUDE,"include") \
   X(TK_ENDINCLUDE,"endinclude") \
-  X(TK_IN,"in") \
   X(TK_AS,"as") \
   X(TK_CONTINUE,"continue") \
   X(TK_BREAK,"break") \
@@ -73,6 +72,8 @@ enum {
   X(TK_LE,"<=") \
   X(TK_GT,">") \
   X(TK_GE,">=") \
+  X(TK_IN,"in") \
+  X(TK_NIN,"notin") \
   X(TK_AND,"and") \
   X(TK_OR,"or") \
   X(TK_NOT,"not") \

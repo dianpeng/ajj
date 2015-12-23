@@ -802,6 +802,7 @@ int parse_term( struct parser* p, struct emitter* em ) {
       case TK_ADD: op = VM_ADD; break;
       case TK_SUB: op = VM_SUB; break;
       case TK_IN: op = VM_IN; break;
+      case TK_NIN: op = VM_NIN; break;
       default: goto done;
     }
     tk_move(tk);

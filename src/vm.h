@@ -146,7 +146,8 @@ static
 int program_const_num( struct program* prg , double num ) {
   size_t i;
   if( prg->num_len== prg->num_cap ) {
-    prg->num_tbl = mem_grow(prg->num_tbl,sizeof(double),
+    prg->num_tbl = mem_grow(
+        prg->num_tbl,sizeof(double),
         0,
         &(prg->num_cap));
   }

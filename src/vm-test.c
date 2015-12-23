@@ -642,5 +642,6 @@ void test_macro() {
 }
 
 int main() {
-  test_macro();
+  do_test("{% set a = [1,2,3,4] %}" \
+          "{{ 3 in a }}");
 }

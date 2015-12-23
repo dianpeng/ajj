@@ -547,10 +547,10 @@ static
 struct ajj_value
 vm_in( struct ajj* a , struct ajj_value* obj ,
     const struct ajj_value* val , int* fail ) {
-  if( val->type != AJJ_VALUE_OBJECT ) {
+  if( obj->type != AJJ_VALUE_OBJECT ) {
     *fail = 1;
     report_error(a,"Type:%s doesn't support in operator!",
-        ajj_value_get_type_name(val));
+        ajj_value_get_type_name(obj));
     return AJJ_NONE;
   } else {
     struct object* o = &(val->value.object->val.obj);
@@ -1326,10 +1326,21 @@ int vm_main( struct ajj* a ) {
 
       vm_beg(IN) {
         struct ajj_value o = vm_in(a,
-            top(a,2),top(a,1),RCHECK);
+            top(a,1),top(a,2),RCHECK);
         pop(a,2);
         push(a,o);
       } vm_end(IN)
+
+      vm_beg(NIN) {
+        struct ajj_value o = vm_in(a,
+            top(a,1),top(a,2),RCHECK);
+        pop(a,2);
+        assert(o.type == AJJ_VALUE_BOOLEAN);
+        if(o.value.boolean)
+          push(a,AJJ_FALSE);
+        else
+          push(a,AJJ_TRUE);
+      } vm_end(NIN)
 
       vm_beg(LEN) {
         struct ajj_value o = vm_len(a,top(a,1));
