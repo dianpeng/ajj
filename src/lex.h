@@ -73,6 +73,8 @@ enum {
   X(TK_LE,"<=") \
   X(TK_GT,">") \
   X(TK_GE,">=") \
+  X(TK_IS,"is") \
+  X(TK_ISN,"is-not") \
   X(TK_IN,"in") \
   X(TK_NIN,"not-in") \
   X(TK_AND,"and") \

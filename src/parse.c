@@ -879,6 +879,9 @@ done:
 }
 #undef PUSH_JMP
 
+static
+int parse_is( struct parser* p, struct emitter* em );
+
 /* Expression.
  * We support value1 if cond else value2 format.
  * The code generation is not simple at all, however. Since the condition is not
@@ -898,6 +901,7 @@ int parse_expr( struct parser* p, struct emitter* em ) {
   int val1_l = emitter_label(em);
   struct tokenizer* tk = &(p->tk);
   CALLE(parse_logic(p,em));
+
   /* Check if we have a pending if or not */
   if( tk->tk == TK_IF ) {
     int cond_l, end_l;
@@ -921,6 +925,16 @@ int parse_expr( struct parser* p, struct emitter* em ) {
     /* Patch the jump */
     EMIT1_AT(em,fjmp,VM_JMP,cond_l);
     EMIT1_AT(em,val1_jmp,VM_JMP,end_l);
+  } else if( tk->tk == TK_IS || tk->tk == TK_ISN ) {
+    int ret;
+    /* parsing test or test not. The is/is not operator
+     * is treated as a function call actually. So the actually
+     * code is like generating a function call */
+    ret = parse_is(p,em);
+    if(!ret) {
+      EMIT1_AT(em,fjmp,VM_NOP1,0);
+    }
+    return ret;
   } else {
     /* nothing serious, just issue a NOP */
     EMIT1_AT(em,fjmp,VM_NOP1,0);

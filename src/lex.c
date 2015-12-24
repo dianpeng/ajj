@@ -123,6 +123,16 @@ token_id tk_lex_keyword( struct tokenizer* tk , int offset ) {
     RETURN(TK_VARIABLE,i-tk->pos);
 }
 
+static
+size_t skip_whitespace( const char* src, size_t pos ) {
+  char c;
+  for( ; (c =src[pos++]) ; ) {
+    if(c==' '||c=='\t'||c=='\b')
+      continue;
+  }
+  return pos;
+}
+
 /* Jinja 2 has so many keywords :
  * Sort according to the first character:
  * A: and
@@ -268,9 +278,17 @@ token_id tk_lex_keyword_or_id( struct tokenizer* tk ) {
           tk_not_id_rchar(tk->src[i+2]) )
         RETURN(TK_IF,2);
       else if( (len = tk_keyword_check(tk,"s",i+1)) == 1 &&
-          tk_not_id_rchar(tk->src[i+2]))
-        RETURN(TK_EQ,2); /* "is" is just alias of == */
-      else if( (len = tk_keyword_check(tk,"nclude",i+1)) == 6 &&
+          tk_not_id_rchar(tk->src[i+2])) {
+        int k = skip_whitespace(tk->src,i+2);
+        int c = tk->src[k];
+        if(c) {
+          if((len = tk_keyword_check(tk,"not",k)) == 3 &&
+              tk_not_id_rchar(tk->src[k+3])) {
+            RETURN(TK_ISN,(k-tk->pos+3));
+          }
+          RETURN(TK_IS,2);
+        }
+      } else if( (len = tk_keyword_check(tk,"nclude",i+1)) == 6 &&
           tk_not_id_rchar(tk->src[i+7]))
         RETURN(TK_INCLUDE,7);
       else if( (len = tk_keyword_check(tk,"mport",i+1)) == 5 &&
@@ -299,16 +317,8 @@ token_id tk_lex_keyword_or_id( struct tokenizer* tk ) {
         RETURN(TK_NONE,4);
       else if( (len=tk_keyword_check(tk,"ot",i+1))==2 &&
           tk_not_id_rchar(tk->src[i+3])) {
-        size_t k = i+3;
-        int c;
-        /* probing forward to see whether we have another
-         * in since we treat not ... in as a single token */
-        for( ; (c=tk->src[k]) ; ++k ) {
-          if(c==' '||c=='\t'||c=='\r')
-            continue;
-          else
-            break;
-        }
+        size_t k = skip_whitespace(tk->src,i+3);
+        int c = tk->src[k];
         if(c) {
           /* try to check whether this value is IN or not */
           if((len = tk_keyword_check(tk,"in",k))==2 &&

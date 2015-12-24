@@ -72,6 +72,8 @@ extern struct string LOOP;
   X(VM_POW,0,"pow") \
   X(VM_IN,0,"in") \
   X(VM_NIN,0,"notin") \
+  X(VM_IS,2,"is") \
+  X(VM_ISN,2,"isnot") \
   X(VM_LEN,0,"len") \
   X(VM_CAT,0,"cat") \
   X(VM_EQ,0,"eq") \
