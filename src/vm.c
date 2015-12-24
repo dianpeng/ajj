@@ -28,6 +28,21 @@ void set_upvalue( struct ajj* a, const struct string* name,
 static
 void del_upvalue( struct ajj* a, const struct string* name );
 
+/* This FUNC_CALL actually means we want a TAIL call of a
+ * new script functions. The return from the LOWEST script function
+ * will end up its caller been poped as well. We don't return the
+ * continuation from VM to the external C script again if it tries
+ * to call a script function.
+ * The called script function's return value will be carried over
+ * to the caller of the C function that issue the script call.
+ * It is used for implementing Super and Caller function, which the
+ * C function will just look up the script function entry and then
+ * call them, after that the return value from the script function
+ * will be used as the return value for the C function builtin */
+
+#define VM_FUNC_CALL 1 /* indicate we want to call a script
+                        * function recursively */
+
 #define cur_frame(a) (&(a->rt->call_stk[a->rt->cur_call_stk-1]))
 #define cur_function(a) (cur_frame(a)->entry)
 
