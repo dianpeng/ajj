@@ -79,6 +79,9 @@ struct runtime {
   struct ajj_value val_stk[AJJ_MAX_VALUE_STACK_SIZE]; /* current value stack size */
   struct gc_scope* cur_gc; /* current gc scope */
   struct ajj_io* output;
+  struct upvalue_table* global; /* Per template based global value. This make
+                                 * sure each template is executed in its own
+                                 * global variable states */
 };
 
 static inline
@@ -177,6 +180,32 @@ int vm_is_false( const struct ajj_value* val ) {
 
 int vm_to_string( const struct ajj_value* val ,
         struct string* str , int* own );
+
+/* This FUNC_CALL actually means we want a TAIL call of a
+ * new script functions. The return from the LOWEST script function
+ * will end up its caller been poped as well. We don't return the
+ * continuation from VM to the external C script again if it tries
+ * to call a script function.
+ * The called script function's return value will be carried over
+ * to the caller of the C function that issue the script call.
+ * It is used for implementing Super and Caller function, which the
+ * C function will just look up the script function entry and then
+ * call them, after that the return value from the script function
+ * will be used as the return value for the C function builtin */
+
+#define VM_FUNC_CALL 1 /* indicate we want to call a script
+                        * function recursively */
+
+/* An internal helper function to allow user redirect a C side function
+ * into a script function call. Pay attention, this is not the tradition
+ * way for calling a script function from C function, since after the
+ * script function finishes its call , the VM will NOT return back to the
+ * C function calls it. Please be aware, this is only for internal use */
+int vm_call_script_function( struct ajj* a,
+    const char* name,
+    struct ajj_value* par,
+    size_t par_cnt,
+    int* fail );
 
 /* =============================================
  * Interfaces

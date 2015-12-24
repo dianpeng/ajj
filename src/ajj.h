@@ -57,9 +57,8 @@ struct ajj_slot {
   int (*iter_has  ) ( struct ajj* , const struct ajj_value* , int );
   struct ajj_value (*iter_get_key)( struct ajj* , const struct ajj_value* , int );
   struct ajj_value (*iter_get_val)( struct ajj* , const struct ajj_value* , int );
-  size_t (*length) ( struct ajj* , const struct ajj_value* );
+  size_t (*len) ( struct ajj* , const struct ajj_value* );
   int (*empty)( struct ajj* , const struct ajj_value* );
-  int (*in) ( struct ajj* , const struct ajj_value* , const struct ajj_value* );
   /* attributes modifier */
   struct ajj_value (*attr_get) ( struct ajj* , const struct ajj_value* ,
           const struct ajj_value* );
@@ -68,21 +67,25 @@ struct ajj_slot {
   /* attributes push */
   void (*attr_push)( struct ajj* , struct ajj_value* ,
       const struct ajj_value* v );
-  /* for print */
+  /* print */
   const char* (*display)(struct ajj*, const struct ajj_value*,size_t*);
-  /* comparison */
+  /* comparison.
+   * All the comparision operation COULD FAIL, the return value is a
+   * status indicator not the result of the comparision */
+  int (*in) ( struct ajj* , const struct ajj_value* ,
+      const struct ajj_value* , int* );
   int (*eq)(struct ajj* , const struct ajj_value* ,
-      const struct ajj_value* );
+      const struct ajj_value* , int* );
   int (*ne)(struct ajj* , const struct ajj_value* ,
-      const struct ajj_value* );
+      const struct ajj_value* , int* );
   int (*lt)(struct ajj* , const struct ajj_value* ,
-      const struct ajj_value* );
+      const struct ajj_value* , int* );
   int (*le)(struct ajj* , const struct ajj_value* ,
-      const struct ajj_value* );
+      const struct ajj_value* , int* );
   int (*gt)(struct ajj* , const struct ajj_value* ,
-      const struct ajj_value* );
+      const struct ajj_value* , int* );
   int (*ge)(struct ajj* , const struct ajj_value* ,
-      const struct ajj_value* );
+      const struct ajj_value* , int* );
 };
 
 struct ajj_class_method {
@@ -114,7 +117,6 @@ struct ajj_value {
 };
 
 enum {
-  AJJ_VALUE_CLASS = -1,
   AJJ_VALUE_NOT_USE = 0,
   AJJ_VALUE_NUMBER,
   AJJ_VALUE_BOOLEAN,
@@ -132,38 +134,45 @@ enum {
 
 /* AJJ VALUE ============================== */
 
-static
 const char*
-ajj_value_get_type_name( const struct ajj_value* v ) {
-  switch(v->type) {
-    case AJJ_VALUE_NOT_USE:
-      return NULL;
-    case AJJ_VALUE_NUMBER:
-      return "number";
-    case AJJ_VALUE_BOOLEAN:
-      return "boolean";
-    case AJJ_VALUE_NONE:
-      return "none";
-    case AJJ_VALUE_STRING:
-      return "string";
-    case AJJ_VALUE_OBJECT:
-      return "object";
-    default:
-      return NULL;
-  }
-}
+ajj_value_get_type_name( const struct ajj_value* v );
 
 extern struct ajj_value AJJ_TRUE;
 extern struct ajj_value AJJ_FALSE;
 extern struct ajj_value AJJ_NONE;
 
-static inline
+/* Function helps us to compose of a new ajj_value */
+
+static
 struct ajj_value ajj_value_number( double val ) {
   struct ajj_value value;
   value.type = AJJ_VALUE_NUMBER;
   value.value.number = val;
   return value;
 }
+
+static
+struct ajj_value
+ajj_value_boolean( int boolean ) {
+  struct ajj_value ret;
+  assert(boolean ==0 || boolean ==1);
+  ret.type = AJJ_VALUE_BOOLEAN;
+  ret.value.boolean = boolean;
+  return ret;
+}
+
+struct ajj_value ajj_value_new_string( struct ajj* a,
+    const char* str, size_t len );
+
+struct ajj_value ajj_value_new_const_string( struct ajj* a,
+    const char* str ,size_t len );
+
+struct ajj_value ajj_value_new_object( struct ajj* a,
+    const char* name ,
+    size_t arg_num ,
+    struct ajj_value* args );
+
+/* Function convert ajj_value to specific c type */
 static inline
 int ajj_value_to_boolean( const struct ajj_value* val ) {
   assert(val->type == AJJ_VALUE_BOOLEAN);
@@ -176,16 +185,43 @@ double ajj_value_to_number( const struct ajj_value* val ) {
 }
 const char* ajj_value_to_str( const struct ajj_value* val );
 
-/* This function will create a specific value based on the type
- * you tells it and the corresponding parameters you put into it.
- * The return value , if it is a heap based object , will live on
- * the scope that CURRENTLY the vm on. But if you call it while no
- * executiong is performing, the value you get is on the global gc
- * scope which will only be released when you delete the corresponding
- * ajj object. */
+/* AJJ value operators */
+int ajj_value_in ( struct ajj* a,
+    const struct ajj_value* obj,
+    const struct ajj_value* target,
+    int* result);
 
-struct ajj_value
-ajj_value_new( struct ajj* a , int type , ... );
+int ajj_value_eq( struct ajj* a,
+    const struct ajj_value* L , const struct ajj_value* R,
+    int* result );
+
+int ajj_value_ne( struct ajj* a,
+    const struct ajj_value* L , const struct ajj_value* R,
+    int* result);
+
+int ajj_value_lt( struct ajj* a,
+    const struct ajj_value* L , const struct ajj_value* R,
+    int* result);
+
+int ajj_value_le( struct ajj* a,
+    const struct ajj_value* L , const struct ajj_value* R,
+    int* result);
+
+int ajj_value_ge( struct ajj* a,
+    const struct ajj_value* L , const struct ajj_value* R,
+    int* result);
+
+int ajj_value_gt( struct ajj* a,
+    const struct ajj_value* L , const struct ajj_value* R,
+    int* result);
+
+int ajj_value_len( struct ajj* a,
+    const struct ajj_value* obj ,
+    int* result );
+
+int ajj_value_empty( struct ajj* a,
+    const struct ajj_value* obj ,
+    int* result );
 
 /* AJJ ============================= */
 struct ajj* ajj_create();
@@ -193,14 +229,45 @@ void ajj_destroy( struct ajj* );
 void ajj_error ( struct ajj* , const char* format , ... );
 
 /* Register object ======================*/
+
+/* Used to add a value to global environment */
 void ajj_env_add_value( struct ajj* a , const char* , int type , ... );
-int ajj_env_del_value( struct ajj* a , const char* );
+
+/* This function is used to add a class to the global environment.*/
+void ajj_env_add_class( struct ajj* a , const struct ajj_class* );
+
+/* This function is used to add a function to the global environment*/
+void ajj_env_add_function( struct ajj* a, const char* ,
+    ajj_function entry, void* );
+
+/* This function is used to delete something from the global environment */
+int ajj_env_del( struct ajj* a , const char* );
+
+/* The following upvalue function will be only useful when the VM is
+ * executing the code. And these functions can only be used during the
+ * registered callback function gets called */
+
+/* This function is used to add a value to the CURRENT scope */
+void ajj_upvalue_add_value( struct ajj* a,
+    const char* , int type , ... );
+
+void ajj_upvalue_add_class( struct ajj* a,
+    const struct ajj_class* );
+
+void ajj_upvalue_add_function( struct ajj* a, const char*,
+    ajj_function entry, void* );
+
+void ajj_upvalue_del( struct ajj* a, const char* );
+
+/* Clear the *all* the environment variables */
+void ajj_env_clear( struct ajj* a );
 
 /* IO ============================= */
-/* We used to decide just use FILE* as our IO abstration layer since we could use it handle
- * in memory output. However, since FILE*'s memory buffer version doesn't support dynamic
- * buffer growth so we have to roll our own wheels. This one is really just a very thing
- * warpper on top of the memory and FILE* */
+/* We used to decide just use FILE* as our IO abstration layer since we
+ * could use it handle in memory output. However, since FILE*'s memory
+ * buffer version doesn't support dynamic buffer growth so we have to
+ * roll our own wheels. This one is really just a very thin warpper on
+ * top of the memory and FILE* */
 
 struct ajj_io* ajj_io_create_file( struct ajj* a , FILE* );
 struct ajj_io* ajj_io_create_mem ( struct ajj* a , size_t size );

@@ -10,6 +10,20 @@ struct object;
 
 extern struct string MAIN; /* For __main__ */
 
+/* NOTES:
+ * The UGLY parts of my object model is that the string is handled
+ * separately instead of being treated as an object. At the time I made
+ * the decision, I still *GUESS* that make string as a separate part
+ * will make initializing constant string cost free since we don't
+ * have any heap allocation at all (either from slab or no allocation).
+ * But it makes tons of less intution for the code and many extra
+ * complexity. String is not an object, but it is stored inside of an
+ * structure called ajj_object which is so stupid ! I am sorry , guys :(.
+ * The ajj_object is really something describe its garbage collection
+ * behavior , like a GC header add some extra bits for mark&swap . We
+ * have to deal with it, and also string is not able to have member
+ * function ... */
+
 /* Internal representation of iterators */
 #define AJJ_VALUE_ITERATOR     (AJJ_VALUE_SIZE+2)
 #define AJJ_IS_PRIMITIVE(V) \
@@ -24,7 +38,9 @@ extern struct string MAIN; /* For __main__ */
 enum {
   AJJ_VALUE_CONST_STRING = AJJ_VALUE_SIZE + 3,
   AJJ_VALUE_JINJA = AJJ_VALUE_SIZE + 4,
-  AJJ_VALUE_EXTENSION = AJJ_VALUE_SIZE + 5
+
+  /* This type value is only used for builin */
+  AJJ_VALUE_BUILTIN_TYPE = AJJ_VALUE_SIZE + 5
 };
 
 struct c_closure {
@@ -130,6 +146,7 @@ struct ajj_object {
 
 #define IS_OBJECT_OWNED(obj) (((obj)->scp) == NULL)
 #define IS_VALUE_OWNED(val) ((AJJ_IS_PRIMITIVE(val))||((val)->value.object->scp!=NULL))
+#define GET_OBJECT_TYPE_NAME(O) (&((O)->val.obj.fn_tb->name))
 
 /* This function will initialize an existed function table */
 static
@@ -454,15 +471,6 @@ int ajj_value_to_iter( const struct ajj_value* val ) {
   return val->value.boolean;
 }
 
-static
-struct ajj_value
-ajj_value_boolean( int boolean ) {
-  struct ajj_value ret;
-  assert(boolean ==0 || boolean ==1);
-  ret.type = AJJ_VALUE_BOOLEAN;
-  ret.value.boolean = boolean;
-  return ret;
-}
 
 static
 struct ajj_value

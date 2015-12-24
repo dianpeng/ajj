@@ -1839,8 +1839,8 @@ int parse_set( struct parser* p, struct emitter* em ) {
     CONSUME(TK_RSTMT);
     return 0;
   } else {
-    report_error(p,"Set scope either uses \"=\" to indicate " \
-        "a one line assignment," \
+    report_error(p,"Set scope either uses \"=\" to indicate "
+        "a one line assignment,"
         "or uses a scope based set!");
     return -1;
   }
@@ -2330,7 +2330,8 @@ fail:
  * Public Interface
  * ======================================*/
 struct ajj_object*
-parse( struct ajj* a, const char* key, const char* src, int own ) {
+parse( struct ajj* a, const char* key,
+    const char* src, int own ) {
   struct ajj_object* tmpl;
   struct parser p;
   struct emitter em;
@@ -2345,7 +2346,8 @@ parse( struct ajj* a, const char* key, const char* src, int own ) {
   parser_init(&p,key,src,a,tmpl);
   CHECK(lex_scope_jump(&p)!=NULL);
   /* STARTS for parsing main */
-  CHECK((prg = func_table_add_jj_main(tmpl->val.obj.fn_tb,&MAIN,0)));
+  CHECK((prg = func_table_add_jj_main(
+          tmpl->val.obj.fn_tb,&MAIN,0)));
   emitter_init(&em,prg);
   if(parse_scope(&p,&em,1,1)) {
     lex_scope_exit(&p);

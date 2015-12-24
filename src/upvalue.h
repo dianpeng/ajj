@@ -73,7 +73,7 @@ upvalue_table_clear( struct ajj* , struct upvalue_table * );
 void
 upvalue_table_destroy( struct ajj* a,
     struct upvalue_table* m ,
-    struct upvalue_table* until );
+    const struct upvalue_table* until );
 
 /* add a upvalue into the upvalue table chain */
 struct upvalue*
@@ -102,19 +102,23 @@ upvalue_table_overwrite_c( struct ajj* a,
 int
 upvalue_table_del( struct ajj* a,
     struct upvalue_table* ,
-    const struct string* );
+    const struct string*  ,
+    const struct upvalue_table* util );
 
 int
 upvalue_table_del_c( struct ajj* a,
     struct upvalue_table* ,
-    const char* key );
+    const char* key ,
+    const struct upvalue_table* util );
 
 struct upvalue*
 upvalue_table_find( struct upvalue_table* ,
-    const struct string* );
+    const struct string* ,
+    const struct upvalue_table* util );
 
 struct upvalue*
 upvalue_table_find_c( struct upvalue_table* ,
-    const char* );
+    const char* ,
+    const struct upvalue_table* util );
 
 #endif /* _UPVALUE_H_ */

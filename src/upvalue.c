@@ -74,7 +74,8 @@ upvalue_table_overwrite_c( struct ajj* a ,
 
 int upvalue_table_del( struct ajj* a ,
     struct upvalue_table* tb,
-    const struct string* key ) {
+    const struct string* key,
+    const struct upvalue_table* util  ) {
   struct upvalue_table* cur_tb = tb;
   do {
     struct upvalue** slot;
@@ -90,13 +91,14 @@ int upvalue_table_del( struct ajj* a ,
       return 0;
     }
     cur_tb = cur_tb->prev;
-  } while(cur_tb);
+  } while(cur_tb != util);
   return -1;
 }
 
 int upvalue_table_del_c( struct ajj* a,
     struct upvalue_table* tb,
-    const char* key ) {
+    const char* key ,
+    const struct upvalue_table* util ) {
   struct upvalue_table* cur_tb = tb;
   do {
     struct upvalue** slot;
@@ -112,13 +114,14 @@ int upvalue_table_del_c( struct ajj* a,
       return 0;
     }
     cur_tb = cur_tb->prev;
-  } while(cur_tb);
+  } while(cur_tb != util);
   return -1;
 }
 
 struct upvalue*
 upvalue_table_find( struct upvalue_table* tb,
-    const struct string* key ) {
+    const struct string* key ,
+    const struct upvalue_table* util ) {
   struct upvalue_table* cur_tb = tb;
   do {
     struct upvalue** slot;
@@ -126,13 +129,14 @@ upvalue_table_find( struct upvalue_table* tb,
       return *slot;
     }
     cur_tb = cur_tb->prev;
-  } while(cur_tb);
+  } while(cur_tb != util);
   return NULL;
 }
 
 struct upvalue*
 upvalue_table_find_c( struct upvalue_table* tb,
-    const char* key ) {
+    const char* key ,
+    const struct upvalue_table* util ) {
   struct upvalue_table* cur_tb = tb;
   do {
     struct upvalue** slot;
@@ -140,7 +144,7 @@ upvalue_table_find_c( struct upvalue_table* tb,
       return *slot;
     }
     cur_tb = cur_tb->prev;
-  } while(cur_tb);
+  } while(cur_tb != util);
   return NULL;
 }
 
@@ -153,12 +157,13 @@ upvalue_table_clear( struct ajj* a, struct upvalue_table* m ) {
     struct upvalue* uv = *(struct upvalue**)p.val;
     while( uv ) {
       struct upvalue* p = uv->prev;
-      if( uv->type == UPVALUE_FUNCTION &&
-          uv->gut.gfunc.tp == OBJECT_CTOR ) {
-        /* this slot is owned by upvalue , no one will track
-         * its usage except this upvalue table .*/
-        func_table_destroy(a,
-            GET_OBJECTCTOR(&(uv->gut.gfunc)));
+      if( uv->type == UPVALUE_FUNCTION ) {
+        if( IS_OBJECTCTOR(&(uv->gut.gfunc)) ) {
+          /* We *own* the object ctor memory, so we need to
+           * delete it , it is not tracked by any gc chain */
+          func_table_destroy(a,
+              GET_OBJECTCTOR(&(uv->gut.gfunc)));
+        }
       }
       slab_free(&(a->upval_slab),uv);
       uv = p;
@@ -180,7 +185,7 @@ upvalue_table_destroy_one( struct ajj* a ,
 void
 upvalue_table_destroy( struct ajj* a,
     struct upvalue_table* m ,
-    struct upvalue_table* until ) {
+    const struct upvalue_table* until ) {
   while(m!=until) {
     m = upvalue_table_destroy_one(a,m);
   }

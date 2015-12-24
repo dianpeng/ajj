@@ -36,7 +36,7 @@ struct ajj {
    * currently working at. It will be set when we
    * start executing the code */
   struct runtime* rt;
-  struct upvalue_table* upval_tb; /* upvalue table */
+  struct upvalue_table env;       /* environment value table */
   struct upvalue_table builtins;  /* builtin table */
 
   /* INLINE those common builtin types and this makes our builtin type
@@ -115,14 +115,26 @@ int ajj_delete_template( struct ajj* a, const char* name ) {
   return 0;
 }
 
-/* This function is used to define an object into a specific
- * table. It is usually used to define builtin inside of the
- * builtins table */
-void* ajj_add_value( struct ajj* a, struct upvalue_table* ut,
-    const char* name , int type , ... );
-
 /* Wipe out ALL the template is safe operation */
 void ajj_clear_template( struct ajj* );
+
+/* Register value/class/function into different uvpalue table */
+void
+ajj_add_value( struct ajj* a , struct upvalue_table* ut,
+    const char* name, int type,  ... );
+
+/* Function used to add a class definition in SPECIFIC table
+ * and it will return added object's function table */
+struct func_table*
+ajj_add_class( struct ajj* a, struct upvalue_table* ut,
+    const struct ajj_class* cls );
+
+const
+struct function*
+ajj_add_function( struct ajj* a , struct upvalue_table* ut,
+    const char* name,
+    ajj_function entry,
+    void* );
 
 int ajj_render( struct ajj* a , const char* ,
     const char*  , struct ajj_io* );

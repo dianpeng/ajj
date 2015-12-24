@@ -313,7 +313,7 @@ token_id tk_lex_keyword_or_id( struct tokenizer* tk ) {
           /* try to check whether this value is IN or not */
           if((len = tk_keyword_check(tk,"in",k))==2 &&
               tk_not_id_rchar(tk->src[k+2])) {
-            RETURN(TK_NIN,(k-tk->pos));
+            RETURN(TK_NIN,(k-tk->pos+2));
           }
         }
         RETURN(TK_NOT,3);

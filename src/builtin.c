@@ -3,8 +3,6 @@
 #include "util.h"
 #include "vm.h"
 
-#define DICT_DEFAULT_BUF_SIZE 4
-
 #define FAIL(a,f,...) \
   do { \
     ajj_error(a,f,__VA_ARGS__); \
@@ -19,7 +17,7 @@
 #define OBJECT(V) ((V)->value.object->val.obj.data)
 
 /* LIST */
-#define LIST_TYPE (AJJ_VALUE_EXTENSION+1)
+#define LIST_TYPE (AJJ_VALUE_BUILTIN_TYPE+1)
 #define LIST(val) ((struct list*)OBJECT(val))
 
 /* List core data structure and it will be embeded inside of the
@@ -125,8 +123,8 @@ int list_pop_back( struct ajj* a,
   } else {
     struct list* l = LIST(obj);
     if( l->len == 0 ) {
-      FAIL(a,"%s","list::pop_back cannot pop value from \
-          list has 0 elements!");
+      FAIL(a,"%s","list::pop_back cannot pop value from "
+          "list has 0 elements!");
     } else {
       --l->len;
     }
@@ -168,28 +166,32 @@ int list_clear( struct ajj* a,
 
 /* slot protocol */
 static
-size_t list_length( struct ajj* a , const struct ajj_value* l ) {
+size_t list_length( struct ajj* a ,
+    const struct ajj_value* l ) {
   UNUSE_ARG(a);
   assert( IS_A(l,LIST_TYPE) );
   return LIST(l)->len;
 }
 
 static
-int list_iter_start( struct ajj* a , const struct ajj_value* l) {
+int list_iter_start( struct ajj* a ,
+    const struct ajj_value* l) {
   UNUSE_ARG(a);
   assert( IS_A(l,LIST_TYPE) );
   return 0;
 }
 
 static
-int list_iter_move( struct ajj* a , const struct ajj_value* l, int itr ) {
+int list_iter_move( struct ajj* a ,
+    const struct ajj_value* l, int itr ) {
   UNUSE_ARG(a);
   assert( IS_A(l,LIST_TYPE) );
   return itr+1;
 }
 
 static
-int list_iter_has( struct ajj* a , const struct ajj_value* l , int itr ) {
+int list_iter_has( struct ajj* a ,
+    const struct ajj_value* l , int itr ) {
   UNUSE_ARG(a);
   assert( IS_A(l,LIST_TYPE) );
   return itr < LIST(l)->len;
@@ -197,7 +199,8 @@ int list_iter_has( struct ajj* a , const struct ajj_value* l , int itr ) {
 
 static
 struct ajj_value
-list_iter_get_key( struct ajj* a , const struct ajj_value* l , int itr ) {
+list_iter_get_key( struct ajj* a ,
+    const struct ajj_value* l , int itr ) {
   UNUSE_ARG(a);
   assert( IS_A(l,LIST_TYPE) );
   return ajj_value_number(itr);
@@ -205,7 +208,8 @@ list_iter_get_key( struct ajj* a , const struct ajj_value* l , int itr ) {
 
 static
 struct ajj_value
-list_iter_get_val( struct ajj* a , const struct ajj_value* l , int itr ) {
+list_iter_get_val( struct ajj* a ,
+    const struct ajj_value* l , int itr ) {
   UNUSE_ARG(a);
   assert( IS_A(l,LIST_TYPE) );
   assert( itr < LIST(l)->len);
@@ -213,28 +217,17 @@ list_iter_get_val( struct ajj* a , const struct ajj_value* l , int itr ) {
 }
 
 static
-int list_empty( struct ajj* a , const struct ajj_value* l ) {
+int list_empty( struct ajj* a ,
+    const struct ajj_value* l ) {
   UNUSE_ARG(a);
   assert( IS_A(l,LIST_TYPE) );
   return LIST(l)->len == 0;
 }
 
 static
-int list_in ( struct ajj* a , const struct ajj_value* l ,
-    const struct ajj_value* idx ) {
-  int k;
-  UNUSE_ARG(a);
-  assert( IS_A(l,LIST_TYPE) );
-  if( vm_to_integer(idx,&k) ) {
-    return 0;
-  } else {
-    return LIST(l)->len > (size_t)k && k >= 0;
-  }
-}
-
-static
 struct ajj_value
-list_attr_get( struct ajj* a , const struct ajj_value* obj,
+list_attr_get( struct ajj* a ,
+    const struct ajj_value* obj,
     const struct ajj_value* idx ) {
   int i;
   UNUSE_ARG(a);
@@ -251,7 +244,8 @@ list_attr_get( struct ajj* a , const struct ajj_value* obj,
 }
 
 static
-void list_attr_set( struct ajj* a, struct ajj_value* obj,
+void list_attr_set( struct ajj* a,
+    struct ajj_value* obj,
     const struct ajj_value* idx ,
     const struct ajj_value* val ) {
   int i;
@@ -270,7 +264,8 @@ void list_attr_set( struct ajj* a, struct ajj_value* obj,
 }
 
 static
-void list_attr_push( struct ajj* a, struct ajj_value* obj,
+void list_attr_push( struct ajj* a,
+    struct ajj_value* obj,
     const struct ajj_value* val ) {
   struct ajj_value arg = *val;
   struct ajj_value ret;
@@ -280,7 +275,8 @@ void list_attr_push( struct ajj* a, struct ajj_value* obj,
 
 static
 const char*
-list_display( struct ajj* a , const struct ajj_value* obj,
+list_display( struct ajj* a ,
+    const struct ajj_value* obj,
     size_t* len ) {
   struct list* lst;
   size_t i;
@@ -303,6 +299,71 @@ list_display( struct ajj* a , const struct ajj_value* obj,
   }
   *len = sbuf.len;
   return sbuf.str;
+}
+
+/* comparison */
+static
+int list_in ( struct ajj* a , const struct ajj_value* l ,
+    const struct ajj_value* val , int* result ) {
+  size_t i;
+  struct list* lst;
+  UNUSE_ARG(a);
+  assert( IS_A(l,LIST_TYPE) );
+  lst = LIST(l);
+  for( i = 0 ;  i < lst->len ; ++i ) {
+    int cmp;
+    if( ajj_value_eq( a , lst->entry+i, val, &cmp ) ) {
+      return AJJ_EXEC_FAIL;
+    }
+    if(cmp) {
+      *result = 1;
+      return AJJ_EXEC_OK;
+    }
+  }
+  *result = 0;
+  return AJJ_EXEC_OK;
+}
+
+int list_eq(struct ajj* a, const struct ajj_value* l,
+    const struct ajj_value* r , int* res ) {
+  struct list* L;
+  struct list* R;
+  /* left value is always the list */
+  assert( IS_A(l,LIST_TYPE) );
+  L = LIST(l);
+
+  if(!IS_A(r,LIST_TYPE)) {
+    *res = 0; return AJJ_EXEC_OK;
+  } else {
+    R = LIST(r);
+    if( R->len != L->len ) {
+      *res = 0; return AJJ_EXEC_OK;
+    } else {
+      size_t i;
+      for( i = 0 ; i < L->len ; ++i ) {
+        struct ajj_value* lval = L->entry + i;
+        struct ajj_value* rval = R->entry + i;
+        int cmp;
+        if( !ajj_value_eq(a,lval,rval,&cmp) ) {
+          return AJJ_EXEC_FAIL;
+        }
+        if(!cmp) {
+          *res = 0; return AJJ_EXEC_OK;
+        }
+      }
+      *res = 1; return AJJ_EXEC_OK;
+    }
+  }
+}
+
+int list_ne( struct ajj* a, const struct ajj_value* l,
+    const struct ajj_value* r , int* result ) {
+  if(list_eq(a,l,r,result))
+    return AJJ_EXEC_FAIL;
+  else {
+    *result = !*result;
+    return AJJ_EXEC_OK;
+  }
 }
 
 /* list class */
@@ -328,17 +389,23 @@ static struct ajj_class LIST_CLASS  = {
     list_iter_get_val,
     list_length,
     list_empty,
-    list_in,
     list_attr_get,
     list_attr_set,
     list_attr_push,
-    list_display
+    list_display,
+    list_in,
+    list_eq,
+    list_ne,
+    NULL,
+    NULL,
+    NULL,
+    NULL
   },
   NULL
 };
 
 /* DICT */
-#define DICT_TYPE (AJJ_VALUE_EXTENSION+2)
+#define DICT_TYPE (AJJ_VALUE_BUILTIN_TYPE+2)
 #define DICT(val) ((struct map*)OBJECT(val))
 #define DEFAULT_DICT_CAP 8
 
@@ -366,7 +433,6 @@ static
 void dict_dtor( struct ajj* a , void* udata, void* object ) {
   struct map* m = (struct map*)object;
   UNUSE_ARG(udata);
-
   map_destroy(m);
   free(m);
 }
@@ -408,8 +474,8 @@ int dict_set( struct ajj* a ,
   int own;
 
   if( arg_len != 2 || vm_to_string(arg,&key,&own) ) {
-    FAIL(a,"%s","dict::set can only accept 2 arguments and the\
-        first one must be a string!");
+    FAIL(a,"%s","dict::set can only accept 2 arguments and the "
+        "first one must be a string!");
   } else {
     struct map* m = DICT(obj);
     struct ajj_value* val;
@@ -433,8 +499,8 @@ int dict_has_key( struct ajj* a ,
   int own;
 
   if( arg_len != 1 || vm_to_string(arg,&key,&own) ) {
-    FAIL(a,"%s","dict::has_key can only accept 1 argument and it \
-        must be a string!");
+    FAIL(a,"%s","dict::has_key can only accept 1 argument and it "
+        "must be a string!");
   } else {
     struct map* m = DICT(obj);
     struct ajj_value* val;
@@ -459,8 +525,8 @@ int dict_update( struct ajj* a ,
   int own;
 
   if( arg_len != 2 || vm_to_string(arg,&key,&own) ) {
-    FAIL(a,"%s","dict::updatae can only accept 2 arguments and the first \
-        one must be a string!");
+    FAIL(a,"%s","dict::updatae can only accept 2 arguments and the first "
+        "one must be a string!");
   } else {
     struct map* m = DICT(obj);
     struct ajj_value* val;
@@ -542,9 +608,13 @@ dict_iter_get_key( struct ajj* a ,
   UNUSE_ARG(a);
   assert( IS_A(obj,DICT_TYPE) );
   ret = map_iter_deref(DICT(obj),itr);
-  /* return a copied string for key, we do the copy for safety reason
-   * because it is possible this object is dropped but its returned key
-   * should not dropped so we cannot return a constant string reference */
+
+  /* return a copied string for key, we do
+   * the copy for safety reason  because it
+   * is possible this object is dropped but
+   * its returned key should not dropped so
+   * we cannot return a constant string reference */
+
   return ajj_value_assign(
       ajj_object_create_string(
         a,
@@ -571,27 +641,6 @@ size_t dict_length( struct ajj* a ,
     const struct ajj_value* obj ) {
   UNUSE_ARG(a);
   return DICT(obj)->len;
-}
-
-static
-int dict_in( struct ajj* a ,
-    const struct ajj_value* obj ,
-    const struct ajj_value* key ) {
-  struct string str;
-  int own;
-  UNUSE_ARG(a);
-  assert( IS_A(obj,DICT_TYPE) );
-  if( vm_to_string(key,&str,&own) )
-    return 0;
-  else {
-    if( map_find( DICT(obj) , &str ) ) {
-      if(own) string_destroy(&str);
-      return 1;
-    } else {
-      if(own) string_destroy(&str);
-      return 0;
-    }
-  }
 }
 
 static
@@ -626,7 +675,8 @@ dict_attr_set( struct ajj* a,
 
 static
 const char*
-dict_display( struct ajj* a , const struct ajj_value* obj,
+dict_display( struct ajj* a ,
+    const struct ajj_value* obj,
     size_t* len ) {
   struct strbuf sbuf;
   size_t i;
@@ -664,6 +714,92 @@ dict_display( struct ajj* a , const struct ajj_value* obj,
   return sbuf.str;
 }
 
+/* comparision */
+static
+int dict_in( struct ajj* a ,
+    const struct ajj_value* obj ,
+    const struct ajj_value* key ,
+    int* result ) {
+  struct string str;
+  int own;
+  UNUSE_ARG(a);
+  assert( IS_A(obj,DICT_TYPE) );
+  if( vm_to_string(key,&str,&own) ) {
+    *result = 0;
+    return AJJ_EXEC_OK;
+  } else {
+    if( map_find( DICT(obj) , &str ) ) {
+      if(own) string_destroy(&str);
+      *result = 1;
+      return AJJ_EXEC_OK;
+    } else {
+      if(own) string_destroy(&str);
+      *result = 0;
+      return AJJ_EXEC_OK;
+    }
+  }
+}
+
+static
+int dict_eq( struct ajj* a ,
+    const struct ajj_value* l,
+    const struct ajj_value* r,
+    int* result ) {
+  assert( IS_A(l,DICT_TYPE) );
+  if( !IS_A(r,DICT_TYPE) ) {
+    *result = 0; return AJJ_EXEC_OK;
+  } else {
+    struct map* L = DICT(l);
+    struct map* R = DICT(r);
+    if( L->len != R->len ) {
+      *result = 0; return AJJ_EXEC_OK;
+    } else {
+      int litr , ritr;
+      litr = map_iter_start(L);
+      ritr = map_iter_start(R);
+      while( map_iter_has(L,litr) ) {
+        struct map_pair lval =
+          map_iter_deref(L,litr);
+        struct map_pair rval =
+          map_iter_deref(R,ritr);
+        /* check whether key and value are equal */
+        if( string_eq(lval.key,rval.key) ) {
+          int cmp;
+          if( ajj_value_eq(a,
+                (struct ajj_value*)lval.val,
+                (struct ajj_value*)rval.val,
+                &cmp)) {
+            return AJJ_EXEC_FAIL;
+          } else {
+            if(!cmp) {
+              *result = 0;
+              return AJJ_EXEC_OK;
+            }
+          }
+        }
+        /* move the iterator */
+        litr = map_iter_move(L,litr);
+        ritr = map_iter_move(R,ritr);
+      }
+      *result = 1;
+      return AJJ_EXEC_OK;
+    }
+  }
+}
+
+static
+int dict_ne( struct ajj* a,
+    const struct ajj_value* l,
+    const struct ajj_value* r,
+    int* result ) {
+  if(dict_eq(a,l,r,result))
+    return AJJ_EXEC_FAIL;
+  else {
+    *result = !(*result);
+    return AJJ_EXEC_OK;
+  }
+}
+
 static struct ajj_class_method DICT_METHOD[] = {
   { dict_set , "set" },
   { dict_get , "get" },
@@ -687,49 +823,57 @@ static struct ajj_class DICT_CLASS = {
     dict_iter_get_val,
     dict_length,
     dict_empty,
-    dict_in,
     dict_attr_get,
     dict_attr_set,
     NULL,
-    dict_display
+    dict_display,
+    dict_in,
+    dict_eq,
+    dict_ne,
+    NULL,
+    NULL,
+    NULL,
+    NULL
   },
   NULL
 };
 
-/* XList
- * An easy way to craft a list that is used to do foreach. It basically doesn't have any
- * member and cannot be used to add and set member */
-#define XLIST_TYPE (AJJ_VALUE_EXTENSION+3)
-#define XLIST(val) ((struct xlist*)(OBJECT(val)))
+/* XRange
+ * An easy way to craft a list that is used to do basic for.
+ * It basically doesn't have any member and cannot be used
+ * to add and set member */
 
-struct xlist {
+#define XRANGE_TYPE (AJJ_VALUE_BUILTIN_TYPE+3)
+#define XRANGE(val) ((struct xrange*)(OBJECT(val)))
+
+struct xrange {
   size_t len;
 };
 
 static
-int xlist_ctor( struct ajj* a,
+int xrange_ctor( struct ajj* a,
     void* udata,
     struct ajj_value* arg,
     size_t arg_len,
     void** ret,
     int* tp ) {
-  struct xlist* x;
+  struct xrange* x;
   int val;
 
   if( arg_len != 1 || vm_to_integer(arg,&val) ) {
-    FAIL(a,"%s","xlist::__ctor__ can only accept 1 \
-        argument and it must be a integer!");
+    FAIL(a,"%s","xrange::__ctor__ can only accept 1 "
+        "argument and it must be a integer!");
   } else {
     x = malloc(sizeof(*x));
     x->len = (size_t)(val);
     *ret = x;
-    *tp = XLIST_TYPE;
+    *tp = XRANGE_TYPE;
     return AJJ_EXEC_OK;
   }
 }
 
 static
-void xlist_dtor( struct ajj* a, void* udata,
+void xrange_dtor( struct ajj* a, void* udata,
     void* object ) {
   UNUSE_ARG(a);
   UNUSE_ARG(udata);
@@ -738,106 +882,244 @@ void xlist_dtor( struct ajj* a, void* udata,
 
 /* slots functions */
 static
-int xlist_iter_start( struct ajj* a,
+int xrange_iter_start( struct ajj* a,
     const struct ajj_value* obj ) {
   UNUSE_ARG(a);
-  assert( IS_A(obj,XLIST_TYPE) );
+  assert( IS_A(obj,XRANGE_TYPE) );
   return 0;
 }
 
 static
-int xlist_iter_has( struct ajj* a,
+int xrange_iter_has( struct ajj* a,
     const struct ajj_value* obj , int itr ) {
   UNUSE_ARG(a);
-  assert( IS_A(obj,XLIST_TYPE) );
-  return itr < XLIST(obj)->len;
+  assert( IS_A(obj,XRANGE_TYPE) );
+  return itr < XRANGE(obj)->len;
 }
 
 static
-int xlist_iter_move( struct ajj* a,
+int xrange_iter_move( struct ajj* a,
     const struct ajj_value* obj , int itr ) {
   UNUSE_ARG(a);
-  assert( IS_A(obj,XLIST_TYPE) );
+  assert( IS_A(obj,XRANGE_TYPE) );
   return ++itr;
 }
 
 static
 struct ajj_value
-xlist_iter_get_key( struct ajj* a,
+xrange_iter_get_key( struct ajj* a,
     const struct ajj_value* obj , int itr ) {
   UNUSE_ARG(a);
-  assert( IS_A(obj,XLIST_TYPE) );
+  assert( IS_A(obj,XRANGE_TYPE) );
   return ajj_value_number(itr);
 }
 
 static
 struct ajj_value
-xlist_iter_get_val( struct ajj* a,
+xrange_iter_get_val( struct ajj* a,
     const struct ajj_value* obj , int itr ) {
   UNUSE_ARG(a);
-  assert( IS_A(obj,XLIST_TYPE) );
+  assert( IS_A(obj,XRANGE_TYPE) );
   return ajj_value_number(itr);
 }
 
 static
-size_t xlist_length( struct ajj* a,
+size_t xrange_length( struct ajj* a,
     const struct ajj_value* obj ) {
   UNUSE_ARG(a);
-  assert( IS_A(obj,XLIST_TYPE) );
-  return XLIST(obj)->len;
+  assert( IS_A(obj,XRANGE_TYPE) );
+  return XRANGE(obj)->len;
 }
 
 static
-int xlist_empty( struct ajj* a ,
+int xrange_empty( struct ajj* a ,
     const struct ajj_value* obj ) {
   UNUSE_ARG(a);
-  assert( IS_A(obj,XLIST_TYPE) );
-  return XLIST(obj)->len == 0;
+  assert( IS_A(obj,XRANGE_TYPE) );
+  return XRANGE(obj)->len == 0;
 }
 
 static
 const char*
-xlist_display( struct ajj* a ,
+xrange_display( struct ajj* a ,
     const struct ajj_value* val,
     size_t* len ) {
   UNUSE_ARG(a);
-  assert( IS_A(val,XLIST_TYPE) );
+  assert( IS_A(val,XRANGE_TYPE) );
   *len = 1;
   return "";
 }
 
+/* comparison */
+#define DEFINE_XRANGE_CMP(T,O) \
+  static \
+  int xrange_##T( struct ajj* a, \
+      const struct ajj_value* l, \
+      const struct ajj_value* r, \
+      int* result ) { \
+    assert( IS_A(l,XRANGE_TYPE) ); \
+    if( !IS_A(r,XRANGE_TYPE) ) { \
+      *result = 0; return AJJ_EXEC_FAIL; \
+    } else { \
+      struct xrange* L = XRANGE(l); \
+      struct xrange* R = XRANGE(r); \
+      *result = L->len O R->len; \
+      return AJJ_EXEC_OK; \
+    } \
+  }
+
+DEFINE_XRANGE_CMP(eq,==)
+DEFINE_XRANGE_CMP(ne,!=)
+DEFINE_XRANGE_CMP(lt,<)
+DEFINE_XRANGE_CMP(le,<=)
+DEFINE_XRANGE_CMP(gt,>)
+DEFINE_XRANGE_CMP(ge,>=)
+
+#undef DEFINE_XRANGE_CMP
+
 static
-struct ajj_class XLIST_CLASS = {
-  "xlist",
-  xlist_ctor,
-  xlist_dtor,
+struct ajj_class XRANGE_CLASS = {
+  "xrange",
+  xrange_ctor,
+  xrange_dtor,
   NULL,
   0,
   {
-    xlist_iter_start,
-    xlist_iter_move,
-    xlist_iter_has,
-    xlist_iter_get_key,
-    xlist_iter_get_val,
-    xlist_length,
-    xlist_empty,
+    xrange_iter_start,
+    xrange_iter_move,
+    xrange_iter_has,
+    xrange_iter_get_key,
+    xrange_iter_get_val,
+    xrange_length,
+    xrange_empty,
     NULL,
     NULL,
     NULL,
+    xrange_display,
     NULL,
-    xlist_display
+    xrange_eq,
+    xrange_ne,
+    xrange_lt,
+    xrange_le,
+    xrange_gt,
+    xrange_ge
   },
   NULL,
 };
 
+/* =========================================
+ * Loop Object
+ * =======================================*/
+struct loop {
+  size_t index;
+  size_t index0;
+
+  size_t revindex;
+  size_t revindex0;
+
+  int first;
+  int last;
+  size_t length;
+  /* we don't support depth/depth0 */
+};
+
+#define LOOP_TYPE (AJJ_VALUE_BUILTIN_TYPE + 4)
+#define LOOP(V) ((struct loop*)(OBJECT(V)))
+
+static
+int loop_ctor( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_num,
+    void** ret,
+    int* tp ) {
+  UNUSE_ARG(udata);
+  if(arg_num != 1)
+    FAIL(a,"%s","__loop__::__ctor__ can only accept 1 argument and "
+        "it must be an integer!");
+  else {
+    int len;
+    if( vm_to_integer(arg,&len) ) {
+      FAIL(a,,"__loop__::__ctpr__ can only convert first argument:%s "
+          "to integer!",ajj_value_get_type_name(arg));
+    } else {
+      struct loop* lp = malloc(sizeof(*lp));
+      lp->index = 1;
+      lp->index0= 0;
+      lp->revindex= (size_t)(len);
+      lp->revindex0=(size_t)(len-1);
+      lp->first = 1;
+      lp->last = 0;
+      lp->length = (size_t)len;
+      *ret = lp;
+      *tp = LOOP_TYPE;
+      return AJJ_EXEC_OK;
+    }
+  }
+}
+
+static
+int loop_dtor( struct ajj* a,
+    void* udata,
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 void ajj_builtin_load( struct ajj* a ) {
   /* list */
-  a->list = ajj_add_value(a,&(a->builtins),NULL,
-      AJJ_VALUE_CLASS,&LIST_CLASS);
+  a->list =  ajj_add_class(a,&(a->builtins),
+      &LIST_CLASS);
   /* dict */
-  a->dict = ajj_add_value(a,&(a->builtins),NULL,
-      AJJ_VALUE_CLASS,&DICT_CLASS);
-  /* xlist */
-  ajj_add_value(a,&(a->builtins),NULL,
-      AJJ_VALUE_CLASS,&XLIST_CLASS);
+  a->dict = ajj_add_class(a,&(a->builtins),
+      &DICT_CLASS);
+  /* xrange */
+  ajj_add_class(a,&(a->builtins),
+      &XRANGE_CLASS);
 }

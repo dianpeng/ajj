@@ -14,22 +14,6 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-/* This FUNC_CALL actually means we want a TAIL call of a
- * new script functions. The return from the LOWEST script function
- * will end up its caller been poped as well. We don't return the
- * continuation from VM to the external C script again if it tries
- * to call a script function.
- * The called script function's return value will be carried over
- * to the caller of the C function that issue the script call.
- * It is used for implementing Super and Caller function, which the
- * C function will just look up the script function entry and then
- * call them, after that the return value from the script function
- * will be used as the return value for the C function builtin */
-
-#define FUNC_CALL 1 /* indicate we want to call a script
-                     * function recursively */
-
-
 #define cur_frame(a) (&(a->rt->call_stk[a->rt->cur_call_stk-1]))
 #define cur_function(a) (cur_frame(a)->entry)
 
@@ -62,14 +46,14 @@ int unwind_stack( struct ajj* a , char* buf ) {
   /* dump the code in reverse order */
   for( i = a->rt->cur_call_stk-1 ; i >= 0 ; --i ) {
     if( fr[i].obj == NULL ) {
-      buf += snprintf(buf,end-buf,"%d %s:%s %d\n",i,
+      buf += snprintf(buf,end-buf,"%d %s:%s arg-num:%d\n",i,
           "<free-func>",
           fr[i].name.str,
           fr[i].par_cnt);
       if( buf == end ) break;
     } else {
       const char* obj_name;
-      obj_name = fr[i].obj->val.obj.fn_tb->name.str;
+      obj_name = GET_OBJECT_TYPE_NAME(fr[i].obj)->str;
       buf += snprintf(buf,end-buf,"%d <%s>:%s arg-num:%d\n",i,
           obj_name,
           fr[i].name.str,
@@ -98,6 +82,16 @@ void report_error( struct ajj* a , const char* fmt , ... ) {
   b += vsnprintf(b,end-b,fmt,vl);
   *b = '\n'; ++b;
   b += unwind_stack(a,b);
+}
+
+/* This function is helped to build our error with the function
+ * call error , only used when we got an error from a function
+ * call not inside of our VM */
+static
+void rewrite_error( struct ajj* a ) {
+  char msg[ERROR_BUFFER_SIZE];
+  strcpy(msg,a->err);
+  report_error(a,"%s",msg);
 }
 
 /* push/pop to manipulate the value stack */
@@ -148,6 +142,7 @@ struct runtime* runtime_create( struct ajj* a , struct ajj_io* output ) {
   rt->cur_call_stk = 0;
   rt->cur_gc = &(a->gc_root);
   rt->output = output;
+  rt->global = upvalue_table_create(&(a->env));
   return rt;
 }
 
@@ -159,6 +154,7 @@ void runtime_destroy( struct ajj* a , struct runtime* rt ) {
     gc_scope_destroy(a,c);
     c = n;
   }
+  upvalue_table_destroy(a,rt->global,&(a->env));
   free(rt);
 }
 
@@ -219,8 +215,8 @@ int instr_2nd_arg( struct ajj* a ) {
 static
 void set_upvalue( struct ajj* a, const struct string* name,
     const struct ajj_value* value ) {
-  struct upvalue* uv = upvalue_table_add(a,
-      a->upval_tb,name,0);
+  struct upvalue* uv = upvalue_table_add(
+      a,a->rt->global,name,0);
   uv->type = UPVALUE_VALUE;
   uv->gut.val = *value;
 }
@@ -229,7 +225,7 @@ static
 void overwrite_upvalue( struct ajj* a , const struct string* name,
     const struct ajj_value* value ) {
   struct upvalue* uv = upvalue_table_overwrite(a,
-      a->upval_tb,name,0);
+      a->rt->global,name,0);
   uv->type = UPVALUE_VALUE;
   uv->gut.val = *value;
 }
@@ -237,7 +233,8 @@ void overwrite_upvalue( struct ajj* a , const struct string* name,
 static
 struct ajj_value
 get_upvalue( struct ajj* a , const struct string* name ) {
-  struct upvalue* uv = upvalue_table_find(a->upval_tb,name);
+  struct upvalue* uv = upvalue_table_find(
+      a->rt->global,name,NULL);
   if( !uv || uv->type != UPVALUE_VALUE )
     return AJJ_NONE;
   else
@@ -246,7 +243,8 @@ get_upvalue( struct ajj* a , const struct string* name ) {
 
 static
 void del_upvalue( struct ajj* a, const struct string* name ) {
-  upvalue_table_del(a,a->upval_tb,name);
+  upvalue_table_del(a,a->rt->global,
+      name,&(a->env));
 }
 
 /* =============================
@@ -382,83 +380,63 @@ int vm_to_boolean( const struct ajj_value* val ) {
 /* =============================
  * Specific instruction handler
  * ============================*/
+static
+struct ajj_value vm_add(struct ajj* a,
+    const struct ajj_value* l,
+    const struct ajj_value* r,
+    int* fail ) {
+  if( l->type == AJJ_VALUE_STRING ||
+      r->type == AJJ_VALUE_STRING ) {
+    int own_l , own_r;
+    struct string ls ;
+    struct string rs ;
+    struct string str;
+    ls = to_string(a,l,&own_l,fail);
+    if( *fail ) return AJJ_NONE;
+    rs = to_string(a,r,&own_r,fail);
+    if( *fail ) {
+      if(own_l)
+        string_destroy(&ls);
+      return AJJ_NONE;
+    }
+    str = string_concate(&ls,&rs);
+    if(own_l) string_destroy(&ls);
+    if(own_r) string_destroy(&rs);
+    return ajj_value_assign(
+        ajj_object_create_string(a,a->rt->cur_gc,
+          str.str,str.len,1));
+  } else {
+    double ln , rn;
+    ln = to_number(a,l,fail);
+    if( *fail ) return AJJ_NONE;
+    rn = to_number(a,r,fail);
+    if( *fail ) return AJJ_NONE;
+    return ajj_value_number( ln + rn );
+  }
+}
 
-/* binary operation handler , saves me some typings */
-#define DEFINE_BIN_HANDLER(N,ON,OS,TYPE) \
-  static   \
-  struct ajj_value N(struct ajj* a, \
+#define DEFINE_BIN_HANDLER(T) \
+  static \
+  struct ajj_value vm_##T( struct ajj* a , \
       const struct ajj_value* l, \
       const struct ajj_value* r, \
       int* fail ) { \
-    if( l->type == AJJ_VALUE_STRING || \
-        r->type == AJJ_VALUE_STRING ) { \
-      int own_l , own_r; \
-      struct string ls ; \
-      struct string rs ; \
-      ls = to_string(a,l,&own_l,fail); \
-      if( *fail ) return AJJ_NONE; \
-      rs = to_string(a,r,&own_r,fail); \
-      if( *fail ) { \
-        if(own_l) \
-          string_destroy(&ls); \
-        return AJJ_NONE; \
-      } \
-      OS(a,&ls,own_l,&rs,own_r); \
+    int cmp; \
+    if( ajj_value_##T(a,l,r,&cmp) ) { \
+      *fail = 1; rewrite_error(a); return AJJ_NONE; \
     } else { \
-      double ln , rn; \
-      ln = to_number(a,l,fail); \
-      if( *fail ) return AJJ_NONE; \
-      rn = to_number(a,r,fail); \
-      if( *fail ) return AJJ_NONE; \
-      return ajj_value_##TYPE( ln ON rn ); \
+      *fail = 0; return ajj_value_boolean(cmp); \
     } \
   }
 
-#define STRING_ADD(a,L,OL,R,OR) \
-  do { \
-    struct string str = string_concate(L,R); \
-    if(OL) string_destroy(L); \
-    if(OR) string_destroy(R); \
-    return ajj_value_assign( \
-        ajj_object_create_string(a,a->rt->cur_gc,\
-          str.str,str.len,1)); \
-  } while(0)
-
-#define STRING_COMP(a,L,OL,R,OR,CMP) \
-  do { \
-    int result = strcmp((L)->str,(R)->str) CMP 0; \
-    return ajj_value_number(result); \
-  } while(0)
-
-DEFINE_BIN_HANDLER(vm_add,+,STRING_ADD,number)
-
-#define STRING_COMP_EQ(A,B,C,D,E) STRING_COMP(A,B,C,D,E,==)
-DEFINE_BIN_HANDLER(vm_eq,==,STRING_COMP_EQ,boolean)
-
-#define STRING_COMP_NE(A,B,C,D,E) STRING_COMP(A,B,C,D,E,!=)
-DEFINE_BIN_HANDLER(vm_ne,!=,STRING_COMP_NE,boolean)
-
-#define STRING_COMP_LE(A,B,C,D,E) STRING_COMP(A,B,C,D,E,<=)
-DEFINE_BIN_HANDLER(vm_le,<=,STRING_COMP_LE,boolean)
-
-#define STRING_COMP_LT(A,B,C,D,E) STRING_COMP(A,B,C,D,E,<)
-DEFINE_BIN_HANDLER(vm_lt,<,STRING_COMP_LT,boolean)
-
-#define STRING_COMP_GE(A,B,C,D,E) STRING_COMP(A,B,C,D,E,>=)
-DEFINE_BIN_HANDLER(vm_ge,>=,STRING_COMP_GE,boolean)
-
-#define STRING_COMP_GT(A,B,C,D,E) STRING_COMP(A,B,C,D,E,>)
-DEFINE_BIN_HANDLER(vm_gt,>,STRING_COMP_GT,boolean)
+DEFINE_BIN_HANDLER(eq)
+DEFINE_BIN_HANDLER(ne)
+DEFINE_BIN_HANDLER(le)
+DEFINE_BIN_HANDLER(lt)
+DEFINE_BIN_HANDLER(ge)
+DEFINE_BIN_HANDLER(gt)
 
 #undef DEFINE_BIN_HANDLER
-#undef STRING_ADD
-#undef STRING_COMP
-#undef STRING_COMP_EQ
-#undef STRING_COMP_NE
-#undef STRING_COMP_LE
-#undef STRING_COMP_LT
-#undef STRING_COMP_GE
-#undef STRING_COMP_GT
 
 /* handle multiply */
 static
@@ -518,28 +496,15 @@ struct ajj_value vm_neg(struct ajj* a, const struct ajj_value* val,
 }
 
 static
-struct ajj_value vm_len(struct ajj* a, const struct ajj_value* val ) {
-  switch(val->type) {
-    case AJJ_VALUE_NONE:
-    case AJJ_VALUE_NUMBER:
-    case AJJ_VALUE_BOOLEAN:
-      return ajj_value_number(1);
-    case AJJ_VALUE_STRING:
-      return ajj_value_number(
-          val->value.object->val.str.len);
-    case AJJ_VALUE_OBJECT:
-      {
-        struct object* o = &(val->value.object->val.obj);
-        if( o->fn_tb->slot.length ) {
-          return ajj_value_number(
-              o->fn_tb->slot.length(a,val));
-        } else {
-          return AJJ_NONE;
-        }
-      }
-    default:
-      UNREACHABLE();
-      return AJJ_NONE;
+struct ajj_value vm_len(struct ajj* a,
+    const struct ajj_value* val , int* fail ) {
+  int res;
+  if(ajj_value_len(a,val,&res)) {
+    *fail = 1;
+    rewrite_error(a);
+    return AJJ_NONE;
+  } else {
+    return ajj_value_number(res);
   }
 }
 
@@ -547,62 +512,33 @@ static
 struct ajj_value
 vm_in( struct ajj* a , struct ajj_value* obj ,
     const struct ajj_value* val , int* fail ) {
-  if( obj->type != AJJ_VALUE_OBJECT ) {
+  int res;
+  if( ajj_value_in(a,obj,val,&res) ) {
     *fail = 1;
-    report_error(a,"Type:%s doesn't support in operator!",
-        ajj_value_get_type_name(obj));
+    rewrite_error(a);
     return AJJ_NONE;
   } else {
-    struct object* o = &(val->value.object->val.obj);
-    if( o->fn_tb->slot.in ) {
-      *fail = 0;
-      return ajj_value_number(
-          o->fn_tb->slot.in(a,obj,val));
-    } else {
-      *fail = 1;
-      report_error(a,"Type:%s doesn't support in operator!",
-          o->fn_tb->name.str);
-      return AJJ_NONE;
-    }
+    return ajj_value_boolean(res);
   }
 }
 
 static
 int
 is_empty( struct ajj* a , struct ajj_value* val , int* fail ) {
+  int res;
   assert( val->type != AJJ_VALUE_NOT_USE );
-  switch(val->type) {
-    case AJJ_VALUE_STRING:
-      *fail = 0;
-      return ajj_value_to_string(val)->len == 0;
-    case AJJ_VALUE_OBJECT:
-      /* try to use empty slots here */
-      {
-        struct object* o = &(val->value.object->val.obj);
-        if( o->fn_tb->slot.empty != NULL ) {
-          return o->fn_tb->slot.empty(a,val);
-        } else {
-          *fail = 1;
-          report_error(a,"Type:%s doesn't support empty slot!",
-              o->fn_tb->name.str);
-          return -1;
-        }
-      }
-    default:
-      *fail = 1;
-      report_error(a,"Type:%s doesn't support test empty!",
-          ajj_value_get_type_name(val));
-      return -1;
+  if( ajj_value_empty(a,val,&res) ) {
+    *fail = 1;
+    rewrite_error(a);
+    return -1;
+  } else {
+    return res;
   }
 }
 
 /* For C users, we don't allow them to call a script function in their
  * registered C function easily, but we need it for execution in our
  * VM. */
-static
-int call_script_func( struct ajj* a ,
-    const char* name,
-    struct ajj_value* par, size_t par_len , int* fail );
 
 static
 int call_ctor( struct ajj* a , struct func_table* ft,
@@ -692,13 +628,17 @@ vm_call(struct ajj* a, struct ajj_object* obj ,
       const struct c_closure* cc = &(entry->f.c_fn);
       assert( obj == NULL );
       rval = cc->func(a,cc->udata,par,par_sz,ret);
-      assert( rval >= -1 && rval <= 1);
+      if(rval == AJJ_EXEC_FAIL) {
+        rewrite_error(a);
+      }
       return rval;
     } else {
       assert( obj != NULL );
       assert( IS_CMETHOD(fr->entry) );
       rval = entry->f.c_mt(a,&v_obj,par,par_sz,ret);
-      assert( rval >= -1 && rval <= 1);
+      if(rval == AJJ_EXEC_FAIL) {
+        rewrite_error(a);
+      }
       return rval;
     }
   } else {
@@ -717,7 +657,7 @@ vm_call(struct ajj* a, struct ajj_object* obj ,
       for( i = fr->par_cnt ; i < prg->par_size ; ++i ) {
         push(a,prg->par_list[i].def_val);
       }
-      return FUNC_CALL; /* continue call */
+      return VM_FUNC_CALL; /* continue call */
     } else {
       struct func_table* ft;
       assert( IS_OBJECTCTOR(fr->entry) );
@@ -851,10 +791,6 @@ vm_attrget( struct ajj* a , struct ajj_value* obj,
           *fail = 0;
           buf.str = const_cstr( str->str[k] );
           buf.len = 1;
-          /* TODO::
-           * Optimize this with const_string instead of dynamic string,
-           * to achieve this a static table must be created for each
-           * charaters. This is not hard at all */
           return ajj_value_assign(
               ajj_object_create_const_string(
                 a,
@@ -911,7 +847,7 @@ void vm_exit( struct ajj* a , int loops ) {
 static
 void setup_env( struct ajj* a , int cnt ) {
   assert(cnt>0);
-  a->upval_tb = upvalue_table_create( a->upval_tb );
+  a->rt->global = upvalue_table_create( a->rt->global );
   for( ; cnt > 0 ; --cnt ) {
     const int idx = 3*cnt;
     struct ajj_value* sym = top(a,idx);
@@ -924,7 +860,7 @@ void setup_env( struct ajj* a , int cnt ) {
     assert( opt->type == AJJ_VALUE_NUMBER );
     /* check the options */
     if( iopt == UPVALUE_FIX ) {
-      if( upvalue_table_find(a->upval_tb,k) != NULL )
+      if( upvalue_table_find(a->rt->global,k,NULL) != NULL )
         continue;
     }
     /* set up the value thing */
@@ -939,7 +875,8 @@ void setup_json_env( struct ajj* a , int cnt , int* fail ) {
 
 static
 void remove_env( struct ajj* a ) {
-  a->upval_tb = upvalue_table_destroy_one(a,a->upval_tb);
+  a->rt->global = upvalue_table_destroy_one(
+      a,a->rt->global);
 }
 
 static
@@ -1069,7 +1006,7 @@ resolve_free_function( struct ajj* a, const struct string* name ,
     return f;
 
   /* searching through the global function table */
-  uv = upvalue_table_find( a->upval_tb, name );
+  uv = upvalue_table_find( a->rt->global , name , NULL );
   *obj = NULL;
   if(uv) {
     if(uv->type == UPVALUE_FUNCTION) {
@@ -1141,7 +1078,6 @@ int exit_function( struct ajj* a , const struct ajj_value* ret ) {
   return 0;
 }
 
-static
 int call_script_func( struct ajj* a , const char* name,
     struct ajj_value* par , size_t par_cnt , int* fail ) {
   /* resolve the function from the current template object
@@ -1169,7 +1105,7 @@ int call_script_func( struct ajj* a , const char* name,
   if(!*fail) return -1;
 
   /* notify the VM to execute the current script function */
-  return FUNC_CALL;
+  return VM_FUNC_CALL;
 }
 
 #define RCHECK &fail); \
@@ -1343,7 +1279,7 @@ int vm_main( struct ajj* a ) {
       } vm_end(NIN)
 
       vm_beg(LEN) {
-        struct ajj_value o = vm_len(a,top(a,1));
+        struct ajj_value o = vm_len(a,top(a,1),RCHECK);
         pop(a,1);
         push(a,o);
       } vm_end(LEN)

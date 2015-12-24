@@ -31,7 +31,7 @@ struct ajj* ajj_create() {
   r->rt = NULL;
   /* initiliaze the upvalue table */
   upvalue_table_init(&(r->builtins),NULL);
-  r->upval_tb = upvalue_table_create(&(r->builtins));
+  upvalue_table_init(&(r->env),&(r->builtins));
   r->list = NULL;
   r->dict = NULL;
   /* lastly load the builtins into the ajj things */
@@ -40,16 +40,14 @@ struct ajj* ajj_create() {
 }
 
 void ajj_destroy( struct ajj* r ) {
-  /* MUST delete upvalue_table at very first */
-  upvalue_table_destroy(r,r->upval_tb,&(r->builtins));
-  /* Destroy the builtins */
+  /* clear the env and builtin table */
+  upvalue_table_clear(r,&(r->env));
   upvalue_table_clear(r,&(r->builtins));
   r->list = NULL;
   r->dict = NULL;
   /* just exit the scope without deleting this scope
    * since it is not a pointer from the gc_slab */
   gc_scope_exit(r,&(r->gc_root));
-
   /* Now destroy rest of the data structure */
   map_destroy(&(r->tmpl_tbl));
   slab_destroy(&(r->upval_slab));
@@ -67,9 +65,10 @@ ajj_cur_gc_scope( struct ajj* a ) {
     return &(a->gc_root);
 }
 
-static
-void* ajj_add_class( struct ajj* a, const struct ajj_class* cls,
-    struct upvalue_table* ut ) {
+struct func_table*
+ajj_add_class( struct ajj* a,
+    struct upvalue_table* ut,
+    const struct ajj_class* cls ) {
   size_t i;
   struct func_table* tb = slab_malloc(&(a->ft_slab));
   struct upvalue* uv;
@@ -99,7 +98,7 @@ void* ajj_add_class( struct ajj* a, const struct ajj_class* cls,
 }
 
 static
-void* ajj_add_val( struct ajj* a , struct upvalue_table* ut,
+void ajj_add_vvalue( struct ajj* a , struct upvalue_table* ut,
     const char* name , int type , va_list vl ) {
   struct string n;
 
@@ -153,34 +152,86 @@ void* ajj_add_val( struct ajj* a , struct upvalue_table* ut,
         uv->gut.val = ajj_value_move(&(a->gc_root),val);
         break;
       }
-    case AJJ_VALUE_CLASS:
-      {
-        const struct ajj_class* cls;
-        cls = va_arg(vl,const struct ajj_class*);
-        return ajj_add_class(a,cls,ut);
-      }
     default:
       UNREACHABLE();
   }
-  return NULL;
 }
 
-void* ajj_add_value( struct ajj* a , struct upvalue_table* ut,
-    const char* name , int type , ... ) {
+void ajj_add_value( struct ajj* a, struct upvalue_table* ut,
+    const char* name, int type, ... ) {
   va_list vl;
   va_start(vl,type);
-  return ajj_add_val(a,ut,name,type,vl);
+  ajj_add_vvalue(a,ut,name,type,vl);
 }
 
-void ajj_env_add_value( struct ajj* a , const char* name ,
-    int type , ... ) {
+const
+struct function*
+ajj_add_function( struct ajj* a, struct upvalue_table* ut,
+    const char* name,
+    ajj_function entry,
+    void* udata ) {
+  struct string n = string_dupc(name);
+  struct upvalue* uv = upvalue_table_add(a,ut,&n,1);
+  uv->type = UPVALUE_FUNCTION;
+  uv->gut.gfunc.f.c_fn.udata = udata;
+  uv->gut.gfunc.f.c_fn.func = entry;
+  uv->gut.gfunc.name = n; /* weak */
+  return &(uv->gut.gfunc);
+}
+
+/* ==================================================
+ * Registeration
+ * ================================================*/
+void ajj_env_add_value( struct ajj* a, const char* name,
+    int type, ... ) {
   va_list vl;
   va_start(vl,type);
-  ajj_add_val(a,a->upval_tb,name,type,vl);
+  ajj_add_vvalue(a,&(a->env),name,type,vl);
 }
 
-int ajj_env_del_value( struct ajj* a , const char* name ) {
-  return upvalue_table_del_c(a,a->upval_tb,name);
+void ajj_env_add_class( struct ajj* a, const struct ajj_class* cls ) {
+  ajj_add_class(a,&(a->env),cls);
+}
+
+void ajj_env_add_function( struct ajj* a, const char* name,
+    ajj_function entry,
+    void* udata ) {
+  ajj_add_function(a,&(a->env),name,entry,udata);
+}
+
+int ajj_env_del( struct ajj* a, const char* name ) {
+  return upvalue_table_del_c(a,&(a->env),name,a->env.prev);
+}
+
+void ajj_upvalue_add_value( struct ajj* a,
+    const char* name , int type, ... ) {
+  va_list vl;
+  assert(a->rt&&a->rt->global);
+  va_start(vl,type);
+  ajj_add_vvalue(a,a->rt->global,name,type,vl);
+}
+
+void ajj_upvalue_add_class( struct ajj* a,
+    const struct ajj_class* cls ) {
+  assert(a->rt&&a->rt->global);
+  ajj_add_class(a,a->rt->global,cls);
+}
+
+void ajj_upvalue_add_function( struct ajj* a,
+    const char* name ,
+    ajj_function entry,
+    void* udata ) {
+  assert( a->rt && a->rt->global );
+  ajj_add_function(a,a->rt->global,name,entry,udata);
+}
+
+void ajj_upvalue_del( struct ajj* a, const char* name ) {
+  assert( a->rt && a->rt->global );
+  upvalue_table_del_c(a,a->rt->global,name,&(a->env));
+}
+
+void ajj_env_clear( struct ajj* a ) {
+  upvalue_table_clear(a,&(a->env));
 }
 
 /* =======================================================
@@ -206,11 +257,7 @@ ajj_io_create_mem( struct ajj* a , size_t cap ) {
 }
 
 void ajj_io_destroy( struct ajj_io* io ) {
-  if(io->tp == AJJ_IO_FILE) {
-    if(io->out.f != stdout &&
-       io->out.f != stdin )
-      fclose(io->out.f);
-  } else {
+  if(io->tp == AJJ_IO_MEM) {
     free(io->out.m.mem);
   }
   free(io);
@@ -220,16 +267,19 @@ static
 int io_mem_vprintf( struct ajj_io* io , const char* fmt , va_list vl ) {
   if( io->out.m.cap == io->out.m.len ) {
     /* resize the memory */
-    io->out.m.mem = mem_grow(io->out.m.mem,sizeof(char),0,&(io->out.m.len));
+    io->out.m.mem = mem_grow(io->out.m.mem,
+        sizeof(char),0,&(io->out.m.len));
   }
   do {
-    int ret = vsnprintf(io->out.m.mem+io->out.m.len,
+    int ret = vsnprintf(
+        io->out.m.mem+io->out.m.len,
         io->out.m.cap-io->out.m.len,
         fmt,
         vl);
     if( ret == io->out.m.cap-io->out.m.len ) {
       /* resize the memory again */
-      io->out.m.mem = mem_grow(io->out.m.mem,sizeof(char),0,&(io->out.m.len));
+      io->out.m.mem = mem_grow(io->out.m.mem,
+          sizeof(char),0,&(io->out.m.len));
     } else {
       if(ret >=0) io->out.m.len += ret;
       return ret;
@@ -238,7 +288,7 @@ int io_mem_vprintf( struct ajj_io* io , const char* fmt , va_list vl ) {
 }
 
 static
-void io_mem_write( struct ajj_io* io , const void* mem , size_t len ) {
+void io_mem_write( struct ajj_io* io ,const void* mem , size_t len ) {
   if( io->out.m.cap < io->out.m.len + len ) {
     io->out.m.mem = mem_grow(io->out.m.mem,
         sizeof(char),
@@ -294,6 +344,267 @@ void ajj_io_flush( struct ajj_io* io ) {
 /* =======================================
  * MISC
  * =====================================*/
+const char*
+ajj_value_get_type_name( const struct ajj_value* val ) {
+  switch(val->type) {
+    case AJJ_VALUE_NONE:
+      return "<None>";
+    case AJJ_VALUE_BOOLEAN:
+      return "<Boolean>";
+    case AJJ_VALUE_NUMBER:
+      return "<Number>";
+    case AJJ_VALUE_STRING:
+      return "<String>";
+    case AJJ_VALUE_OBJECT:
+      return GET_OBJECT_TYPE_NAME(
+          val->value.object)->str;
+  }
+}
+
+/* comparison */
+#define DEFINE_CMP_BODY(L,R,RES,OP,T) \
+  do { \
+    if((L)->type == AJJ_VALUE_STRING || \
+       (R)->type == AJJ_VALUE_STRING ) { \
+      const struct ajj_value* str_val; \
+      const struct ajj_value* nstr_val; \
+      int own; \
+      struct string str; \
+      if((L)->type == AJJ_VALUE_STRING) { \
+        str_val = (L); nstr_val = (R); \
+      } else { \
+        str_val = (R); nstr_val = (L); \
+      } \
+      if( vm_to_string(nstr_val,&str,&own) ) { \
+        ajj_error(a,"Cannot convert type:%s to string!", \
+            ajj_value_get_type_name(nstr_val)); \
+        return -1; \
+      } \
+      *(RES) = string_cmp(ajj_value_to_string(str_val), \
+          &str) OP 0; \
+      if(own) string_destroy(&str); \
+      return 0; \
+    } else { \
+      if((L)->type == AJJ_VALUE_OBJECT && \
+         (R)->type == AJJ_VALUE_OBJECT ) { \
+        const struct object* lo = ajj_value_to_obj(L); \
+        if( lo->fn_tb->slot.T ) { \
+          if(lo->fn_tb->slot.T(a,L,R,RES)) { \
+            return -1; \
+          } else { \
+            return 0; \
+          } \
+        } else { \
+          ajj_error(a,"The object:%s doesn't support operator:%s!", \
+              ajj_value_get_type_name(L),#T); \
+          return -1; \
+        } \
+      } else { \
+        double lval,rval; \
+        if(vm_to_number(L,&lval)) { \
+          ajj_error(a,"Cannot convert type:%s to number!", \
+              ajj_value_get_type_name(L)); \
+          return -1; \
+        } \
+        if(vm_to_number(R,&rval)) { \
+          ajj_error(a,"Cannot convert type:%s to number!", \
+              ajj_value_get_type_name(R)); \
+          return -1; \
+        } \
+        *result = lval OP rval; \
+        return 0; \
+      } \
+    } \
+  } while(0)
+
+int ajj_value_eq( struct ajj* a,
+    const struct ajj_value* l,
+    const struct ajj_value* r,
+    int* result ) {
+  if(l->type == AJJ_VALUE_NONE) {
+    if(r->type == AJJ_VALUE_NONE) {
+      *result = 1; return 0;
+    } else {
+      *result = 0; return 0;
+    }
+  } else {
+    DEFINE_CMP_BODY(l,r,result,==,eq);
+  }
+}
+
+/* DO NOT implement ne as !eq , if we do this all the
+ * __ne__ operator will never be executed . We don' try
+ * to interpret the __ne__ as a less than in mathmatic
+ * world but just a hint for calling a speicific function.
+ */
+int ajj_value_ne( struct ajj* a,
+    const struct ajj_value* l,
+    const struct ajj_value* r,
+    int* result ) {
+  if(l->type == AJJ_VALUE_NONE) {
+    if(r->type == AJJ_VALUE_NONE) {
+      *result = 1; return 0;
+    } else {
+      *result = 0; return 0;
+    }
+  } else {
+    DEFINE_CMP_BODY(l,r,result,!=,ne);
+  }
+}
+
+int ajj_value_lt( struct ajj* a,
+    const struct ajj_value* l,
+    const struct ajj_value* r,
+    int* result ) {
+  if( l->type == AJJ_VALUE_NONE ||
+      r->type == AJJ_VALUE_NONE ) {
+    ajj_error(a,"Cannot use lt(<) between None type!");
+    return -1;
+  } else {
+    DEFINE_CMP_BODY(l,r,result,<,lt);
+  }
+}
+
+int ajj_value_le( struct ajj* a,
+    const struct ajj_value* l,
+    const struct ajj_value* r,
+    int* result ) {
+  if( l->type == AJJ_VALUE_NONE ||
+      r->type == AJJ_VALUE_NONE ) {
+    ajj_error(a,"Cannot use le(<=) between None type!");
+    return -1;
+  } else {
+    DEFINE_CMP_BODY(l,r,result,<=,le);
+  }
+}
+
+int ajj_value_gt( struct ajj* a,
+    const struct ajj_value* l,
+    const struct ajj_value* r,
+    int* result ) {
+  if( l->type == AJJ_VALUE_NONE ||
+      r->type == AJJ_VALUE_NONE ) {
+    ajj_error(a,"Cannot use gt(>) between None type!");
+    return -1;
+  } else {
+    DEFINE_CMP_BODY(l,r,result,>,le);
+  }
+}
+
+int ajj_value_ge( struct ajj* a,
+    const struct ajj_value* l,
+    const struct ajj_value* r,
+    int* result ) {
+  if( l->type == AJJ_VALUE_NONE ||
+      r->type == AJJ_VALUE_NONE ) {
+    ajj_error(a,"Cannot use ge(>=) between None type!");
+    return -1;
+  } else {
+    DEFINE_CMP_BODY(l,r,result,>=,ge);
+  }
+}
+
+#undef DEFINE_CMP_BODY
+
+int ajj_value_in( struct ajj* a,
+    const struct ajj_value* l, /* object */
+    const struct ajj_value* r, /* target */
+    int* result ) {
+  switch(l->type) {
+    case AJJ_VALUE_NONE:
+    case AJJ_VALUE_BOOLEAN:
+    case AJJ_VALUE_NUMBER:
+      ajj_error(a,"None/Boolean/Number doesn't support in operator!");
+      return -1;
+    case AJJ_VALUE_STRING:
+      if(r->type != AJJ_VALUE_STRING) {
+        ajj_error(a,"String can only test in operator with string!");
+        return -1;
+      } else {
+        *result = strstr(ajj_value_to_cstr(l),
+              ajj_value_to_cstr(r)) != NULL;
+        return 0;
+      }
+    case AJJ_VALUE_OBJECT:
+      {
+        const struct object* lr = ajj_value_to_obj(l);
+        if(lr->fn_tb->slot.in) {
+          return lr->fn_tb->slot.in(a,l,r,result);
+        } else {
+          ajj_error(a,"Type:%s doesn't support in operator!",
+              ajj_value_get_type_name(l));
+          return -1;
+        }
+      }
+    default:
+      UNREACHABLE();
+      return -1;
+  }
+}
+
+int ajj_value_len( struct ajj* a,
+    const struct ajj_value* val ,int* result ) {
+  switch(val->type) {
+    case AJJ_VALUE_NONE:
+      *result = 0;
+      return 0;
+    case AJJ_VALUE_NUMBER:
+    case AJJ_VALUE_BOOLEAN:
+      *result = 1;
+      return 0;
+    case AJJ_VALUE_STRING:
+      *result = ajj_value_to_string(val)->len;
+      return 0;
+    case AJJ_VALUE_OBJECT:
+      {
+        const struct object* o = ajj_value_to_obj(val);
+        if(o->fn_tb->slot.len) {
+          *result = o->fn_tb->slot.len(a,val);
+          return 0;
+        } else {
+          ajj_error(a,"Type:%s doesn't support len operator!",
+            ajj_value_get_type_name(val));
+          return -1;
+        }
+      }
+    default:
+      UNREACHABLE();
+      return -1;
+  }
+}
+
+int ajj_value_empty( struct ajj* a,
+    const struct ajj_value* val,
+    int* result ) {
+  switch(val->type) {
+    case AJJ_VALUE_NONE:
+      *result = 1;
+      return 0;
+    case AJJ_VALUE_NUMBER:
+    case AJJ_VALUE_BOOLEAN:
+      *result = 0;
+      return 0;
+    case AJJ_VALUE_STRING:
+      *result = ajj_value_to_string(val)->len == 0 ;
+      return 0;
+    case AJJ_VALUE_OBJECT:
+      {
+        const struct object* o = ajj_value_to_obj(val);
+        if(o->fn_tb->slot.empty) {
+          *result = o->fn_tb->slot.empty(a,val);
+          return 0;
+        } else {
+          ajj_error(a,"Type:%s doesn't support empty operator!",
+            ajj_value_get_type_name(val));
+          return -1;
+        }
+      }
+    default:
+      UNREACHABLE();
+      return -1;
+  }
+}
+
 const char*
 ajj_display( struct ajj* a, const struct ajj_value* val,
     size_t* len , int* own ) {

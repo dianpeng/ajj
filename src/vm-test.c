@@ -162,7 +162,7 @@ void test_expr() {
   }
   {
     struct ajj* a = ajj_create();
-    const char* src = "{% for index,val in xlist(1000) %}" \
+    const char* src = "{% for index,val in xrange(1000) %}" \
                       "{{ ':'+index }}\n"\
                       "{{ False }}\n" \
                       "{% endfor %}";
@@ -198,7 +198,7 @@ void test_expr() {
   {
     struct ajj* a = ajj_create();
     const char* src = "{% set a = [] %}" \
-                      "{% for i,_ in xlist(10000) %}" \
+                      "{% for i,_ in xrange(10000) %}" \
                       "{% do a.append(i) %}" \
                       "{{ i }} " \
                       "{% endfor %}\n"\
@@ -218,7 +218,7 @@ void test_expr() {
   {
     struct ajj* a = ajj_create();
     const char* src = "{% set a = {} %}" \
-                      "{% for i,_ in xlist(10) %}" \
+                      "{% for i,_ in xrange(10) %}" \
                       "{% do a.set('HelloWorld'+i,i) %}" \
                       "{{ 'HelloWorld'+i+'='+i }} " \
                       "{% endfor %}\n" \
@@ -239,7 +239,7 @@ void test_expr() {
 #endif
   {
     struct ajj* a = ajj_create();
-    const char* src = "{% for i in xlist(10) if i%2 ==0 %}" \
+    const char* src = "{% for i in xrange(10) if i%2 ==0 %}" \
                       "{{ i }}\n"\
                       "{% endfor %}";
     struct ajj_object* jinja;
@@ -254,13 +254,14 @@ void test_expr() {
     dump_program(a,src,prg,output);
     assert(!vm_run_jinja(a,jinja,output));
   }
+
 }
 
 void test_loop() {
 #if 0
   {
     struct ajj* a = ajj_create();
-    const char* src = "{% for i in xlist(10) if i % 2 != 0 %}" \
+    const char* src = "{% for i in xrange(10) if i % 2 != 0 %}" \
                       "{{ ('Value='+i,'\n') }}" \
                       "{% if i < 3 %}"\
                       "{{ (i+100,'\n') }}"\
@@ -282,7 +283,7 @@ void test_loop() {
   }
   {
     struct ajj* a = ajj_create();
-    const char* src = "{% for i in xlist(10) %}" \
+    const char* src = "{% for i in xrange(10) %}" \
                       "{% if i % 2 != 0 %}{% continue %}{% endif %}"\
                       "{{ 'Value='+i }}\n" \
                       "{% if i >= 5 %}{% break %}{% endif %}" \
@@ -311,7 +312,7 @@ void test_loop() {
                       "{{ k }} {{ '=' }} {{ v }}\n" \
                       "{{ 'Index:'+idx+ppp+uuv }}\n"\
                       "{% endfor %}" \
-                      "{% for i in xlist(10) %}" \
+                      "{% for i in xrange(10) %}" \
                       "{{ i }}\n" \
                       "{% endfor %}";
     struct ajj_object* jinja;
@@ -329,7 +330,7 @@ void test_loop() {
   {
     struct ajj* a = ajj_create();
     const char* src = "{% set i = 0 %}" \
-                      "{% for x in xlist(99999) %}" \
+                      "{% for x in xrange(99999) %}" \
                       "{% set idx = i+1 %}" \
                       "{% move i=idx %}" \
                       "{{ idx }}\n"\
@@ -348,8 +349,8 @@ void test_loop() {
   }
   { /* nested loop */
     struct ajj* a = ajj_create();
-    const char* src = "{% for a in xlist(10) %}" \
-                        "{% for b in xlist(10) %}" \
+    const char* src = "{% for a in xrange(10) %}" \
+                        "{% for b in xrange(10) %}" \
                           "{{ (a,'+',b,'=',a+b) }}\n" \
                         "{% endfor %}" \
                       "{% endfor %}";
@@ -367,9 +368,9 @@ void test_loop() {
   }
   { /* nested loop with control */
     struct ajj* a = ajj_create();
-    const char* src = "{% for a in xlist(10) %}" \
+    const char* src = "{% for a in xrange(10) %}" \
                       "{% if a % 3 %}{% continue %}{% endif %}" \
-                        "{% for b in xlist(10) %}" \
+                        "{% for b in xrange(10) %}" \
                           "{% if b > 6 %}{% break %} {% endif %}" \
                           "{% if b % 2 %}{% continue %}{% endif %}" \
                           "{{ (a,'+',b,'=',a+b) }}\n" \
@@ -390,9 +391,9 @@ void test_loop() {
   { /* nested loop with some move semantic and local variable */
     struct ajj* a = ajj_create();
     const char* src = "{% set outside = 0 %}" \
-                      "{% for a in xlist(10) %}" \
+                      "{% for a in xrange(10) %}" \
                       "{% set invar = 100 %}" \
-                        "{% for b in xlist(10) %}" \
+                        "{% for b in xrange(10) %}" \
                           "{% set i2 = outside+1 %}" \
                           "{% move outside=i2 %}" \
                           "{{ (a,'+',b,'=',a+b) }}\n" \
@@ -435,7 +436,7 @@ void test_loop() {
   {
     struct ajj* a = ajj_create();
     const char* src = "static const char* STRING_TABLE[] = {\n" \
-                      "{% for i in xlist(256) %}" \
+                      "{% for i in xrange(256) %}" \
                       "{ {{ i }},{{ 0 }} },\n" \
                       "{% endfor %}"\
                       "};";
@@ -455,7 +456,7 @@ void test_loop() {
   {
     struct ajj* a = ajj_create();
     const char* src = "{% set str = 'AbcdEfgHIJK' %}" \
-                      "{% for a in xlist(#str) %}" \
+                      "{% for a in xrange(#str) %}" \
                       "{{ str[a] }}\n" \
                       "{% endfor %}";
     struct ajj_object* jinja;
@@ -496,7 +497,7 @@ void test_branch() {
 #endif
   {
     struct ajj* a = ajj_create();
-    const char* src = "{% set l = xlist(100) %}" \
+    const char* src = "{% set l = xrange(100) %}" \
                       "{% for a in l %}" \
                       "{{ 'List='+#l }}\n" \
                       "{% if a % 10 == 0 %}" \
@@ -609,14 +610,14 @@ void test_macro() {
   do_test("{% macro User(Name,Value) %}" \
             "Name={{Name}};Value={{Value}}\n"\
           "{% endmacro %}"\
-          "{% for a in xlist(100) %}" \
+          "{% for a in xrange(100) %}" \
           "{% do User('YourName',100) %}"
           "{% endfor %}"
           );
   do_test("{% macro User(Name,Value,Def=['123',456],UUVV='345') %}" \
           "Name={{Name}}\nValue={{Value}}\nDef={{Def}}\nUUVV={{UUVV}}\n" \
           "{% endmacro %}" \
-          "{% for a in xlist(2) %}" \
+          "{% for a in xrange(2) %}" \
           "{% do User('Hulu'+a,a) %}\n"\
           "{% endfor %}");
 #endif
@@ -624,7 +625,7 @@ void test_macro() {
       "{% macro Foo(my_foo,bar='123') %}" \
       "ARGNUM:{{__argnum__}}\n" \
       "FUNC:{{__func__}}\n" \
-      "{% for a in xlist(2) %}" \
+      "{% for a in xrange(2) %}" \
       "my_foo:{{a}}={{my_foo}}\n"\
       "{% do Bar(a,bar) %}"\
       "{% endfor %}" \
@@ -632,7 +633,7 @@ void test_macro() {
       "{% macro Bar(arg,def={'abc':[1,2,3,[123123123,23]],'A':'B'}) %}"\
       "ARGNUM:{{__argnum__}}\n" \
       "FUNC:{{__func__}}\n" \
-      "{% for p in xlist(2) %}" \
+      "{% for p in xrange(2) %}" \
       "arg:{{p}}={{arg}}\n" \
       "def={{def}}\n"\
       "{% endfor %}" \
@@ -642,6 +643,7 @@ void test_macro() {
 }
 
 int main() {
-  do_test("{% set a = [1,2,3,4] %}" \
-          "{{ 3 in a }}");
+  do_test("{% set my_dict = {'abc':123} %}"\
+          "{{ my_dict.abc }}\n" \
+          "{{ my_dict['abc'] }}\n");
 }
