@@ -77,7 +77,7 @@ int list_append( struct ajj* a ,
   }
   assert(l->len < l->cap);
   /* move the target value to THIS gc scope */
-  l->entry[l->len++] = ajj_value_move(
+  l->entry[l->len++] = ajj_value_move(a,
       obj->value.object->scp,arg);
 
   RETURN_VOID;
@@ -104,7 +104,7 @@ int list_extend( struct ajj* a ,
      * value to the new scope */
     for( i = 0 ; i < t->len ; ++i ) {
       l->entry[l->len++] =
-        ajj_value_move(obj->value.object->scp,t->entry+i);
+        ajj_value_move(a,obj->value.object->scp,t->entry+i);
     }
 
     RETURN_VOID;
@@ -256,7 +256,7 @@ void list_attr_set( struct ajj* a,
   else {
     struct list* l = LIST(obj);
     if( (size_t)i < l->len ) {
-      l->entry[i] = ajj_value_move(
+      l->entry[i] = ajj_value_move(a,
           obj->value.object->scp,
           val);
     }
@@ -271,6 +271,19 @@ void list_attr_push( struct ajj* a,
   struct ajj_value ret;
   assert( IS_A(obj,LIST_TYPE) );
   CHECK(list_append(a,obj,&arg,1,&ret) == AJJ_EXEC_OK);
+}
+
+static
+void list_move( struct ajj* a, struct ajj_value* obj ) {
+  size_t i;
+  struct list* l;
+
+  assert( IS_A(obj,LIST_TYPE) );
+  l = LIST(obj);
+  for( i = 0 ; i < l->len ; ++i ) {
+    ajj_value_move(a,obj->value.object->scp,
+        l->entry + i );
+  }
 }
 
 static
@@ -392,6 +405,7 @@ static struct ajj_class LIST_CLASS  = {
     list_attr_get,
     list_attr_set,
     list_attr_push,
+    list_move,
     list_display,
     list_in,
     list_eq,
@@ -531,7 +545,7 @@ int dict_update( struct ajj* a ,
     struct map* m = DICT(obj);
     struct ajj_value* val;
     if( (val = map_find(m,&key)) ) {
-      *val = ajj_value_move(obj->value.object->scp,arg+1);
+      *val = ajj_value_move(a,obj->value.object->scp,arg+1);
       *ret = AJJ_TRUE;
     } else {
       *ret = AJJ_FALSE;
@@ -663,14 +677,29 @@ dict_attr_get( struct ajj* a ,
 }
 
 static
-void
-dict_attr_set( struct ajj* a,
+void dict_attr_set( struct ajj* a,
     struct ajj_value* obj,
     const struct ajj_value* key,
     const struct ajj_value* val ) {
   struct ajj_value ret;
   struct ajj_value arg[2] = { *key , *val };
   CHECK(dict_set(a,obj,arg,2,&ret)==AJJ_EXEC_OK);
+}
+
+static
+void dict_move( struct ajj* a, struct ajj_value* obj ) {
+  int itr;
+  struct map* d;
+  assert( IS_A(obj,DICT_TYPE) );
+  d = DICT(obj);
+  itr = map_iter_start(d);
+  while( map_iter_has(d,itr) ) {
+    struct map_pair p =
+      map_iter_deref(d,itr);
+    ajj_value_move(a,obj->value.object->scp,
+        (struct ajj_value*)p.val);
+    itr = map_iter_move(d,itr);
+  }
 }
 
 static
@@ -826,6 +855,7 @@ static struct ajj_class DICT_CLASS = {
     dict_attr_get,
     dict_attr_set,
     NULL,
+    dict_move,
     dict_display,
     dict_in,
     dict_eq,
@@ -944,10 +974,12 @@ const char*
 xrange_display( struct ajj* a ,
     const struct ajj_value* val,
     size_t* len ) {
+  char buf[256];
   UNUSE_ARG(a);
   assert( IS_A(val,XRANGE_TYPE) );
-  *len = 1;
-  return "";
+  *len = (size_t)sprintf(buf,"xrange(%zu)",
+      XRANGE(val)->len);
+  return strdup(buf);
 }
 
 /* comparison */
@@ -992,6 +1024,7 @@ struct ajj_class XRANGE_CLASS = {
     xrange_iter_get_val,
     xrange_length,
     xrange_empty,
+    NULL,
     NULL,
     NULL,
     NULL,
@@ -1040,7 +1073,7 @@ int loop_ctor( struct ajj* a,
   else {
     int len;
     if( vm_to_integer(arg,&len) ) {
-      FAIL(a,,"__loop__::__ctpr__ can only convert first argument:%s "
+      FAIL(a,"__loop__::__ctpr__ can only convert first argument:%s "
           "to integer!",ajj_value_get_type_name(arg));
     } else {
       struct loop* lp = malloc(sizeof(*lp));
@@ -1059,58 +1092,107 @@ int loop_ctor( struct ajj* a,
 }
 
 static
-int loop_dtor( struct ajj* a,
+void loop_dtor( struct ajj* a,
     void* udata,
+    void* object ) {
+  UNUSE_ARG(a);
+  UNUSE_ARG(udata);
+  free(object);
+}
 
+static
+struct ajj_value loop_attr_get( struct ajj* a,
+    const struct ajj_value* obj,
+    const struct ajj_value* val ) {
+  struct string key;
+  int own;
+  if( vm_to_string(val,&key,&own) ) {
+    return AJJ_NONE;
+  } else {
+    struct loop* l = LOOP(obj);
+    if( string_eqc(&key,"index") ) {
+      return ajj_value_number(l->index);
+    } else if( string_eqc(&key,"index0") ) {
+      return ajj_value_number(l->index0);
+    } else if( string_eqc(&key,"revindex") ) {
+      return ajj_value_number(l->revindex);
+    } else if( string_eqc(&key,"revindex0") ) {
+      return ajj_value_number(l->revindex0);
+    } else if( string_eqc(&key,"first") ) {
+      return ajj_value_number(l->first);
+    } else if( string_eqc(&key,"last") ) {
+      return ajj_value_number(l->last);
+    } else if( string_eqc(&key,"length") ) {
+      return ajj_value_number(l->length);
+    } else {
+      return AJJ_NONE;
+    }
+  }
+}
 
+const char*
+loop_display( struct ajj* a, const struct ajj_value* obj,
+    size_t* len ) {
+  char buf[1024];
+  struct loop* l;
+  assert(IS_A(obj,LOOP_TYPE));
+  l = LOOP(obj);
+  *len = (size_t)sprintf(buf,"loop(index:%zu;index0:%zu;revindex:%zu;"
+      "revindex0:%zu;first:%d;last:%d;length:%zu)",
+      l->index,
+      l->index0,
+      l->revindex,
+      l->revindex0,
+      l->first,
+      l->last,
+      l->length);
+  return strdup(buf);
+}
 
+void builtin_loop_move( struct ajj_value* loop ) {
+  struct loop* l;
+  assert( IS_A(loop,LOOP_TYPE) );
+  l = LOOP(loop);
+  ++(l->index);
+  ++(l->index0);
+  --(l->revindex);
+  --(l->revindex0);
+  l->first = 0;
+  if( l->index == l->length ) {
+    l->last = 1;
+  }
+}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+static
+struct ajj_class LOOP_CLASS = {
+  "__loop__",
+  loop_ctor,
+  loop_dtor,
+  NULL,
+  0,
+  {
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    loop_attr_get,
+    NULL,
+    NULL,
+    NULL,
+    loop_display,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL
+  },
+  NULL
+};
 
 void ajj_builtin_load( struct ajj* a ) {
   /* list */
@@ -1122,4 +1204,7 @@ void ajj_builtin_load( struct ajj* a ) {
   /* xrange */
   ajj_add_class(a,&(a->builtins),
       &XRANGE_CLASS);
+  /* loop */
+  a->loop = ajj_add_class(a,&(a->builtins),
+      &LOOP_CLASS);
 }

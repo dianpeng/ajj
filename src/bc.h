@@ -33,6 +33,7 @@ extern struct string FUNC;
 extern struct string SUPER;
 extern struct string SELF;
 extern struct string ITER;
+extern struct string LOOP;
 
 /* Instructions
  * All the instruction itself only occupies one byte, but for alignment, each
@@ -72,6 +73,7 @@ extern struct string ITER;
   X(VM_IN,0,"in") \
   X(VM_NIN,0,"notin") \
   X(VM_LEN,0,"len") \
+  X(VM_CAT,0,"cat") \
   X(VM_EQ,0,"eq") \
   X(VM_NE,0,"ne") \
   X(VM_LT,0,"lt") \
@@ -117,6 +119,7 @@ extern struct string ITER;
   X(VM_ITER_HAS,0,"iterhas") \
   X(VM_ITER_MOVE,0,"itermove") \
   X(VM_ITER_DEREF,1,"iterderef") \
+  X(VM_ITER_EXIT,0,"iterexit") \
   X(VM_ENTER,0,"enter") \
   X(VM_EXIT,0,"exit") \
   X(VM_INCLUDE,2,"include") \

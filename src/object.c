@@ -77,13 +77,11 @@ ajj_object_create_list( struct ajj* a , struct gc_scope* scp ) {
   void* udata;
   int tp;
   assert(a->list);
-
-  if(a->list->ctor( a,
+  CHECK(a->list->ctor( a,
       a->list->udata,
       NULL,0,
       &udata,
-      &tp) == AJJ_EXEC_FAIL)
-    return NULL;
+      &tp) == AJJ_EXEC_OK);
   return ajj_object_create_obj(a,scp,
       a->list,udata,tp);
 }
@@ -111,16 +109,34 @@ list_index( struct ajj* a, struct ajj_object* obj,
 }
 
 struct ajj_object*
+ajj_object_create_loop( struct ajj* a, struct gc_scope* scp ,
+    size_t len) {
+  void* udata;
+  int tp;
+  struct ajj_value arg;
+  assert(a->loop);
+
+  arg = ajj_value_number(len);
+
+  CHECK(a->loop->ctor(a,
+        a->loop->udata,
+        &arg,
+        1,
+        &udata,
+        &tp) == AJJ_EXEC_OK);
+  return ajj_object_create_obj(a,scp,a->loop,udata,tp);
+}
+
+struct ajj_object*
 ajj_object_create_dict( struct ajj* a , struct gc_scope* scp ) {
   void* udata;
   int tp;
   assert(a->dict);
-  if(a->dict->ctor(a,
+  CHECK(a->dict->ctor(a,
         a->dict->udata,
         NULL,0,
         &udata,
-        &tp) == AJJ_EXEC_FAIL)
-    return NULL;
+        &tp) == AJJ_EXEC_OK);
   return ajj_object_create_obj(a,scp,a->dict,udata,tp);
 }
 
@@ -157,24 +173,34 @@ ajj_value_delete_string( struct ajj* a, struct ajj_value* str ) {
 }
 
 struct ajj_object*
-ajj_object_move( struct gc_scope* scp , struct ajj_object* obj ) {
+ajj_object_move( struct ajj* a,
+    struct gc_scope* scp , struct ajj_object* obj ) {
   assert(obj->scp);
-
   /* only do move when we fonud out that the target scope has smaller
    * scp_id value since this means we have less lifecycle */
   if( obj->scp->scp_id > scp->scp_id ) {
     LREMOVE(obj);
     LINSERT(obj,&(scp->gc_tail));
     obj->scp = scp;
+    /* Now propogate the move operation into the object's internal
+     * states */
+    if(obj->tp != AJJ_VALUE_STRING) {
+      if(obj->val.obj.fn_tb->slot.move) {
+        struct ajj_value objv = ajj_value_assign(obj);
+        /* Notify the object to move all its children object */
+        obj->val.obj.fn_tb->slot.move(a,&objv);
+      }
+    }
   }
 }
 
 struct ajj_value
-ajj_value_move( struct gc_scope* scp, const struct ajj_value* val ) {
+ajj_value_move( struct ajj* a,
+    struct gc_scope* scp, const struct ajj_value* val ) {
   if(AJJ_IS_PRIMITIVE(val)) {
     return *val;
   } else {
-    ajj_object_move(scp,val->value.object);
+    ajj_object_move(a,scp,val->value.object);
     return *val;
   }
 }

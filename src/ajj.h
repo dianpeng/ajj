@@ -67,6 +67,8 @@ struct ajj_slot {
   /* attributes push */
   void (*attr_push)( struct ajj* , struct ajj_value* ,
       const struct ajj_value* v );
+  /* move */
+  void (*move) ( struct ajj* , struct ajj_value* obj );
   /* print */
   const char* (*display)(struct ajj*, const struct ajj_value*,size_t*);
   /* comparison.

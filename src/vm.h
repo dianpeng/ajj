@@ -2,6 +2,7 @@
 #define _VM_H_
 #include "ajj.h"
 #include "util.h"
+#include "parse.h" /* for MAX_LOOP_CTRL_SIZE */
 #include <stdio.h>
 
 struct ajj;
@@ -63,6 +64,10 @@ struct func_frame {
                            * to the corresponding caller object */
   int par_cnt : 31;  /* parameter count when calling this function */
   int method  : 1 ;  /* indicate whether this call is a method call or not */
+
+  /* Optimization for LOOP object */
+  struct ajj_object* loops[ MAX_LOOP_CTRL_SIZE ];
+  size_t cur_loops;
 };
 
 
@@ -78,11 +83,14 @@ struct runtime {
   int cur_call_stk; /* Current stk position */
   struct ajj_value val_stk[AJJ_MAX_VALUE_STACK_SIZE]; /* current value stack size */
   struct gc_scope* cur_gc; /* current gc scope */
+  struct gc_scope* root_gc;/* root gc scope for *this* jinja template */
   struct ajj_io* output;
   struct upvalue_table* global; /* Per template based global value. This make
                                  * sure each template is executed in its own
                                  * global variable states */
 };
+
+#define runtime_root_gc(rt) ((rt)->root_gc)
 
 static inline
 void program_init( struct program* prg ) {

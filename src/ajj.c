@@ -27,13 +27,16 @@ struct ajj* ajj_create() {
   slab_init(&(r->gc_slab),
       GC_SLAB_SIZE,sizeof(struct gc_scope));
   map_create(&(r->tmpl_tbl),sizeof(struct ajj_object*),32);
-  gc_init(&(r->gc_root));
+  gc_root_init(&(r->gc_root));
   r->rt = NULL;
   /* initiliaze the upvalue table */
   upvalue_table_init(&(r->builtins),NULL);
   upvalue_table_init(&(r->env),&(r->builtins));
   r->list = NULL;
   r->dict = NULL;
+  r->loop = NULL;
+
+  /* NOTE: */
   /* lastly load the builtins into the ajj things */
   ajj_builtin_load(r);
   return r;
@@ -68,7 +71,7 @@ ajj_cur_gc_scope( struct ajj* a ) {
 struct func_table*
 ajj_add_class( struct ajj* a,
     struct upvalue_table* ut,
-    const struct ajj_class* cls ) {
+    const struct ajj_class* cls) {
   size_t i;
   struct func_table* tb = slab_malloc(&(a->ft_slab));
   struct upvalue* uv;
@@ -80,7 +83,7 @@ ajj_add_class( struct ajj* a,
       &(cls->slot),cls->udata,
       &n,0);
 
-  uv = upvalue_table_overwrite(a,ut,&n,1);
+  uv = upvalue_table_overwrite(a,ut,&n,1,0);
   uv->type = UPVALUE_FUNCTION;
   uv->gut.gfunc.tp = OBJECT_CTOR;
   uv->gut.gfunc.f.obj_ctor = tb; /* owned by this slot, it will be deleted
@@ -99,7 +102,10 @@ ajj_add_class( struct ajj* a,
 
 static
 void ajj_add_vvalue( struct ajj* a , struct upvalue_table* ut,
-    const char* name , int type , va_list vl ) {
+    struct gc_scope* scp,
+    const char* name ,
+    int type ,
+    va_list vl ) {
   struct string n;
 
   switch(type) {
@@ -108,7 +114,7 @@ void ajj_add_vvalue( struct ajj* a , struct upvalue_table* ut,
         double val = va_arg(vl,double);
         struct upvalue* uv;
         n = string_dupc(name);
-        uv = upvalue_table_overwrite(a,ut,&n,1);
+        uv = upvalue_table_overwrite(a,ut,&n,1,1);
         uv->type = UPVALUE_VALUE;
         uv->gut.val = ajj_value_number(val);
         break;
@@ -118,7 +124,7 @@ void ajj_add_vvalue( struct ajj* a , struct upvalue_table* ut,
         int val = va_arg(vl,int);
         struct upvalue* uv;
         n = string_dupc(name);
-        uv = upvalue_table_overwrite(a,ut,&n,1);
+        uv = upvalue_table_overwrite(a,ut,&n,1,1);
         uv->type = UPVALUE_VALUE;
         uv->gut.val = ajj_value_boolean(val);
         break;
@@ -127,7 +133,7 @@ void ajj_add_vvalue( struct ajj* a , struct upvalue_table* ut,
       {
         struct upvalue* uv;
         n = string_dupc(name);
-        uv = upvalue_table_overwrite(a,ut,&n,1);
+        uv = upvalue_table_overwrite(a,ut,&n,1,1);
         uv->type = UPVALUE_VALUE;
         uv->gut.val = AJJ_NONE;
         break;
@@ -137,10 +143,10 @@ void ajj_add_vvalue( struct ajj* a , struct upvalue_table* ut,
         struct upvalue* uv;
         const char* str = va_arg(vl,const char*);
         n = string_dupc(name);
-        uv = upvalue_table_overwrite(a,ut,&n,1);
+        uv = upvalue_table_overwrite(a,ut,&n,1,1);
         uv->gut.val = ajj_value_assign(
             ajj_object_create_string(a,
-              &(a->gc_root),str,strlen(str),0));
+              scp,str,strlen(str),0));
         break;
       }
     case AJJ_VALUE_OBJECT:
@@ -148,20 +154,23 @@ void ajj_add_vvalue( struct ajj* a , struct upvalue_table* ut,
         struct upvalue* uv;
         struct ajj_value* val = va_arg(vl,struct ajj_value*);
         n = string_dupc(name);
-        uv = upvalue_table_overwrite(a,ut,&n,1);
-        uv->gut.val = ajj_value_move(&(a->gc_root),val);
+        uv = upvalue_table_overwrite(a,ut,&n,1,1);
+        uv->gut.val = ajj_value_move(a,scp,val);
         break;
       }
     default:
       UNREACHABLE();
+      break;
   }
 }
 
-void ajj_add_value( struct ajj* a, struct upvalue_table* ut,
-    const char* name, int type, ... ) {
+void ajj_add_value( struct ajj* a,
+    struct upvalue_table* ut,
+    const char* name,
+    int type, ... ) {
   va_list vl;
   va_start(vl,type);
-  ajj_add_vvalue(a,ut,name,type,vl);
+  ajj_add_vvalue(a,ut,&(a->gc_root),name,type,vl);
 }
 
 const
@@ -171,7 +180,7 @@ ajj_add_function( struct ajj* a, struct upvalue_table* ut,
     ajj_function entry,
     void* udata ) {
   struct string n = string_dupc(name);
-  struct upvalue* uv = upvalue_table_add(a,ut,&n,1);
+  struct upvalue* uv = upvalue_table_overwrite(a,ut,&n,1,0);
   uv->type = UPVALUE_FUNCTION;
   uv->gut.gfunc.f.c_fn.udata = udata;
   uv->gut.gfunc.f.c_fn.func = entry;
@@ -186,7 +195,7 @@ void ajj_env_add_value( struct ajj* a, const char* name,
     int type, ... ) {
   va_list vl;
   va_start(vl,type);
-  ajj_add_vvalue(a,&(a->env),name,type,vl);
+  ajj_add_vvalue(a,&(a->env),&(a->gc_root),name,type,vl);
 }
 
 void ajj_env_add_class( struct ajj* a, const struct ajj_class* cls ) {
@@ -203,12 +212,71 @@ int ajj_env_del( struct ajj* a, const char* name ) {
   return upvalue_table_del_c(a,&(a->env),name,a->env.prev);
 }
 
+/* upvalue */
+
+/* This function uses upvalue_table_add instead of upvalue_table_overwrite
+ * because it is supposed to be used by user when they are in the VM
+ * execution ! */
 void ajj_upvalue_add_value( struct ajj* a,
     const char* name , int type, ... ) {
   va_list vl;
+  struct string n;
   assert(a->rt&&a->rt->global);
   va_start(vl,type);
-  ajj_add_vvalue(a,a->rt->global,name,type,vl);
+  switch(type) {
+    case AJJ_VALUE_NUMBER:
+      {
+        double val = va_arg(vl,double);
+        struct upvalue* uv;
+        n = string_dupc(name);
+        uv = upvalue_table_add(a,a->rt->global,&n,1,0,0);
+        uv->type = UPVALUE_VALUE;
+        uv->gut.val = ajj_value_number(val);
+        break;
+      }
+    case AJJ_VALUE_BOOLEAN:
+      {
+        int val = va_arg(vl,int);
+        struct upvalue* uv;
+        n = string_dupc(name);
+        uv = upvalue_table_add(a,a->rt->global,&n,1,0,0);
+        uv->type = UPVALUE_VALUE;
+        uv->gut.val = ajj_value_boolean(val);
+        break;
+      }
+    case AJJ_VALUE_NONE:
+      {
+        struct upvalue* uv;
+        n = string_dupc(name);
+        uv = upvalue_table_add(a,a->rt->global,&n,1,0,0);
+        uv->type = UPVALUE_VALUE;
+        uv->gut.val = AJJ_NONE;
+        break;
+      }
+    case AJJ_VALUE_STRING:
+      {
+        struct upvalue* uv;
+        const char* str = va_arg(vl,const char*);
+        n = string_dupc(name);
+        uv = upvalue_table_add(a,a->rt->global,&n,1,0,0);
+        uv->gut.val = ajj_value_assign(
+            ajj_object_create_string(a,
+              a->rt->cur_gc,str,strlen(str),0));
+        break;
+      }
+    case AJJ_VALUE_OBJECT:
+      {
+        struct upvalue* uv;
+        struct ajj_value* val = va_arg(vl,struct ajj_value*);
+        n = string_dupc(name);
+        uv = upvalue_table_add(a,a->rt->global,&n,1,0,0);
+        uv->gut.val = ajj_value_move(a,a->rt->cur_gc,val);
+        break;
+      }
+    default:
+      UNREACHABLE();
+      break;
+  }
 }
 
 void ajj_upvalue_add_class( struct ajj* a,
@@ -237,12 +305,10 @@ void ajj_env_clear( struct ajj* a ) {
 /* =======================================================
  * IO
  * =====================================================*/
-
 struct ajj_io*
 ajj_io_create_file( struct ajj* a , FILE* f ) {
   struct ajj_io* r = malloc(sizeof(*r));
   UNUSE_ARG(a);
-
   ajj_io_init_file(r,f);
   return r;
 }
@@ -251,7 +317,6 @@ struct ajj_io*
 ajj_io_create_mem( struct ajj* a , size_t cap ) {
   struct ajj_io* r = malloc(sizeof(*r));
   UNUSE_ARG(a);
-
   ajj_io_init_mem(r,cap);
   return r;
 }
@@ -433,8 +498,8 @@ int ajj_value_eq( struct ajj* a,
 }
 
 /* DO NOT implement ne as !eq , if we do this all the
- * __ne__ operator will never be executed . We don' try
- * to interpret the __ne__ as a less than in mathmatic
+ * ne operator will never be executed . We don' try
+ * to interpret the ne as a less than in mathmatic
  * world but just a hint for calling a speicific function.
  */
 int ajj_value_ne( struct ajj* a,

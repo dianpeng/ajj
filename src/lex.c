@@ -59,7 +59,7 @@ token_id tk_lex_num( struct tokenizer* tk ) {
   errno = 0;
   tk->num_lexeme = strtod(tk->pos+tk->src,&pend);
   if( errno != 0 ) {
-    RETURN(TK_UNKNOWN,0);
+    RETURN(TK_UNKNOWN_NUMBER,0);
   } else {
     RETURN(TK_NUMBER,pend-(tk->pos+tk->src));
   }
@@ -473,6 +473,8 @@ int tk_lex_script( struct tokenizer* tk ) {
         RETURN(TK_QUESTION,1);
       case '#':
         RETURN(TK_LEN,1);
+      case '~':
+        RETURN(TK_CAT,1);
       case '\'':
         return tk_lex_str(tk);
       case '0':case '1':case '2':case '3':case '4':

@@ -254,6 +254,9 @@ void test_expr() {
     dump_program(a,src,prg,output);
     assert(!vm_run_jinja(a,jinja,output));
   }
+  do_test("{% set my_dict = {'abc':123} %}"\
+          "{{ my_dict.abc }}\n" \
+          "{{ my_dict['abc'] }}\n");
 
 }
 
@@ -471,6 +474,10 @@ void test_loop() {
     dump_program(a,src,prg,output);
     assert(!vm_run_jinja(a,jinja,output));
   }
+  do_test("{% for i in xrange(100) %}" \
+          "{{ loop }}\n" \
+          "i={{i}}\n" \
+          "{% endfor %}");
 }
 
 void test_branch() {
@@ -643,7 +650,7 @@ void test_macro() {
 }
 
 int main() {
-  do_test("{% set my_dict = {'abc':123} %}"\
-          "{{ my_dict.abc }}\n" \
-          "{{ my_dict['abc'] }}\n");
+  do_test("{{ 'a' ~ 'b' ~ 'c' ~123 ~ False }}\n"\
+          "{{ [1,2,3,4] ~ 'uvc' }}\n");
 }
+

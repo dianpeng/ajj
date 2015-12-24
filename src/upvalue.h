@@ -34,7 +34,9 @@ struct upvalue {
     struct ajj_value val;    /* value , could contain whatever */
     struct function gfunc;   /* function, global executable entry */
   } gut;
-  int type;
+  int type : 31;
+  int fixed: 1; /* indicate whether this upvalue is not
+                 * chainable. */
 };
 
 struct upvalue_table {
@@ -80,23 +82,29 @@ struct upvalue*
 upvalue_table_add( struct ajj* a ,
     struct upvalue_table* ,
     const struct string* ,
-    int own );
+    int own ,
+    int force,
+    int fixed );
 
 struct upvalue*
 upvalue_table_add_c( struct ajj* a,
     struct upvalue_table* ,
-    const char* key );
+    const char* key ,
+    int force,
+    int fixed );
 
 struct upvalue*
 upvalue_table_overwrite( struct ajj* a,
     struct upvalue_table* ,
     const struct string* ,
-    int own );
+    int own ,
+    int fixed );
 
 struct upvalue*
 upvalue_table_overwrite_c( struct ajj* a,
     struct upvalue_table* ,
-    const char* key );
+    const char* key ,
+    int fixed );
 
 /* delete a upvalue inside of the table chain */
 int

@@ -4,8 +4,6 @@
 struct ajj_object;
 struct ajj;
 
-/* A very simple peephole optimizer */
 int optimize( struct ajj* a , struct ajj_object* jinja );
-
 
 #endif /* _OPT_H_ */

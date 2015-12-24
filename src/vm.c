@@ -6,6 +6,7 @@
 #include "bc.h"
 #include "lex.h"
 #include "upvalue.h"
+#include "builtin.h"
 
 #include <limits.h>
 #include <math.h>
@@ -13,6 +14,19 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
+
+/* =============================
+ * Forward
+ * ===========================*/
+static
+void set_upvalue( struct ajj* a, const struct string* name,
+    const struct ajj_value* value ,
+    int force ,
+    int fixed ,
+    int* fail );
+
+static
+void del_upvalue( struct ajj* a, const struct string* name );
 
 #define cur_frame(a) (&(a->rt->call_stk[a->rt->cur_call_stk-1]))
 #define cur_function(a) (cur_frame(a)->entry)
@@ -84,9 +98,8 @@ void report_error( struct ajj* a , const char* fmt , ... ) {
   b += unwind_stack(a,b);
 }
 
-/* This function is helped to build our error with the function
- * call error , only used when we got an error from a function
- * call not inside of our VM */
+/* This function is used to rewrite user throwned error
+ * into our own error stack plus stack unwind information */
 static
 void rewrite_error( struct ajj* a ) {
   char msg[ERROR_BUFFER_SIZE];
@@ -140,7 +153,8 @@ struct runtime* runtime_create( struct ajj* a , struct ajj_io* output ) {
   struct runtime* rt = malloc(sizeof(*rt));
   rt->cur_obj = NULL;
   rt->cur_call_stk = 0;
-  rt->cur_gc = &(a->gc_root);
+  rt->cur_gc = rt->root_gc = 
+    gc_scope_create(a,&(a->gc_root));
   rt->output = output;
   rt->global = upvalue_table_create(&(a->env));
   return rt;
@@ -149,13 +163,59 @@ struct runtime* runtime_create( struct ajj* a , struct ajj_io* output ) {
 static
 void runtime_destroy( struct ajj* a , struct runtime* rt ) {
   struct gc_scope* c = rt->cur_gc;
-  while( c != &(a->gc_root) ) {
+  const struct gc_scope* end = &(a->gc_root);
+  while(c != end ) {
     struct gc_scope* n = c->parent;
     gc_scope_destroy(a,c);
     c = n;
   }
   upvalue_table_destroy(a,rt->global,&(a->env));
   free(rt);
+}
+
+static
+void enter_loop( struct ajj* a, size_t len ) {
+  struct ajj_object* lobj;
+  struct func_frame* fr = cur_frame(a);
+  int fail;
+  if(len == 0) {
+    /* We don't have a length operator for this object,
+     * so we just insert a NULL pointer at the current
+     * position */
+    fr->loops[fr->cur_loops++] = NULL;
+  } else {
+    struct ajj_value lval;
+    lobj = ajj_object_create_loop(a,
+        a->rt->cur_gc,
+        len);
+    lval = ajj_value_assign(lobj);
+    assert(fr->cur_loops < MAX_LOOP_CTRL_SIZE );
+    set_upvalue(a,&LOOP,&lval,1,1,&fail);
+    assert(!fail);
+    fr->loops[fr->cur_loops++] = lobj;
+  }
+}
+
+static
+void exit_loop( struct ajj* a ) {
+  struct func_frame* fr = cur_frame(a);
+  struct ajj_object* lobj = fr->loops[fr->cur_loops-1];
+  assert(fr->cur_loops >0);
+  --fr->cur_loops;
+  if(lobj)
+    del_upvalue(a,&LOOP);
+}
+
+static
+void move_loop( struct ajj* a ) {
+  struct func_frame* fr = cur_frame(a);
+  struct ajj_value l;
+  struct ajj_object* lobj;
+  assert(fr->cur_loops >0);
+  if( (lobj = fr->loops[fr->cur_loops-1]) ) {
+    l = ajj_value_assign(fr->loops[fr->cur_loops-1]);
+    builtin_loop_move(&l);
+  }
 }
 
 /* =============================
@@ -214,19 +274,27 @@ int instr_2nd_arg( struct ajj* a ) {
 
 static
 void set_upvalue( struct ajj* a, const struct string* name,
-    const struct ajj_value* value ) {
+    const struct ajj_value* value ,
+    int force ,
+    int fixed ,
+    int* fail ) {
   struct upvalue* uv = upvalue_table_add(
-      a,a->rt->global,name,0);
+      a,a->rt->global,name,0,force,fixed);
+  if(uv == NULL) {
+    *fail = 1;
+    report_error(a,"Cannot setup upvalue with name:%s,possibly "
+        "collide with builtin variable name!",
+        name->str);
+    return;
+  }
+  *fail = 0;
   uv->type = UPVALUE_VALUE;
-  uv->gut.val = *value;
-}
-
-static
-void overwrite_upvalue( struct ajj* a , const struct string* name,
-    const struct ajj_value* value ) {
-  struct upvalue* uv = upvalue_table_overwrite(a,
-      a->rt->global,name,0);
-  uv->type = UPVALUE_VALUE;
+  /* We don't need to move the value from its scope
+   * to the root scope of this jinja template. The
+   * reason is because this function is always called
+   * in a scope based , so this upvalue will always be
+   * deleted when it goes out of the scope so the upvalue
+   * will never outlive the lifecycle of this *value* */
   uv->gut.val = *value;
 }
 
@@ -250,7 +318,6 @@ void del_upvalue( struct ajj* a, const struct string* name ) {
 /* =============================
  * Type conversions
  * ===========================*/
-
 static
 int str_to_number( const char* str , double* val ) {
   char* pend;
@@ -380,6 +447,24 @@ int vm_to_boolean( const struct ajj_value* val ) {
 /* =============================
  * Specific instruction handler
  * ============================*/
+static
+struct ajj_value vm_cat( struct ajj* a,
+    const struct ajj_value* l,
+    const struct ajj_value* r ) {
+  int own_l , own_r;
+  struct string ls ;
+  struct string rs ;
+  struct string str;
+  ls.str = ajj_display(a,l,&(ls.len),&own_l);
+  rs.str = ajj_display(a,r,&(rs.len),&own_r);
+  str = string_concate(&ls,&rs);
+  if(own_l) string_destroy(&ls);
+  if(own_r) string_destroy(&rs);
+  return ajj_value_assign(
+      ajj_object_create_string(a,a->rt->cur_gc,
+        str.str,str.len,1));
+}
+
 static
 struct ajj_value vm_add(struct ajj* a,
     const struct ajj_value* l,
@@ -578,13 +663,16 @@ int call_ctor( struct ajj* a , struct func_table* ft,
 
 static
 void set_func_upvalue( struct ajj* a ) {
+  int fail;
   struct func_frame* fr = cur_frame(a);
   struct ajj_value argnum = ajj_value_number(fr->par_cnt);
   struct ajj_value fname = ajj_value_assign(
       ajj_object_create_const_string(a,
         a->rt->cur_gc,&(fr->name)));
-  overwrite_upvalue(a,&ARGNUM,&argnum);
-  overwrite_upvalue(a,&FUNC,&fname);
+  set_upvalue(a,&ARGNUM,&argnum,1,1,&fail);
+  assert(!fail);
+  set_upvalue(a,&FUNC,&fname,1,1,&fail);
+  assert(!fail);
 }
 
 /* call */
@@ -725,7 +813,7 @@ void vm_lift( struct ajj* a , int pos , int level ) {
       scp = scp->parent;
       assert( scp != NULL );
     }
-    ajj_object_move(scp,val->value.object);
+    ajj_object_move(a,scp,val->value.object);
   }
 }
 
@@ -845,7 +933,7 @@ void vm_exit( struct ajj* a , int loops ) {
 }
 
 static
-void setup_env( struct ajj* a , int cnt ) {
+void setup_env( struct ajj* a , int cnt , int* fail ) {
   assert(cnt>0);
   a->rt->global = upvalue_table_create( a->rt->global );
   for( ; cnt > 0 ; --cnt ) {
@@ -864,7 +952,7 @@ void setup_env( struct ajj* a , int cnt ) {
         continue;
     }
     /* set up the value thing */
-    set_upvalue(a,k,val);
+    set_upvalue(a,k,val,1,0,fail);
   }
 }
 
@@ -916,9 +1004,11 @@ void vm_include( struct ajj* a , int type,
   }
   if( type == INCLUDE_UPVALUE ) {
     if(cnt>0)
-      setup_env(a,cnt);
+      setup_env(a,cnt,fail);
+    if(*fail) goto fail;
   } else if( type == INCLUDE_JSON ) {
     setup_json_env(a,cnt,fail);
+    if(*fail) goto fail;
   }
   rt = a->rt;
   if( ajj_render(a,fc,ajj_value_to_cstr(
@@ -1016,8 +1106,6 @@ resolve_free_function( struct ajj* a, const struct string* name ,
   return NULL;
 }
 
-/* helpers */
-
 /* method field is used to indicate whether this function call
  * has an object put on the stack. It will ONLY emitted by ATTR_CALL
  * instructions which will have such object on the stack */
@@ -1047,6 +1135,7 @@ void enter_function( struct ajj* a , const struct function* f,
     fr->par_cnt = par_cnt;
     fr->method = method;
     fr->obj = obj;
+    fr->cur_loops = 0;
     /* only update the rt->cur_obj when we enter into a function
      * call that really has a object, otherwise just don't update*/
     if(obj) a->rt->cur_obj = obj;
@@ -1061,6 +1150,7 @@ int exit_function( struct ajj* a , const struct ajj_value* ret ) {
   struct runtime* rt = a->rt;
   int par_cnt = fr->par_cnt;
   assert(rt->cur_call_stk >0);
+  assert(fr->cur_loops == 0);
   /* test whether we need to update our par_cnt
    * because we are a call for a method which means
    * we have an object on stack */
@@ -1283,6 +1373,12 @@ int vm_main( struct ajj* a ) {
         pop(a,1);
         push(a,o);
       } vm_end(LEN)
+
+      vm_beg(CAT) {
+        struct ajj_value o = vm_cat(a,top(a,2),top(a,1));
+        pop(a,2);
+        push(a,o);
+      } vm_end(CAT)
 
       vm_beg(CALL) {
         int fn_idx= instr_1st_arg(c);
@@ -1516,7 +1612,7 @@ int vm_main( struct ajj* a ) {
           const_str(a,par);
         struct ajj_value val = *top(a,1);
         /* deteach the value to be owned by upvalue */
-        set_upvalue(a,upvalue_name,&val);
+        set_upvalue(a,upvalue_name,&val,0,0,RCHECK);
         pop(a,1);
       } vm_end(UPVALUE_SET)
 
@@ -1613,6 +1709,11 @@ int vm_main( struct ajj* a ) {
           goto fail;
         } else {
           struct object* o = &(obj->value.object->val.obj);
+          size_t l = 0;
+          if(o->fn_tb->slot.len)
+            l = o->fn_tb->slot.len(a,obj);
+          enter_loop(a,l); /* setup loop object */
+
           if( o->fn_tb->slot.iter_start ) {
             itr = o->fn_tb->slot.iter_start(
                 a,obj);
@@ -1694,6 +1795,7 @@ int vm_main( struct ajj* a ) {
         struct ajj_value* obj = top(a,2);
         struct ajj_value* itr = top(a,1);
         struct object* o ;
+        struct ajj_value loop;
         assert( itr->type == AJJ_VALUE_ITERATOR );
         assert( obj->type == AJJ_VALUE_OBJECT );
         o = &(obj->value.object->val.obj);
@@ -1702,7 +1804,12 @@ int vm_main( struct ajj* a ) {
         push( a , ajj_value_iter(
             o->fn_tb->slot.iter_move(
               a,obj,ajj_value_to_iter(itr))));
+        move_loop(a); /* step the loop object */
       } vm_end(ITER_MOVE)
+
+      vm_beg(ITER_EXIT) {
+        exit_loop(a); /* tear down loop object */
+      } vm_end(ITER_EXIT)
 
       /* MISC -------------------------------------- */
       vm_beg(ENTER) {

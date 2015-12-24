@@ -62,6 +62,7 @@ enum {
   X(TK_MUL,"*") \
   X(TK_DIV,"/") \
   X(TK_LEN,"#") \
+  X(TK_CAT,"~") \
   X(TK_DIVTRUCT,"//") \
   X(TK_MOD,"%") \
   X(TK_POW,"**") \
@@ -91,6 +92,7 @@ enum {
   X(TK_NONE,"<none>") \
   TOKEN_KEYWORD_LIST(X) \
   X(TK_EOF,"<eof>") \
+  X(TK_UNKNOWN_NUMBER,"<unknown-number:overflow>") \
   X(TK_UNKNOWN,"<unknown>")
 
 #define X(A,B) A,

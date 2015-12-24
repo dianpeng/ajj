@@ -9,7 +9,7 @@ struct string CALLER = CONST_STRING("__caller__");
 struct string SUPER  = CONST_STRING("super");
 struct string SELF   = CONST_STRING("self");
 struct string ITER   = CONST_STRING("__iterator__");
-
+struct string LOOP   = CONST_STRING("loop");
 
 const char*
 bc_get_instruction_name( int bc ) {

@@ -270,7 +270,8 @@ struct ajj_object*
 ajj_object_create ( struct ajj* , struct gc_scope* scope );
 
 struct ajj_object*
-ajj_object_move( struct gc_scope* scp , struct ajj_object* obj );
+ajj_object_move( struct ajj* ,
+    struct gc_scope* scp , struct ajj_object* obj );
 
 /* Initialize an created ajj_object to a certain type */
 static
@@ -332,6 +333,10 @@ ajj_object_create_obj( struct ajj* a, struct gc_scope* scp,
       tp);
 }
 
+/* ====================================
+ * BUILTIN objects shortcuts
+ * ==================================*/
+
 /* List operations. The following functions are just wrapper around the
  * internal mechanism to handle object */
 struct ajj_object*
@@ -354,6 +359,15 @@ void dict_insert( struct ajj* a , struct ajj_object* obj,
 struct ajj_value
 dict_find( struct ajj* a , struct ajj_object* obj,
     const struct ajj_value* key );
+
+/* Loop operations */
+struct ajj_object*
+ajj_object_create_loop( struct ajj* a, struct gc_scope* scp ,
+    size_t len );
+
+/* ==================================
+ * JINJA template
+ * ================================*/
 
 /* Creating a jinja object. A jinja object is an object represents a
  * compiled jinja source file. It is only used internally by the parser */
@@ -499,7 +513,8 @@ struct ajj_value ajj_value_assign( struct ajj_object* obj ) {
  * then this value is escaped and it means no gc_scope will hold it
  * The typical usage is for assigning to upvalue */
 struct ajj_value
-ajj_value_move( struct gc_scope* , const struct ajj_value* );
+ajj_value_move( struct ajj* , 
+    struct gc_scope* , const struct ajj_value* );
 
 /* This allow user to delete a string promptly without waiting for the
  * corresponding gc scope exit */

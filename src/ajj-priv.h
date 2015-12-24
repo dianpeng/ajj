@@ -43,6 +43,7 @@ struct ajj {
    * creation easier and faster */
   struct func_table* list;
   struct func_table* dict;
+  struct func_table* loop;
 };
 
 enum {
@@ -121,7 +122,8 @@ void ajj_clear_template( struct ajj* );
 /* Register value/class/function into different uvpalue table */
 void
 ajj_add_value( struct ajj* a , struct upvalue_table* ut,
-    const char* name, int type,  ... );
+    const char* name,
+    int type,  ... );
 
 /* Function used to add a class definition in SPECIFIC table
  * and it will return added object's function table */

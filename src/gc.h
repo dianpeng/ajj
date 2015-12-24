@@ -62,7 +62,7 @@ struct gc_scope {
 };
 
 static
-void gc_init( struct gc_scope* scp ) {
+void gc_root_init( struct gc_scope* scp ) {
   LINIT(&(scp->gc_tail));
   scp->parent = NULL;
   scp->scp_id = 0;

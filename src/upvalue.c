@@ -6,16 +6,26 @@ struct upvalue*
 upvalue_table_add( struct ajj* a,
     struct upvalue_table* tb,
     const struct string* key,
-    int own ) {
+    int own ,
+    int force,
+    int fixed ) {
   struct upvalue* ret = slab_malloc(&(a->upval_slab));
   struct upvalue** slot;
   /* find out if we have such value in the table, if so
    * we just link a value on top of it */
   if( (slot = map_find(&(tb->d),key)) == NULL ) {
+    ret = slab_malloc(&(a->upval_slab));
     /* store the pointer */
     CHECK( !map_insert(&(tb->d),key,own,&ret) );
     ret->prev = NULL;
+    ret->fixed= fixed;
   } else {
+    if( (*slot)->fixed && !force ) {
+      /* cannot chain anything into it */
+      return NULL;
+    }
+    ret = slab_malloc(&(a->upval_slab));
+    ret->fixed = fixed;
     ret->prev = *slot;
     (*slot) = ret;
     if(own) string_destroy((struct string*)key);
@@ -26,13 +36,21 @@ upvalue_table_add( struct ajj* a,
 struct upvalue*
 upvalue_table_add_c( struct ajj* a,
     struct upvalue_table* tb,
-    const char* key) {
+    const char* key,
+    int force,
+    int fixed) {
   struct upvalue* ret = slab_malloc(&(a->upval_slab));
   struct upvalue** slot;
   if( (slot = map_find_c(&(tb->d),key)) == NULL ) {
+    ret = slab_malloc(&(a->upval_slab));
     CHECK( !map_insert_c(&(tb->d),key,&ret) );
     ret->prev = NULL;
   } else {
+    if( (*slot)->fixed && !force ) {
+      return NULL;
+    }
+    ret = slab_malloc(&(a->upval_slab));
+    ret->fixed = fixed;
     ret->prev = *slot;
     (*slot) = ret;
   }
@@ -43,7 +61,8 @@ struct upvalue*
 upvalue_table_overwrite( struct ajj* a ,
     struct upvalue_table* tb,
     const struct string* key ,
-    int own ) {
+    int own ,
+    int fixed ) {
   struct upvalue** slot;
   if( (slot = map_find(&(tb->d),key)) == NULL ) {
     struct upvalue* ret = slab_malloc(&(a->upval_slab));
@@ -52,6 +71,7 @@ upvalue_table_overwrite( struct ajj* a ,
     return ret;
   } else {
     assert(*slot);
+    (*slot)->fixed = fixed;
     return *slot;
   }
 }
@@ -59,7 +79,8 @@ upvalue_table_overwrite( struct ajj* a ,
 struct upvalue*
 upvalue_table_overwrite_c( struct ajj* a ,
     struct upvalue_table* tb,
-    const char* key ) {
+    const char* key ,
+    int fixed ) {
   struct upvalue** slot;
   if( (slot = map_find_c(&(tb->d),key)) == NULL ) {
     struct upvalue* ret = slab_malloc(&(a->upval_slab));
@@ -68,6 +89,7 @@ upvalue_table_overwrite_c( struct ajj* a ,
     return ret;
   } else {
     assert(*slot);
+    (*slot)->fixed = fixed;
     return *slot;
   }
 }

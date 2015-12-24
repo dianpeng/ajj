@@ -62,11 +62,6 @@
 #define EMIT2_AT(em,P,BC,A1,A2) emitter_emit2_at(em,P,p->tk.pos,BC,A1,A2)
 #define EMIT_PUT(em,T) emitter_put(em,T)
 
-/* Lexical Scope
- * Lexical scope cannot cross function boundary. Once a new function
- * enters, a new set of lexical scope must be initialized */
-#define MAX_LOOP_CTRL_SIZE 32
-
 struct loop_ctrl {
   int cur_enter; /* Count for current accumulated enter
                   * instructions. If means , if we have to shfit
@@ -803,6 +798,7 @@ int parse_term( struct parser* p, struct emitter* em ) {
       case TK_SUB: op = VM_SUB; break;
       case TK_IN: op = VM_IN; break;
       case TK_NIN: op = VM_NIN; break;
+      case TK_CAT: op = VM_CAT; break;
       default: goto done;
     }
     tk_move(tk);
@@ -1642,6 +1638,10 @@ static int parse_for_body( struct parser* p ,
   EMIT1_AT(em,loop_jmp,VM_JF,
       emitter_label(em)); /* patch the jmp */
 
+  /* here we generate a ITER_EXIT instructions to make
+   * our vm aware that we gonna exit the loop */
+  EMIT0(em,VM_ITER_EXIT);
+
   /* patch the break jump table here */
   if( PTOP()->lctrl->brks_len && poped_num > 0 ) {
     /* generate a jump here to make sure normal execution flow
@@ -1667,6 +1667,8 @@ static int parse_for_body( struct parser* p ,
      * actually resides inside of the loop body , not here */
     EMIT1(em,VM_POP,poped_num); /* pop the value if the break control
                                  * reaches here */
+    EMIT0(em,VM_ITER_EXIT);     /* Generate ITER_EXIT since the loop
+                                 * has been breaked */
     assert( brk_jmp >0 );
     EMIT1_AT(em,brk_jmp,VM_JMP,emitter_label(em)); /* patch the jump to skip
                                                     * the POP instruction above */
