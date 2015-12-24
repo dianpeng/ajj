@@ -212,3 +212,19 @@ upvalue_table_destroy( struct ajj* a,
     m = upvalue_table_destroy_one(a,m);
   }
 }
+
+struct upvalue_table*
+upvalue_table_init( struct upvalue_table* ret ,
+    struct upvalue_table* p ) {
+  map_create(&(ret->d),sizeof(struct upvalue*),
+      UPVALUE_DEFAULT_BUF_SIZE);
+  ret->prev = p;
+  return ret;
+}
+
+/* Global varialbes table. Wrapper around map */
+struct upvalue_table*
+upvalue_table_create( struct upvalue_table* p ) {
+  struct upvalue_table* ret = malloc(sizeof(*p));
+  return upvalue_table_init(ret,p);
+}

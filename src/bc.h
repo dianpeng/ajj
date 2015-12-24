@@ -72,8 +72,8 @@ extern struct string LOOP;
   X(VM_POW,0,"pow") \
   X(VM_IN,0,"in") \
   X(VM_NIN,0,"notin") \
-  X(VM_IS,2,"is") \
-  X(VM_ISN,2,"isnot") \
+  X(VM_TEST,2,"test") \
+  X(VM_TESTN,2,"testn") \
   X(VM_LEN,0,"len") \
   X(VM_CAT,0,"cat") \
   X(VM_EQ,0,"eq") \
@@ -157,115 +157,24 @@ struct emitter {
   size_t cd_cap; /* capacity for current code */
 };
 
-static
-void emitter_ensure( struct emitter* em ) {
-  /* reserve size for 2 arrays */
-  if( em->cd_cap < em->prg->len + 2 ) {
-    size_t c = em->cd_cap;
-    em->prg->codes = mem_grow( em->prg->codes ,
-        sizeof(int),2,&c);
-    em->prg->spos = mem_grow(em->prg->spos,
-        sizeof(int),2,&(em->cd_cap));
-  }
-}
-
-static
-void emitter_init( struct emitter* em , struct program* prg ) {
-  em->prg = prg;
-  em->cd_cap = 0;
-  emitter_ensure(em);
-}
-
-static
-void emitter_emit0( struct emitter* em , int spos , int bc ) {
-  emitter_ensure(em);
-  em->prg->spos[em->prg->len] = spos;
-  assert(bc>=0 && bc< SIZE_OF_INSTRUCTIONS);
-  em->prg->codes[em->prg->len++] = BC_WRAP_INSTRUCTION0(bc);
-}
-
-static
-void emitter_emit1( struct emitter* em , int spos , int bc , int a1 ) {
-  emitter_ensure(em);
-  em->prg->spos[em->prg->len] = spos;
-  assert(bc>=0 && bc< SIZE_OF_INSTRUCTIONS);
-  assert( (a1&BC_1ST_MASK) == a1 );
-  em->prg->codes[em->prg->len++] = BC_WRAP_INSTRUCTION1(bc,a1);
-}
-
-static
-void emitter_emit2( struct emitter* em , int spos , int bc , int a1 , int a2 ) {
-  emitter_emit1(em,spos,bc,a1);
-  em->prg->codes[em->prg->len++] = a2;
-}
-
-static
-int emitter_put( struct emitter* em , int arg_sz ) {
-  int ret;
-  int add;
-  assert( arg_sz == 0 || arg_sz == 1 || arg_sz == 2 );
-  emitter_ensure(em);
-  add = (arg_sz == 0 || arg_sz == 1) ? 1 : 2;
-  ret = em->prg->len;
-  em->prg->len += add;
-  return ret;
-}
-
-static
-void emitter_emit0_at( struct emitter* em , int pos , int spos , int bc ) {
-  int save = em->prg->len;
-  em->prg->len = pos;
-  emitter_emit0(em,spos,bc);
-  em->prg->len = save;
-}
-
-static
+void emitter_ensure( struct emitter* em );
+void emitter_init( struct emitter* em , struct program* prg );
+void emitter_emit0( struct emitter* em , int spos , int bc );
+void emitter_emit1( struct emitter* em , int spos , int bc , int a1 );
+void emitter_emit2( struct emitter* em , int spos ,
+    int bc , int a1 , int a2 );
+int emitter_put( struct emitter* em , int arg_sz );
+void emitter_emit0_at( struct emitter* em ,
+    int pos , int spos , int bc );
 void emitter_emit1_at( struct emitter* em , int pos ,
-    int spos , int bc , int a1 ) {
-  int save = em->prg->len;
-  em->prg->len = pos;
-  emitter_emit1(em,spos,bc,a1);
-  em->prg->len = save;
-}
-
-static
+    int spos , int bc , int a1 );
 void emitter_emit2_at( struct emitter* em , int pos ,
-    int spos , int bc , int a1 , int a2 ) {
-  int save = em->prg->len;
-  em->prg->len = pos;
-  emitter_emit2(em,spos,bc,a1,a2);
-  em->prg->len = save;
-}
-
-static
-int emitter_label( struct emitter* em ) {
-  return (int)(em->prg->len);
-}
-
-static
-int bc_next( const struct program* prg , size_t* pos ) {
-  if( prg->len == *pos ) {
-    return BC_WRAP_INSTRUCTION0(VM_HALT);
-  } else {
-    return prg->codes[(*pos)++];
-  }
-}
-
-static
-instructions bc_instr( int c ) {
-  return (instructions)(c>>24);
-}
-
-static
-int bc_1st_arg( int c ) {
-  return BC_1ARG(c);
-}
-
-static
-int bc_2nd_arg( const struct program* prg , size_t* pos ) {
-  assert( prg->len > *pos );
-  return prg->codes[(*pos)++];
-}
+    int spos , int bc , int a1 , int a2 );
+#define emitter_label(E) (int)((E)->prg->len)
+int bc_next( const struct program* prg , size_t* pos );
+#define bc_instr(C) BC_INSTRUCTION(C)
+#define bc_1st_arg(C) BC_1ARG(C)
+int bc_2nd_arg( const struct program* prg , size_t* pos );
 
 /* dump program into human readable format */
 void dump_program( struct ajj* a,

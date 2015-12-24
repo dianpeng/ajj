@@ -11,6 +11,90 @@ struct string SELF   = CONST_STRING("self");
 struct string ITER   = CONST_STRING("__iterator__");
 struct string LOOP   = CONST_STRING("loop");
 
+void emitter_ensure( struct emitter* em ) {
+  /* reserve size for 2 arrays */
+  if( em->cd_cap < em->prg->len + 2 ) {
+    size_t c = em->cd_cap;
+    em->prg->codes = mem_grow( em->prg->codes ,
+        sizeof(int),2,&c);
+    em->prg->spos = mem_grow(em->prg->spos,
+        sizeof(int),2,&(em->cd_cap));
+  }
+}
+
+void emitter_init( struct emitter* em , struct program* prg ) {
+  em->prg = prg;
+  em->cd_cap = 0;
+  emitter_ensure(em);
+}
+
+void emitter_emit0( struct emitter* em , int spos , int bc ) {
+  emitter_ensure(em);
+  em->prg->spos[em->prg->len] = spos;
+  assert(bc>=0 && bc< SIZE_OF_INSTRUCTIONS);
+  em->prg->codes[em->prg->len++] = BC_WRAP_INSTRUCTION0(bc);
+}
+
+void emitter_emit1( struct emitter* em , int spos , int bc , int a1 ) {
+  emitter_ensure(em);
+  em->prg->spos[em->prg->len] = spos;
+  assert(bc>=0 && bc< SIZE_OF_INSTRUCTIONS);
+  assert( (a1&BC_1ST_MASK) == a1 );
+  em->prg->codes[em->prg->len++] = BC_WRAP_INSTRUCTION1(bc,a1);
+}
+
+void emitter_emit2( struct emitter* em , int spos , int bc , int a1 , int a2 ) {
+  emitter_emit1(em,spos,bc,a1);
+  em->prg->codes[em->prg->len++] = a2;
+}
+
+int emitter_put( struct emitter* em , int arg_sz ) {
+  int ret;
+  int add;
+  assert( arg_sz == 0 || arg_sz == 1 || arg_sz == 2 );
+  emitter_ensure(em);
+  add = (arg_sz == 0 || arg_sz == 1) ? 1 : 2;
+  ret = em->prg->len;
+  em->prg->len += add;
+  return ret;
+}
+
+void emitter_emit0_at( struct emitter* em , int pos , int spos , int bc ) {
+  int save = em->prg->len;
+  em->prg->len = pos;
+  emitter_emit0(em,spos,bc);
+  em->prg->len = save;
+}
+
+void emitter_emit1_at( struct emitter* em , int pos ,
+    int spos , int bc , int a1 ) {
+  int save = em->prg->len;
+  em->prg->len = pos;
+  emitter_emit1(em,spos,bc,a1);
+  em->prg->len = save;
+}
+
+void emitter_emit2_at( struct emitter* em , int pos ,
+    int spos , int bc , int a1 , int a2 ) {
+  int save = em->prg->len;
+  em->prg->len = pos;
+  emitter_emit2(em,spos,bc,a1,a2);
+  em->prg->len = save;
+}
+
+int bc_next( const struct program* prg , size_t* pos ) {
+  if( prg->len == *pos ) {
+    return BC_WRAP_INSTRUCTION0(VM_HALT);
+  } else {
+    return prg->codes[(*pos)++];
+  }
+}
+
+int bc_2nd_arg( const struct program* prg , size_t* pos ) {
+  assert( prg->len > *pos );
+  return prg->codes[(*pos)++];
+}
+
 const char*
 bc_get_instruction_name( int bc ) {
 #define X(A,B,C) case A: return C;

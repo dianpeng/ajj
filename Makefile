@@ -1,5 +1,11 @@
-GCC_PROFILE_FLAGS := -fprofile-arcs -ftest-coverage -o2 -g
+GCC_PROFILE_FLAGS := -fprofile-arcs -ftest-coverage -o2 -g -Wpedantic -Wall
 LINK := -lm
+
+parser-test:
+	cd src; \
+	gcc $(GCC_PROFILE_FLAGS) ajj.c builtin.c util.c bc.c lex.c parse.c object.c vm.c upvalue.c gc.c parser-test.c $(LINK) -o parser-test; \
+	./parser-test; \
+	gcov ajj.c util.c bc.c lex.c parse.c object.c parser-test.c
 
 
 vm-test:
@@ -11,12 +17,6 @@ opt-test2:
 	gcc $(GCC_PROFILE_FLAGS) ajj.c opt.c util.c bc.c lex.c parse.c object.c upvalue.c opt-test2.c $(LINK) -o opt-test2; \
 	./opt-test2; \
 	gcov ajj.c opt.c util.c bc.c lex.c parse.c object.c opt-test.c
-
-parser-test:
-	cd src; \
-	gcc $(GCC_PROFILE_FLAGS) ajj.c builtin.c util.c bc.c lex.c parse.c object.c vm.c upvalue.c gc.c parser-test.c $(LINK) -o parser-test; \
-	./parser-test; \
-	gcov ajj.c util.c bc.c lex.c parse.c object.c parser-test.c
 
 opt-test:
 	cd src; \

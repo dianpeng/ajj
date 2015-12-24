@@ -12,6 +12,47 @@
     return (TK); \
   } while(0)
 
+token_id tk_init( struct tokenizer* tk , const char* src ) {
+  tk->src = src;
+  tk->pos = 0;
+  tk->mode = TOKENIZE_JINJA;
+  strbuf_init(&(tk->lexeme));
+  return tk_lex(tk);
+}
+
+int tk_expect( struct tokenizer* tk , token_id t ) {
+  if( tk_lex(tk) == t ) {
+    tk_move(tk);
+    return 0;
+  } else {
+    return -1;
+  }
+}
+
+int tk_string_escape_char( char c ) {
+  switch(c) {
+    case 'n': return '\n';
+    case 't': return '\t';
+    case 'b': return '\b';
+    case 'r': return '\r';
+    case '\'':return '\'';
+    case '\\':return '\\';
+    default: return 0;
+  }
+}
+
+int tk_string_reescape_char( char c ) {
+  switch(c) {
+    case '\n': return 'n';
+    case '\t': return 't';
+    case '\b': return 'b';
+    case '\r': return 'r';
+    case '\'': return '\'';
+    case '\\': return '\\';
+    default: return 0;
+  }
+}
+
 static
 int tk_next_skip_cmt( struct tokenizer* tk ) {
   size_t i;
@@ -126,9 +167,11 @@ token_id tk_lex_keyword( struct tokenizer* tk , int offset ) {
 static
 size_t skip_whitespace( const char* src, size_t pos ) {
   char c;
-  for( ; (c =src[pos++]) ; ) {
+  for( ; (c =src[pos]) ; ++pos  ) {
     if(c==' '||c=='\t'||c=='\b')
       continue;
+    else
+      break;
   }
   return pos;
 }
@@ -163,6 +206,7 @@ size_t skip_whitespace( const char* src, size_t pos ) {
  * X: -
  * Y: -
  * Z: - */
+
 static
 token_id tk_lex_keyword_or_id( struct tokenizer* tk ) {
   size_t i = tk->pos;
@@ -508,7 +552,7 @@ int tk_check_single_keyword( struct tokenizer* tk , size_t pos ,
   do {
     c = tk->src[i];
     if( c == str[0] ) {
-      if( tk_keyword_check( tk , str+1 , i+1 ) == len-1 &&
+      if( tk_keyword_check( tk,str+1 , i+1 ) == len-1 &&
           tk_not_id_rchar(tk->src[len+i]) ) {
         i += len;
         goto done;
@@ -556,7 +600,6 @@ static
 token_id tk_lex_raw( struct tokenizer* tk ) {
   size_t i = tk->pos;
   size_t s = tk->pos;
-  char nc;
   char c;
 
   strbuf_reset(&(tk->lexeme));

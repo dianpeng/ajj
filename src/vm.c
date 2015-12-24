@@ -28,6 +28,18 @@ void set_upvalue( struct ajj* a, const struct string* name,
 static
 void del_upvalue( struct ajj* a, const struct string* name );
 
+static
+const struct function*
+resolve_test_function( struct ajj* a, const struct string* name );
+
+static
+void enter_function( struct ajj* a , const struct function* f,
+    int par_cnt , int method ,
+    struct ajj_object* obj , int* fail );
+
+static
+int exit_function( struct ajj* a , const struct ajj_value* ret );
+
 /* This FUNC_CALL actually means we want a TAIL call of a
  * new script functions. The return from the LOWEST script function
  * will end up its caller been poped as well. We don't return the
@@ -61,6 +73,78 @@ stack_value( struct ajj* a , int x ) {
 #define bot(A,X) ((A)->rt->val_stk[cur_frame((A))->ebp+(X)])
 #define top(A,X) ((A)->rt->val_stk[cur_frame((A))->esp-(X)])
 #endif /* NDEBUG */
+
+int program_add_par( struct program* prg , struct string* name ,
+    int own, const struct ajj_value* val ) {
+  if( prg->par_size == AJJ_FUNC_ARG_MAX_SIZE )
+    return -1;
+  else {
+    assert(name->len < AJJ_SYMBOL_NAME_MAX_SIZE );
+    prg->par_list[prg->par_size].def_val = *val; /* owned the value */
+    prg->par_list[prg->par_size].name = own ? *name : string_dup(name);
+    ++prg->par_size;
+    return 0;
+  }
+}
+
+int program_const_str( struct program* prg , struct string* str ,
+    int own ) {
+  if( str->len > 128 ) {
+insert:
+    if( prg->str_len == prg->str_cap ) {
+      prg->str_tbl = mem_grow(prg->str_tbl, sizeof(struct string),
+          0,
+          &(prg->str_cap));
+    }
+    if(own) {
+      prg->str_tbl[prg->str_len] = *str;
+    } else {
+      prg->str_tbl[prg->str_len] = string_dup(str);
+    }
+    return prg->str_len++;
+  } else {
+    size_t i = 0 ;
+    for( ; i < prg->str_len ; ++i ) {
+      if( string_eq(prg->str_tbl+i,str) ) {
+        if(own) string_destroy(str);
+        return i;
+      }
+    }
+    goto insert;
+  }
+}
+
+int program_const_num( struct program* prg , double num ) {
+  size_t i;
+  if( prg->num_len== prg->num_cap ) {
+    prg->num_tbl = mem_grow(
+        prg->num_tbl,sizeof(double),
+        0,
+        &(prg->num_cap));
+  }
+  for( i = 0 ; i < prg->num_len ; ++i ) {
+    if( num == prg->num_tbl[i] )
+      return i;
+  }
+  prg->num_tbl[prg->num_len] = num;
+  return prg->num_len++;
+}
+
+void program_init( struct program* prg ) {
+  prg->codes = NULL;
+  prg->spos = NULL;
+  prg->len = 0;
+
+  prg->str_len = 0;
+  prg->str_cap = AJJ_LOCAL_CONSTANT_SIZE;
+  prg->str_tbl = malloc(sizeof(struct string)*AJJ_LOCAL_CONSTANT_SIZE);
+
+  prg->num_len = 0;
+  prg->num_cap = AJJ_LOCAL_CONSTANT_SIZE;
+  prg->num_tbl = malloc(sizeof(double)*AJJ_LOCAL_CONSTANT_SIZE);
+
+  prg->par_size =0;
+}
 
 /* This function tries to unwind the current stack and then dump
  * the useful information for user, hopefully it is useful :) */
@@ -588,14 +672,6 @@ struct ajj_value vm_not(struct ajj* a , const struct ajj_value* val ,
 }
 
 static
-struct ajj_value vm_neg(struct ajj* a, const struct ajj_value* val,
-    int* fail ) {
-  double v = to_number(a,val,fail);
-  if(*fail) return AJJ_NONE;
-  return ajj_value_number(-v);
-}
-
-static
 struct ajj_value vm_len(struct ajj* a,
     const struct ajj_value* val , int* fail ) {
   int res;
@@ -727,7 +803,8 @@ vm_call(struct ajj* a, struct ajj_object* obj ,
       par[par_sz-1] = *top(a,fr->par_cnt-par_sz+1);
     }
     par_sz = fr->par_cnt;
-    if( IS_CFUNCTION(entry) ) {
+    /* c function and test function has same prototype. */
+    if( IS_CFUNCTION(entry) || IS_TEST(entry) ) {
       const struct c_closure* cc = &(entry->f.c_fn);
       assert( obj == NULL );
       rval = cc->func(a,cc->udata,par,par_sz,ret);
@@ -780,13 +857,52 @@ vm_attrcall(struct ajj* a, struct ajj_object* obj ,
 }
 
 static
+void vm_test( struct ajj* a, int fn_idx, int an , int* fail ) {
+  const struct string* fn;
+  const struct function* f;
+  fn = const_str(a,fn_idx);
+  f = resolve_test_function(a,fn);
+  if(f == NULL) {
+    report_error(a,"Cannot resolve test function:%s!",
+        fn->str);
+    *fail = 1; return;
+  } else {
+    struct ajj_value ret;
+    int r;
+    enter_function(a,f,an,0,NULL,fail);
+    if(*fail) return;
+
+    r = vm_call(a,NULL,&ret);
+    assert( r == AJJ_EXEC_FAIL || r == AJJ_EXEC_OK );
+    if(r) {
+      *fail = 1; return;
+    } else {
+      assert( IS_TEST(f) );
+      /* check return value since all the test function
+       * is supposed to return a boolean value */
+      if( ret.type != AJJ_VALUE_BOOLEAN ) {
+        report_error(a,"Test function:%s return value is not "
+            "boolean value, all the test function should return "
+            "boolean value!",fn->str);
+        *fail =1; return;
+      }
+      /* test function is always a C function, so we need
+       * to pop the function frame right after calling the
+       * function */
+      exit_function(a,&ret);
+    }
+  }
+  *fail = 0;
+}
+
+static
 struct ajj_value vm_lstr( struct ajj* a, int idx ) {
   struct func_frame* fr = cur_frame(a);
   const struct program* prg = &(fr->entry->f.jj_fn);
   const struct string* cstr = prg->str_tbl + idx;
   struct ajj_object* obj;
   assert(IS_JINJA(fr->entry));
-  assert(prg->str_len > idx);
+  assert(prg->str_len > (size_t)idx);
   obj = ajj_object_create_const_string(\
       a,a->rt->cur_gc,cstr);
   return ajj_value_assign(obj);
@@ -794,11 +910,7 @@ struct ajj_value vm_lstr( struct ajj* a, int idx ) {
 
 static
 struct ajj_value vm_lnum( struct ajj* a , int idx ) {
-  struct func_frame* fr = cur_frame(a);
-  const struct program* prg = &(fr->entry->f.jj_fn);
-  assert(IS_JINJA(fr->entry));
-  assert(prg->num_len > idx);
-  return ajj_value_number( prg->num_tbl[idx] );
+  return ajj_value_number( const_num(a,idx) );
 }
 
 static
@@ -1054,6 +1166,10 @@ fail:
   *fail = 1; return;
 }
 
+/* Function resolver.
+ * All the function resolver will *NOT* report error if
+ * they cannot find any function with given name */
+
 static
 const struct function*
 resolve_obj_method( struct ajj* a , struct ajj_object* val,
@@ -1121,6 +1237,22 @@ resolve_free_function( struct ajj* a, const struct string* name ,
   return NULL;
 }
 
+/* Use this to resolve a test function's name. Test can *only*
+ * existed in environment and builtin table. User cannot declare
+ * a test function in its jinja template */
+static
+const struct function*
+resolve_test_function( struct ajj* a, const struct string* name ) {
+  struct upvalue* uv;
+  uv = upvalue_table_find( &(a->env), name , NULL );
+  if(!uv||(uv->type != UPVALUE_FUNCTION &&
+        !IS_TEST(&(uv->gut.gfunc)))) {
+    return NULL;
+  } else {
+    return &(uv->gut.gfunc);
+  }
+}
+
 /* method field is used to indicate whether this function call
  * has an object put on the stack. It will ONLY emitted by ATTR_CALL
  * instructions which will have such object on the stack */
@@ -1163,17 +1295,17 @@ static
 int exit_function( struct ajj* a , const struct ajj_value* ret ) {
   struct func_frame* fr = cur_frame(a);
   struct runtime* rt = a->rt;
-  int par_cnt = fr->par_cnt;
+  int stk_sz = fr->par_cnt;
   assert(rt->cur_call_stk >0);
   assert(fr->cur_loops == 0);
   /* test whether we need to update our par_cnt
    * because we are a call for a method which means
    * we have an object on stack */
-  par_cnt = fr->method ? fr->par_cnt + 1 : fr->par_cnt;
+  stk_sz = fr->method ? fr->par_cnt + 1 : fr->par_cnt;
   --rt->cur_call_stk;
   if( rt->cur_call_stk >0  ) {
     fr = cur_frame(a); /* must be assigned AFTER cur_all_stk changed */
-    fr->esp -= par_cnt;
+    fr->esp -= stk_sz;
     assert( fr->esp >= fr->ebp );
     /* push the return value onto the stack */
     push(a,*ret);
@@ -1190,7 +1322,6 @@ int call_script_func( struct ajj* a , const char* name,
   struct ajj_object* root_obj = a->rt->cur_obj;
   struct string n = string_const(name,strlen(name));
   const struct function* f = resolve_obj_method(a,root_obj,&n);
-  const struct program* prg = &(f->f.jj_fn);
   size_t i;
 
   assert(f); /* internal usage, should never return NULL */
@@ -1224,7 +1355,6 @@ int call_script_func( struct ajj* a , const char* name,
 static
 int vm_main( struct ajj* a ) {
 
-  struct runtime* rt = a->rt;
   int fail;
 
 #define vm_beg(X) case VM_##X:
@@ -1343,9 +1473,10 @@ int vm_main( struct ajj* a ) {
       } vm_end(NOT)
 
       vm_beg(NEG) {
-        double val = to_number(a,
-            top(a,1),RCHECK);
-        struct ajj_value o = ajj_value_number(-val);
+        double val;
+        struct ajj_value o;
+        val = to_number(a,top(a,1),RCHECK);
+        o = ajj_value_number(-val);
         pop(a,1);
         push(a,o);
       } vm_end(NEG)
@@ -1395,11 +1526,16 @@ int vm_main( struct ajj* a ) {
         push(a,o);
       } vm_end(CAT)
 
+      vm_beg(TEST) {
+        int fn_idx = instr_1st_arg(c);
+        int an = instr_2nd_arg(a);
+        vm_test(a,fn_idx,an,RCHECK);
+      } vm_end(TEST)
+
       vm_beg(CALL) {
         int fn_idx= instr_1st_arg(c);
         int an = instr_2nd_arg(a);
 
-        struct ajj_value argnum = ajj_value_number(an);
         const struct string* fn = const_str(a,fn_idx);
         struct ajj_object* obj;
         const struct function* f =
@@ -1431,7 +1567,6 @@ int vm_main( struct ajj* a ) {
         int fn_idx = instr_1st_arg(c);
         int an = instr_2nd_arg(a);
         struct ajj_value obj = *top(a,an+1);
-        struct ajj_value argnum;
         const struct string* fn;
         struct ajj_object* o;
         const struct function* f;
@@ -1442,7 +1577,6 @@ int vm_main( struct ajj* a ) {
           goto fail;
         }
 
-        argnum = ajj_value_number(an);
         fn = const_str(a,fn_idx);
         o = obj.value.object;
         f = resolve_obj_method(a,o,fn);
@@ -1810,7 +1944,6 @@ int vm_main( struct ajj* a ) {
         struct ajj_value* obj = top(a,2);
         struct ajj_value* itr = top(a,1);
         struct object* o ;
-        struct ajj_value loop;
         assert( itr->type == AJJ_VALUE_ITERATOR );
         assert( obj->type == AJJ_VALUE_OBJECT );
         o = &(obj->value.object->val.obj);
@@ -1868,13 +2001,13 @@ done:
 int vm_run_jinja( struct ajj* a , struct ajj_object* jj,
     struct ajj_io* output ) {
   struct runtime* rt = runtime_create(a,output);
-  const struct function* main;
+  const struct function* m;
   int fail;
   a->rt = rt;
   /* get the main function */
-  main = ajj_object_jinja_main_func(jj);
+  m = ajj_object_jinja_main_func(jj);
   /* set up main function stack frame */
-  enter_function(a,main,0,0,jj,&fail);
+  enter_function(a,m,0,0,jj,&fail);
   assert(!fail);
   /* set up builtin upvalue */
   set_func_upvalue(a);

@@ -68,6 +68,56 @@ ajj_cur_gc_scope( struct ajj* a ) {
     return &(a->gc_root);
 }
 
+/* =============================
+ * Template
+ * ===========================*/
+struct ajj_object*
+ajj_find_template( struct ajj* a , const char* name ) {
+  struct ajj_object** ret = map_find_c(&(a->tmpl_tbl),name);
+  return ret == NULL ? NULL : *ret;
+}
+
+struct ajj_object*
+ajj_new_template( struct ajj* a ,const char* name ,
+    const char* src , int own ) {
+  struct ajj_object* obj;
+  if( ajj_find_template(a,name) != NULL )
+    return NULL; /* We already get one */
+  obj = ajj_object_create_jinja(a,name,src,own);
+  CHECK(!map_insert_c(&(a->tmpl_tbl),name,&obj));
+  return obj;
+}
+
+int ajj_delete_template( struct ajj* a, const char* name ) {
+  struct ajj_object* obj;
+  if( map_remove_c(&(a->tmpl_tbl),name,&obj))
+    return -1;
+  LREMOVE(obj); /* remove it from gc scope */
+  ajj_object_destroy_jinja(a,obj);
+  return 0;
+}
+
+
+/* =============================
+ * VALUE
+ * ===========================*/
+
+struct ajj_value ajj_value_number( double val ) {
+  struct ajj_value value;
+  value.type = AJJ_VALUE_NUMBER;
+  value.value.number = val;
+  return value;
+}
+
+struct ajj_value
+ajj_value_boolean( int boolean ) {
+  struct ajj_value ret;
+  assert(boolean ==0 || boolean ==1);
+  ret.type = AJJ_VALUE_BOOLEAN;
+  ret.value.boolean = boolean;
+  return ret;
+}
+
 struct func_table*
 ajj_add_class( struct ajj* a,
     struct upvalue_table* ut,
@@ -173,8 +223,7 @@ void ajj_add_value( struct ajj* a,
   ajj_add_vvalue(a,ut,&(a->gc_root),name,type,vl);
 }
 
-const
-struct function*
+const struct function*
 ajj_add_function( struct ajj* a, struct upvalue_table* ut,
     const char* name,
     ajj_function entry,
@@ -185,6 +234,22 @@ ajj_add_function( struct ajj* a, struct upvalue_table* ut,
   uv->gut.gfunc.f.c_fn.udata = udata;
   uv->gut.gfunc.f.c_fn.func = entry;
   uv->gut.gfunc.name = n; /* weak */
+  uv->gut.gfunc.tp = C_FUNCTION;
+  return &(uv->gut.gfunc);
+}
+
+const struct function*
+ajj_add_test( struct ajj* a, struct upvalue_table* ut,
+    const char* name,
+    ajj_function entry,
+    void* udata ) {
+  struct string n = string_dupc(name);
+  struct upvalue* uv = upvalue_table_overwrite(a,ut,&n,1,1);
+  uv->type = UPVALUE_FUNCTION;
+  uv->gut.gfunc.f.c_fn.udata = udata;
+  uv->gut.gfunc.f.c_fn.func = entry;
+  uv->gut.gfunc.name = n;
+  uv->gut.gfunc.tp = C_TEST;
   return &(uv->gut.gfunc);
 }
 
@@ -206,6 +271,10 @@ void ajj_env_add_function( struct ajj* a, const char* name,
     ajj_function entry,
     void* udata ) {
   ajj_add_function(a,&(a->env),name,entry,udata);
+}
+
+int ajj_env_has( struct ajj* a, const char* name ) {
+  return upvalue_table_find_c(&(a->env),name,NULL) != NULL;
 }
 
 int ajj_env_del( struct ajj* a, const char* name ) {
@@ -293,6 +362,10 @@ void ajj_upvalue_add_function( struct ajj* a,
   ajj_add_function(a,a->rt->global,name,entry,udata);
 }
 
+int ajj_upvalue_has( struct ajj* a, const char* name ) {
+  return upvalue_table_find_c(a->rt->global,name,NULL) != 0;
+}
+
 void ajj_upvalue_del( struct ajj* a, const char* name ) {
   assert( a->rt && a->rt->global );
   upvalue_table_del_c(a,a->rt->global,name,&(a->env));
@@ -305,6 +378,23 @@ void ajj_env_clear( struct ajj* a ) {
 /* =======================================================
  * IO
  * =====================================================*/
+
+static
+void ajj_io_init_file( struct ajj_io* io , FILE* f ) {
+  assert(f);
+  io->tp = AJJ_IO_FILE;
+  io->out.f = f;
+}
+
+static
+void ajj_io_init_mem ( struct ajj_io* io , size_t cap ) {
+  assert(cap);
+  io->tp = AJJ_IO_MEM;
+  io->out.m.mem = malloc(cap);
+  io->out.m.len = 0;
+  io->out.m.cap = cap;
+}
+
 struct ajj_io*
 ajj_io_create_file( struct ajj* a , FILE* f ) {
   struct ajj_io* r = malloc(sizeof(*r));
@@ -371,7 +461,7 @@ int io_file_vprintf( struct ajj_io* io , const char* fmt , va_list vl ) {
 
 static
 void io_file_write( struct ajj_io* io , const void* mem , size_t len ) {
-  int ret = fwrite(mem,sizeof(char),len,io->out.f);
+  fwrite(mem,sizeof(char),len,io->out.f);
 }
 
 int ajj_io_printf( struct ajj_io* io , const char* fmt , ... ) {
@@ -423,6 +513,9 @@ ajj_value_get_type_name( const struct ajj_value* val ) {
     case AJJ_VALUE_OBJECT:
       return GET_OBJECT_TYPE_NAME(
           val->value.object)->str;
+    default:
+      UNREACHABLE();
+      return NULL;
   }
 }
 

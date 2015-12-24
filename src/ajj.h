@@ -144,24 +144,8 @@ extern struct ajj_value AJJ_FALSE;
 extern struct ajj_value AJJ_NONE;
 
 /* Function helps us to compose of a new ajj_value */
-
-static
-struct ajj_value ajj_value_number( double val ) {
-  struct ajj_value value;
-  value.type = AJJ_VALUE_NUMBER;
-  value.value.number = val;
-  return value;
-}
-
-static
-struct ajj_value
-ajj_value_boolean( int boolean ) {
-  struct ajj_value ret;
-  assert(boolean ==0 || boolean ==1);
-  ret.type = AJJ_VALUE_BOOLEAN;
-  ret.value.boolean = boolean;
-  return ret;
-}
+struct ajj_value ajj_value_number( double val );
+struct ajj_value ajj_value_boolean( int boolean );
 
 struct ajj_value ajj_value_new_string( struct ajj* a,
     const char* str, size_t len );
@@ -174,17 +158,8 @@ struct ajj_value ajj_value_new_object( struct ajj* a,
     size_t arg_num ,
     struct ajj_value* args );
 
-/* Function convert ajj_value to specific c type */
-static inline
-int ajj_value_to_boolean( const struct ajj_value* val ) {
-  assert(val->type == AJJ_VALUE_BOOLEAN);
-  return val->value.boolean;
-}
-static inline
-double ajj_value_to_number( const struct ajj_value* val ) {
-  assert(val->type == AJJ_VALUE_NUMBER);
-  return val->value.number;
-}
+#define ajj_value_to_boolean(V) ((V)->value.boolean)
+#define ajj_value_to_number(V) ((V)->value.number)
 const char* ajj_value_to_str( const struct ajj_value* val );
 
 /* AJJ value operators */
@@ -242,6 +217,13 @@ void ajj_env_add_class( struct ajj* a , const struct ajj_class* );
 void ajj_env_add_function( struct ajj* a, const char* ,
     ajj_function entry, void* );
 
+/* This function is used to add a test into the global environment,
+ * a test function can ONLY be added into global environment */
+void ajj_env_add_test( struct ajj* a, const char* ,
+    ajj_function entry, void* );
+
+int ajj_env_has( struct ajj* a, const char* );
+
 /* This function is used to delete something from the global environment */
 int ajj_env_del( struct ajj* a , const char* );
 
@@ -260,6 +242,8 @@ void ajj_upvalue_add_function( struct ajj* a, const char*,
     ajj_function entry, void* );
 
 void ajj_upvalue_del( struct ajj* a, const char* );
+
+int ajj_upvalue_has( struct ajj* a , const char* );
 
 /* Clear the *all* the environment variables */
 void ajj_env_clear( struct ajj* a );

@@ -92,8 +92,8 @@ struct lex_scope {
                * scope serves as the base index to store local
                * variables */
 
-  int in_loop:1;  /* If it is in a loop */
-  int is_loop:1;  /* If this scope is a loop */
+  unsigned short in_loop;  /* If it is in a loop */
+  unsigned short is_loop;  /* If this scope is a loop */
   struct loop_ctrl* lctrl; /* Loop control if this scope is a loop
                             * scope */
 };
@@ -163,17 +163,10 @@ int is_in_main( struct parser* p ) {
 }
 
 static
-int lex_scope_top_index( struct parser* p ) {
-  assert( PTOP()->end != 0 );
-  return PTOP()->end - 1;
-}
-
-static
 void report_error( struct parser* p , const char* format, ... ) {
   va_list vl;
   int len;
   size_t ln,pos;
-  size_t i;
   char cs[32];
   struct tokenizer* tk = &(p->tk);
 
@@ -184,8 +177,8 @@ void report_error( struct parser* p , const char* format, ... ) {
 
   /* output the prefix message */
   len = snprintf(p->a->err,1024,
-      "[Parser:(%s:%zu,%zu)] at:... %s ...!\nMessage:",
-      p->src_key,pos,ln,cs);
+      "[Parser:(%s:" SIZEF "," SIZEF ")] at:... %s ...!\nMessage:",
+      p->src_key,SIZEP(pos),SIZEP(ln),cs);
 
   assert( len >0 && len < ERROR_BUFFER_SIZE );
 
@@ -681,6 +674,77 @@ int parse_prefix( struct parser* p, struct emitter* em ) {
   return 0;
 }
 
+/* Parse the is / is not prefixed expression */
+static
+int parse_is( struct parser* p , struct emitter* em ) {
+  int num = 1;
+  int fn_idx;
+  struct tokenizer* tk;
+  struct string fn;
+  int op;
+
+  tk = &(p->tk);
+  assert(tk->tk == TK_IS || tk->tk == TK_ISN );
+
+  if(tk->tk == TK_IS)
+    op = VM_TEST;
+  else
+    op = VM_TESTN;
+
+  tk_move(tk);
+
+  /* Here our tokenizer will not treate True/true False/false None/none
+   * as valid variable name since this will make other parsing part
+   * ambigious. But we really need to treat these value as variable
+   * which enable user to do test like :
+   * a is True ; b is False ; c is None. Which may not be really useful,
+   * just in case people loves this style. */
+  if(tk_expect_id(tk)) {
+    /* try to check whether we have True,False or None */
+    switch(tk->tk) {
+      case TK_TRUE:
+        fn = string_dup(&TRUE_STRING);
+        break;
+      case TK_FALSE:
+        fn = string_dup(&FALSE_STRING);
+        break;
+      case TK_NONE:
+        fn = string_dup(&NONE_STRING);
+        break;
+      default:
+        report_error(p,"Unexpected token here:%s, expect:Variable/"
+            "False/True/None!",
+            tk_get_name(tk->tk));
+        return -1;
+    }
+  } else {
+    /* an oridinary variable name */
+    CALLE(symbol(p,&fn)); /* get the test name */
+  }
+  fn_idx = program_const_str(em->prg,&fn,1);
+  tk_move(tk);
+  if( tk->tk == TK_LPAR ) {
+    num += parse_invoke_par(p,em);
+  }
+  EMIT2(em,op,fn_idx,num);
+  return 0;
+}
+
+static
+int parse_postfix( struct parser* p , struct emitter* em ) {
+  CALLE(parse_is(p,em));
+  do {
+    switch(p->tk.tk) {
+      case TK_IS:
+      case TK_ISN:
+        CALLE(parse_is(p,em));
+        break;
+      default:
+        return 0;
+    }
+  } while(1);
+}
+
 static
 int parse_atomic( struct parser* p, struct emitter* em ) {
   struct tokenizer* tk = &(p->tk);
@@ -688,39 +752,50 @@ int parse_atomic( struct parser* p, struct emitter* em ) {
   struct string str;
 
   tk_expect_id(tk); /* rewrite the tokenizer to get more
-                          * keyword candidate */
+                     * keyword candidate */
   switch(tk->tk) {
     case TK_VARIABLE:
-      return parse_prefix(p,em);
+      CALLE(parse_prefix(p,em));
+      break;
     case TK_STRING:
       strbuf_move(&(tk->lexeme),&str);
       idx=program_const_str(em->prg,&str,1);
       EMIT1(em,VM_LSTR,idx);
+      tk_move(tk);
       break;
     case TK_TRUE:
       EMIT0(em,VM_LTRUE);
+      tk_move(tk);
       break;
     case TK_FALSE:
       EMIT0(em,VM_LFALSE);
+      tk_move(tk);
       break;
     case TK_NONE:
       EMIT0(em,VM_LNONE);
+      tk_move(tk);
       break;
     case TK_NUMBER:
       idx=program_const_num(em->prg,tk->num_lexeme);
       EMIT1(em,VM_LNUM,idx);
+      tk_move(tk);
       break;
     case TK_LPAR:
-      return parse_tuple_or_subexpr(p,em);
+      CALLE(parse_tuple_or_subexpr(p,em));
+      break;
     case TK_LSQR:
-      return parse_list(p,em);
+      CALLE(parse_list(p,em));
+      break;
     case TK_LBRA:
-      return parse_dict(p,em);
+      CALLE(parse_dict(p,em));
+      break;
     default:
       report_error(p,"Unexpect token here:%s",tk_get_name(tk->tk));
       return -1;
   }
-  tk_move(tk);
+  if(tk->tk == TK_IS || tk->tk == TK_ISN) {
+    CALLE(parse_postfix(p,em));
+  }
   return 0;
 }
 
@@ -879,9 +954,6 @@ done:
 }
 #undef PUSH_JMP
 
-static
-int parse_is( struct parser* p, struct emitter* em );
-
 /* Expression.
  * We support value1 if cond else value2 format.
  * The code generation is not simple at all, however. Since the condition is not
@@ -925,16 +997,6 @@ int parse_expr( struct parser* p, struct emitter* em ) {
     /* Patch the jump */
     EMIT1_AT(em,fjmp,VM_JMP,cond_l);
     EMIT1_AT(em,val1_jmp,VM_JMP,end_l);
-  } else if( tk->tk == TK_IS || tk->tk == TK_ISN ) {
-    int ret;
-    /* parsing test or test not. The is/is not operator
-     * is treated as a function call actually. So the actually
-     * code is like generating a function call */
-    ret = parse_is(p,em);
-    if(!ret) {
-      EMIT1_AT(em,fjmp,VM_NOP1,0);
-    }
-    return ret;
   } else {
     /* nothing serious, just issue a NOP */
     EMIT1_AT(em,fjmp,VM_NOP1,0);
@@ -2022,11 +2084,11 @@ parse_context_body( struct parser* p , struct emitter* em ) {
 
     CONSUME(TK_LSTMT);
     if( tk->tk == TK_SET ) {
-      CONSUME(TK_SET);
-      EXPECT_VARIABLE();
       int var_idx;
       int opt = UPVALUE_OVERRIDE;
       struct string str;
+      CONSUME(TK_SET);
+      EXPECT_VARIABLE();
       /* this is a context statment */
       strbuf_move(&(tk->lexeme),&str);
       tk_move(tk); /* move the variable name */

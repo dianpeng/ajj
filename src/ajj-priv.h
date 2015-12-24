@@ -67,54 +67,18 @@ struct ajj_io {
 struct gc_scope*
 ajj_cur_gc_scope( struct ajj* a );
 
-static
-void ajj_io_init_file( struct ajj_io* io , FILE* f ) {
-  assert(f);
-  io->tp = AJJ_IO_FILE;
-  io->out.f = f;
-}
-
-static
-void ajj_io_init_mem ( struct ajj_io* io , size_t cap ) {
-  assert(cap);
-  io->tp = AJJ_IO_MEM;
-  io->out.m.mem = malloc(cap);
-  io->out.m.len = 0;
-  io->out.m.cap = cap;
-}
-
-static
 struct ajj_object*
-ajj_find_template( struct ajj* a , const char* name ) {
-  struct ajj_object** ret = map_find_c(&(a->tmpl_tbl),name);
-  return ret == NULL ? NULL : *ret;
-}
+ajj_find_template( struct ajj* a , const char* name );
 
-static
 struct ajj_object*
 ajj_new_template( struct ajj* a ,const char* name ,
-    const char* src , int own ) {
-  struct ajj_object* obj;
-  if( ajj_find_template(a,name) != NULL )
-    return NULL; /* We already get one */
-  obj = ajj_object_create_jinja(a,name,src,own);
-  CHECK(!map_insert_c(&(a->tmpl_tbl),name,&obj));
-  return obj;
-}
+    const char* src , int own );
 
 /* THIS FUNCTION IS NOT SAFE!
  * This function is used when we try to recover from the parsing
  * error. It is only used in parser, when the parsing failed, the
  * parser will remove this template and destroy it */
-static
-int ajj_delete_template( struct ajj* a, const char* name ) {
-  struct ajj_object* obj;
-  if( map_remove_c(&(a->tmpl_tbl),name,&obj))
-    return -1;
-  LREMOVE(obj); /* remove it from gc scope */
-  ajj_object_destroy_jinja(a,obj);
-  return 0;
-}
+int ajj_delete_template( struct ajj* a, const char* name );
 
 /* Wipe out ALL the template is safe operation */
 void ajj_clear_template( struct ajj* );
@@ -131,9 +95,14 @@ struct func_table*
 ajj_add_class( struct ajj* a, struct upvalue_table* ut,
     const struct ajj_class* cls );
 
-const
-struct function*
+const struct function*
 ajj_add_function( struct ajj* a , struct upvalue_table* ut,
+    const char* name,
+    ajj_function entry,
+    void* );
+
+const struct function*
+ajj_add_test( struct ajj* a, struct upvalue_table* ut,
     const char* name,
     ajj_function entry,
     void* );

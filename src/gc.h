@@ -61,12 +61,12 @@ struct gc_scope {
   unsigned int scp_id;       /* scope id */
 };
 
-static
-void gc_root_init( struct gc_scope* scp ) {
-  LINIT(&(scp->gc_tail));
-  scp->parent = NULL;
-  scp->scp_id = 0;
-}
+#define gc_root_init(S) \
+  do { \
+    LINIT(&((S)->gc_tail)); \
+    (S)->parent = NULL; \
+    (S)->scp_id = 0; \
+  } while(0)
 
 struct gc_scope*
 gc_scope_create( struct ajj* a, struct gc_scope* scp );

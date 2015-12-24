@@ -60,6 +60,18 @@
     (X)->next->prev = (X)->prev; \
   } while(0)
 
+/* To make print size_t portable, the most conservative way is to
+ * cast it into long long int and use llu. Modifier z is not a part
+ * of C90 standard */
+
+#ifndef C99
+#define SIZEP(S) (unsigned long)(S)
+#define SIZEF "%lu"
+#else
+#define SIZEP(S) (S)
+#define SIZEF "%zu"
+#endif /* C99 */
+
 
 /* grow a piece of memory to a new memory. The size_t obj_sz is used represent
  * the length for each elements and the length is the size of the current array,
@@ -93,64 +105,23 @@ extern struct string NONE_STRING;
 
 #define CONST_STRING(X) { X , ARRAY_SIZE(X)-1 }
 
-static int string_null( const struct string* );
+int string_null( const struct string* );
 
-static
-struct string string_dup( const struct string* str ) {
-  struct string ret;
-  if( string_null(str) ) return NULL_STRING;
-  ret.str = strdup(str->str);
-  ret.len = str->len;
-  return ret;
-}
-
-static
-struct string string_dupc( const char* str ) {
-  struct string ret;
-  ret.str = strdup(str);
-  ret.len = strlen(str);
-  return ret;
-}
+struct string string_dup( const struct string* str );
+struct string string_dupc( const char* str );
 
 /* Do not call string_destroy on constant string */
-static
-struct string string_const( const char* str , size_t len ) {
-  struct string ret;
-  ret.str = str;
-  ret.len = len;
-  return ret;
-}
+struct string string_const( const char* str , size_t len );
 
-static
-int string_eq( const struct string* l , const struct string* r ) {
-  assert( !string_null(l) );
-  assert( !string_null(r) );
-  return l->len == r->len && strcmp(l->str,r->str) == 0 ;
-}
+int string_eq( const struct string* l , const struct string* r );
 
-static
-int string_eqc( const struct string* l , const char* str ) {
-  assert(!string_null(l));
-  return strcmp(l->str,str) == 0;
-}
+int string_eqc( const struct string* l , const char* str );
 
-static
-int string_cmp( const struct string* l , const struct string* r ) {
-  assert( !string_null(l) );
-  assert( !string_null(r) );
-  return strcmp(l->str,r->str);
-}
+int string_cmp( const struct string* l , const struct string* r );
 
-static
-void string_destroy( struct string* str ) {
-  free((void*)str->str);
-  *str = NULL_STRING;
-}
+void string_destroy( struct string* str );
 
-static
-int string_null( const struct string* str ) {
-  return str->str == NULL || str->len == 0;
-}
+#define string_null(S) ((S)->str == NULL || (S)->len == 0)
 
 struct string
 string_concate( const struct string* l , const struct string* r );
@@ -169,111 +140,27 @@ struct strbuf {
   size_t cap;
 };
 
-static
-void strbuf_reserve( struct strbuf* buf , size_t cap ) {
-  char* nbuf = malloc(cap);
-  if( buf->str ) {
-    memcpy(nbuf,buf->str,buf->len);
-    buf->str[buf->len] = 0;
-    free(buf->str);
-  }
-  buf->str = nbuf;
-  buf->cap = cap;
-}
+void strbuf_reserve( struct strbuf* buf , size_t cap );
 
-static
-void strbuf_init( struct strbuf* buf ) {
-  buf->len = 0;
-  buf->cap = 0;
-  buf->str = mem_grow(NULL,sizeof(char),0,&(buf->cap));
-}
+void strbuf_init( struct strbuf* buf );
 
-static
-void strbuf_init_cap( struct strbuf* buf , size_t cap ) {
-  buf->str = NULL;
-  buf->len = 0;
-  assert(cap>0);
-  strbuf_reserve(buf,cap);
-}
+void strbuf_init_cap( struct strbuf* buf , size_t cap );
 
-static
-void strbuf_push( struct strbuf* buf , char c ) {
-  if( buf->cap == 0 || buf->cap == buf->len+1 ) {
-    buf->str = mem_grow(buf->str,sizeof(char),0,&(buf->cap));
-  }
-  buf->str[buf->len] = c;
-  ++(buf->len);
-  buf->str[buf->len]=0; /* always end with a null terminator */
-}
+void strbuf_push( struct strbuf* buf , char c );
 
-static
-void strbuf_append( struct strbuf* buf , const char* str , size_t len ) {
-  if( buf->cap == 0 || buf->cap <= buf->len + len + 1 ) {
-    buf->str = mem_grow(buf->str,sizeof(0),len,&(buf->cap));
-  }
-  memcpy(buf->str+buf->len,str,len);
-  buf->len += len;
-  buf->str[buf->len] = 0; /* always end with a null terminator */
-}
+void strbuf_append( struct strbuf* buf , const char* str , size_t len );
 
-static
-void strbuf_destroy( struct strbuf* buf ) {
-  free(buf->str);
-  buf->cap = buf->len = 0;
-}
+void strbuf_destroy( struct strbuf* buf );
 
-static
-char strbuf_index( const struct strbuf* buf , int idx ){
-  assert( idx < buf->len );
-  return buf->str[idx];
-}
+char strbuf_index( const struct strbuf* buf , int idx );
 
-static
-void strbuf_reset( struct strbuf* buf ) {
-  buf->len = 0;
-  if(buf->str) buf->str[0] == 0;
-}
+void strbuf_reset( struct strbuf* buf );
 
 #define strbuf_clear strbuf_reset
 
-static
-void strbuf_move( struct strbuf* buf , struct string* output ) {
-  /* If the occupied the buffer is larger than 1/2 of string buffer
-   * and its length is smaller than 1KB( small text ). We just return
-   * the buffer directly. Otherwise, we do a deep copy */
+void strbuf_move( struct strbuf* buf , struct string* output );
 
-  if( buf->len > STRBUF_MOVE_THRESHOLD ) {
-    if( buf->len == buf->cap ) {
-      output->str = buf->str;
-      output->len = buf->len;
-      buf->cap = buf->len = 0;
-      buf->str = NULL;
-    } else {
-      output->str = strdup(buf->str);
-      output->len = buf->len;
-      buf->len = 0;
-    }
-  } else {
-    if( buf->len >= buf->cap/2 ) {
-      output->str = buf->str;
-      output->len = buf->len;
-      buf->cap = buf->len = 0;
-      buf->str = NULL;
-    } else {
-      output->str = strdup(buf->str);
-      output->len = buf->len;
-      buf->len = 0;
-    }
-  }
-}
-
-static
-struct string strbuf_tostring( struct strbuf* buf ) {
-  struct string ret;
-  ret.str = buf->str;
-  ret.len = buf->len;
-  return ret;
-}
+struct string strbuf_tostring( struct strbuf* buf );
 
 
 /* ===========================================
@@ -323,24 +210,11 @@ void* map_find  ( struct map* , const struct string* );
 void* map_find_c( struct map* , const char* key );
 void map_clear( struct map* );
 #define map_size(d) ((d)->len)
-
 /* iterator for mapionary */
 int map_iter_start( const struct map* );
-static
-int map_iter_has  ( const struct map* d, int itr ) {
-  return (size_t)itr < d->cap;
-}
+#define map_iter_has(D,I) ((size_t)(I) < (D)->cap)
 int map_iter_move ( const struct map* , int itr );
-
-static
-struct map_pair map_iter_deref( struct map* d, int itr ) {
-  struct map_entry* e = d->entry + itr;
-  struct map_pair ret;
-  assert( e->used && !e->del );
-  ret.key = &(e->key);
-  ret.val = ((char*)(d->value)) + (d->obj_sz*(e-(d->entry)));
-  return ret;
-}
+struct map_pair map_iter_deref( struct map* d, int itr );
 
 /* ========================================
  * Slab
@@ -368,19 +242,8 @@ void slab_free( struct slab* , void* );
 /* =========================================
  * Other helper functions
  * =======================================*/
-
-
-static int is_int( double val ) {
-  double i;
-  modf(val,&i);
-  if( i < INT_MAX && i > INT_MIN )
-    return i == val;
-  else
-    return 0;
-}
-
+int is_int( double val );
 char* dtoc( double val , size_t* len );
-
 const char* const_cstr( char c );
 
 #endif /* _UTIL_H_ */

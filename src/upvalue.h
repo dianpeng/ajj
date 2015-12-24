@@ -25,7 +25,7 @@
 
 enum {
   UPVALUE_VALUE,
-  UPVALUE_FUNCTION,
+  UPVALUE_FUNCTION
 };
 
 struct upvalue {
@@ -44,23 +44,13 @@ struct upvalue_table {
   struct upvalue_table* prev; /* previous table */
 };
 
-static
 struct upvalue_table*
 upvalue_table_init( struct upvalue_table* ret ,
-    struct upvalue_table* p ) {
-  map_create(&(ret->d),sizeof(struct upvalue*),
-      UPVALUE_DEFAULT_BUF_SIZE);
-  ret->prev = p;
-  return ret;
-}
+    struct upvalue_table* p );
 
 /* Global varialbes table. Wrapper around map */
-static
 struct upvalue_table*
-upvalue_table_create( struct upvalue_table* p ) {
-  struct upvalue_table* ret = malloc(sizeof(*p));
-  return upvalue_table_init(ret,p);
-}
+upvalue_table_create( struct upvalue_table* p );
 
 struct upvalue_table*
 upvalue_table_destroy_one( struct ajj* a,

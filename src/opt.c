@@ -4,6 +4,7 @@
 #include "util.h"
 #include "bc.h"
 #include "vm.h"
+#include "lex.h"
 #include "object.h"
 #include <errno.h>
 #include <limits.h>
@@ -182,9 +183,9 @@ void report_error( struct opt* o ,const char* fmt , ... ) {
 
   /* dump the error */
   len = snprintf(o->a->err,1024,
-      "[Optimizer:(%s:%zu,%zu)] at:... %s ...!\nMessage:",
+      "[Optimizer:(%s:" SIZEF "," SIZEF ")] at:... %s ...!\nMessage:",
       obj->fn_tb->name.str,
-      ln,pos,
+      SIZEP(ln),SIZEP(pos),
       cs);
   assert( len >0 && len < ERROR_BUFFER_SIZE );
   /* output the rest messge even it is truncated */
@@ -435,6 +436,7 @@ int copy_ins( struct opt* o , int c1 ) {
       UNREACHABLE();
       return -1;
   }
+  return 0;
 }
 #undef DO
 #undef DO_0

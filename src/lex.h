@@ -1,6 +1,7 @@
 #ifndef _LEX_H_
 #define _LEX_H_
 #include "util.h"
+#include <ctype.h>
 
 #define CODE_SNIPPET_SIZE 256
 
@@ -73,25 +74,25 @@ enum {
   X(TK_LE,"<=") \
   X(TK_GT,">") \
   X(TK_GE,">=") \
-  X(TK_IS,"is") \
-  X(TK_ISN,"is-not") \
-  X(TK_IN,"in") \
-  X(TK_NIN,"not-in") \
-  X(TK_AND,"and") \
-  X(TK_OR,"or") \
-  X(TK_NOT,"not") \
   X(TK_PIPE,"|") \
   X(TK_DOT,".") \
   X(TK_COMMA,",") \
   X(TK_SEMICOLON,";") \
   X(TK_COLON,":") \
   X(TK_QUESTION,"?") \
-  X(TK_STRING,"<string>") \
-  X(TK_NUMBER,"<number>") \
-  X(TK_VARIABLE,"<variable>") \
+  X(TK_IS,"is") \
+  X(TK_ISN,"isnot") \
+  X(TK_IN,"in") \
+  X(TK_NIN,"notin") \
+  X(TK_AND,"and") \
+  X(TK_OR,"or") \
+  X(TK_NOT,"not") \
   X(TK_TRUE,"<true>") \
   X(TK_FALSE,"<false>") \
   X(TK_NONE,"<none>") \
+  X(TK_STRING,"<string>") \
+  X(TK_NUMBER,"<number>") \
+  X(TK_VARIABLE,"<variable>") \
   TOKEN_KEYWORD_LIST(X) \
   X(TK_EOF,"<eof>") \
   X(TK_UNKNOWN_NUMBER,"<unknown-number:overflow>") \
@@ -133,86 +134,25 @@ int tk_expect_id( struct tokenizer* tk );
  * The buffer is always assume has length CODE_SNIPPET_SIZE */
 void tk_get_code_snippet( const char* src, size_t pos ,
     char* output , size_t length );
-
 #define tk_get_current_code_snippet(tk,output,l) \
   tk_get_code_snippet((tk)->src,(tk)->pos,output,l)
 
 void tk_get_coordinate( const char* src , size_t until,
     size_t* ln, size_t* pos );
 
-static inline
-token_id tk_init( struct tokenizer* tk , const char* src ) {
-  tk->src = src;
-  tk->pos = 0;
-  tk->mode = TOKENIZE_JINJA;
-  strbuf_init(&(tk->lexeme));
-  return tk_lex(tk);
-}
+token_id tk_init( struct tokenizer* tk , const char* src );
 
-static inline
-void tk_destroy( struct tokenizer* tk ) {
-  strbuf_destroy(&(tk->lexeme));
-}
+#define tk_destroy(T) strbuf_destroy(&(T)->lexeme)
 
-static inline
-int tk_expect( struct tokenizer* tk , token_id t ) {
-  if( tk_lex(tk) == t ) {
-    tk_move(tk);
-    return 0;
-  } else {
-    return -1;
-  }
-}
+int tk_expect( struct tokenizer* tk , token_id t );
 
-static inline
-int tk_id_ichar( char c ) {
-  return c == '_' || isalpha(c) ;
-}
+#define tk_id_ichar(c) ((c) == '_' || isalpha(c))
+#define tk_not_id_char(C) (!tk_id_ichar(C))
+#define tk_id_rchar(C) ((C) =='_' || isalpha(C) || isdigit(C))
+#define tk_not_id_rchar(C) (!tk_id_rchar(C))
+#define tk_body_escape(C) ((C) =='{')
 
-static inline
-int tk_not_id_ichar( char c ) {
-  return !tk_id_ichar(c);
-}
-
-static inline
-int tk_id_rchar( char c ) {
-  return c == '_' || isalpha(c) || isdigit(c);
-}
-
-static inline
-int tk_not_id_rchar( char c ) {
-  return !tk_id_rchar(c);
-}
-
-static inline
-int tk_body_escape( char c ) {
-  return c == '{';
-}
-
-static inline
-int tk_string_escape_char( char c ) {
-  switch(c) {
-    case 'n': return '\n';
-    case 't': return '\t';
-    case 'b': return '\b';
-    case 'r': return '\r';
-    case '\'':return '\'';
-    case '\\':return '\\';
-    default: return 0;
-  }
-}
-
-static inline
-int tk_string_reescape_char( char c ) {
-  switch(c) {
-    case '\n': return 'n';
-    case '\t': return 't';
-    case '\b': return 'b';
-    case '\r': return 'r';
-    case '\'': return '\'';
-    case '\\': return '\\';
-    default: return 0;
-  }
-}
+int tk_string_escape_char( char c );
+int tk_string_reescape_char( char c );
 
 #endif /* _LEX_H_ */

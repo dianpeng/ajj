@@ -92,100 +92,20 @@ struct runtime {
 
 #define runtime_root_gc(rt) ((rt)->root_gc)
 
-static inline
-void program_init( struct program* prg ) {
-  prg->codes = NULL;
-  prg->spos = NULL;
-  prg->len = 0;
-
-  prg->str_len = 0;
-  prg->str_cap = AJJ_LOCAL_CONSTANT_SIZE;
-  prg->str_tbl = malloc(sizeof(struct string)*AJJ_LOCAL_CONSTANT_SIZE);
-
-  prg->num_len = 0;
-  prg->num_cap = AJJ_LOCAL_CONSTANT_SIZE;
-  prg->num_tbl = malloc(sizeof(double)*AJJ_LOCAL_CONSTANT_SIZE);
-
-  prg->par_size =0;
-}
-
+void program_init( struct program* prg );
 void program_destroy( struct program* prg );
-
-static inline
 int program_add_par( struct program* prg , struct string* name ,
-    int own, const struct ajj_value* val ) {
-  if( prg->par_size == AJJ_FUNC_ARG_MAX_SIZE )
-    return -1;
-  else {
-    assert(name->len < AJJ_SYMBOL_NAME_MAX_SIZE );
-    prg->par_list[prg->par_size].def_val = *val; /* owned the value */
-    prg->par_list[prg->par_size].name = own ? *name : string_dup(name);
-    ++prg->par_size;
-    return 0;
-  }
-}
-
-static
+    int own, const struct ajj_value* val );
 int program_const_str( struct program* prg , struct string* str ,
-    int own ) {
-  if( str->len > 128 ) {
-insert:
-    if( prg->str_len == prg->str_cap ) {
-      prg->str_tbl = mem_grow(prg->str_tbl, sizeof(struct string),
-          0,
-          &(prg->str_cap));
-    }
-    if(own) {
-      prg->str_tbl[prg->str_len] = *str;
-    } else {
-      prg->str_tbl[prg->str_len] = string_dup(str);
-    }
-    return prg->str_len++;
-  } else {
-    size_t i = 0 ;
-    for( ; i < prg->str_len ; ++i ) {
-      if( string_eq(prg->str_tbl+i,str) ) {
-        if(own) string_destroy(str);
-        return i;
-      }
-    }
-    goto insert;
-  }
-}
-
-static
-int program_const_num( struct program* prg , double num ) {
-  size_t i;
-  if( prg->num_len== prg->num_cap ) {
-    prg->num_tbl = mem_grow(
-        prg->num_tbl,sizeof(double),
-        0,
-        &(prg->num_cap));
-  }
-  for( i = 0 ; i < prg->num_len ; ++i ) {
-    if( num == prg->num_tbl[i] )
-      return i;
-  }
-  prg->num_tbl[prg->num_len] = num;
-  return prg->num_len++;
-}
-
+    int own );
+int program_const_num( struct program* prg , double num );
 /* helper function for converting the ajj_value to specific type */
 int vm_to_number( const struct ajj_value* , double* );
 int vm_to_integer( const struct ajj_value* , int* );
 /* boolean conversion will NEVER fail */
 int vm_to_boolean( const struct ajj_value* );
-
-static
-int vm_is_true( const struct ajj_value* val ) {
-  return vm_to_boolean(val) == 1;
-}
-
-static
-int vm_is_false( const struct ajj_value* val ) {
-  return vm_to_boolean(val) == 0;
-}
-
+#define vm_is_true(V) (vm_to_boolean(V) == 1)
+#define vm_is_false(V) (vm_to_boolean(V)==0)
 int vm_to_string( const struct ajj_value* val ,
         struct string* str , int* own );
 

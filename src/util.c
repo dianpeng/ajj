@@ -267,6 +267,146 @@ struct string TRUE_STRING = CONST_STRING("true");
 struct string FALSE_STRING= CONST_STRING("false");
 struct string NONE_STRING = CONST_STRING("none");
 
+struct string string_dup( const struct string* str ) {
+  struct string ret;
+  if( string_null(str) ) return NULL_STRING;
+  ret.str = strdup(str->str);
+  ret.len = str->len;
+  return ret;
+}
+
+struct string string_dupc( const char* str ) {
+  struct string ret;
+  ret.str = strdup(str);
+  ret.len = strlen(str);
+  return ret;
+}
+
+/* Do not call string_destroy on constant string */
+struct string string_const( const char* str , size_t len ) {
+  struct string ret;
+  ret.str = str;
+  ret.len = len;
+  return ret;
+}
+
+int string_eq( const struct string* l , const struct string* r ) {
+  assert( !string_null(l) );
+  assert( !string_null(r) );
+  return l->len == r->len && strcmp(l->str,r->str) == 0 ;
+}
+
+int string_eqc( const struct string* l , const char* str ) {
+  assert(!string_null(l));
+  return strcmp(l->str,str) == 0;
+}
+
+int string_cmp( const struct string* l , const struct string* r ) {
+  assert( !string_null(l) );
+  assert( !string_null(r) );
+  return strcmp(l->str,r->str);
+}
+
+void string_destroy( struct string* str ) {
+  free((void*)str->str);
+  *str = NULL_STRING;
+}
+
+void strbuf_reserve( struct strbuf* buf , size_t cap ) {
+  char* nbuf = malloc(cap);
+  if( buf->str ) {
+    memcpy(nbuf,buf->str,buf->len);
+    buf->str[buf->len] = 0;
+    free(buf->str);
+  }
+  buf->str = nbuf;
+  buf->cap = cap;
+}
+
+void strbuf_init( struct strbuf* buf ) {
+  buf->len = 0;
+  buf->cap = 0;
+  buf->str = mem_grow(NULL,sizeof(char),0,&(buf->cap));
+}
+
+void strbuf_init_cap( struct strbuf* buf , size_t cap ) {
+  buf->str = NULL;
+  buf->len = 0;
+  assert(cap>0);
+  strbuf_reserve(buf,cap);
+}
+
+void strbuf_push( struct strbuf* buf , char c ) {
+  if( buf->cap == 0 || buf->cap == buf->len+1 ) {
+    buf->str = mem_grow(buf->str,sizeof(char),0,&(buf->cap));
+  }
+  buf->str[buf->len] = c;
+  ++(buf->len);
+  buf->str[buf->len]=0; /* always end with a null terminator */
+}
+
+void strbuf_append( struct strbuf* buf , const char* str , size_t len ) {
+  if( buf->cap == 0 || buf->cap <= buf->len + len + 1 ) {
+    buf->str = mem_grow(buf->str,sizeof(0),len,&(buf->cap));
+  }
+  memcpy(buf->str+buf->len,str,len);
+  buf->len += len;
+  buf->str[buf->len] = 0; /* always end with a null terminator */
+}
+
+void strbuf_destroy( struct strbuf* buf ) {
+  free(buf->str);
+  buf->cap = buf->len = 0;
+}
+
+char strbuf_index( const struct strbuf* buf , int idx ){
+  assert( idx < buf->len );
+  return buf->str[idx];
+}
+
+void strbuf_reset( struct strbuf* buf ) {
+  buf->len = 0;
+  if(buf->str) buf->str[0] = 0;
+}
+
+void strbuf_move( struct strbuf* buf , struct string* output ) {
+  /* If the occupied the buffer is larger than 1/2 of string buffer
+   * and its length is smaller than 1KB( small text ). We just return
+   * the buffer directly. Otherwise, we do a deep copy */
+
+  if( buf->len > STRBUF_MOVE_THRESHOLD ) {
+    if( buf->len == buf->cap ) {
+      output->str = buf->str;
+      output->len = buf->len;
+      buf->cap = buf->len = 0;
+      buf->str = NULL;
+    } else {
+      output->str = strdup(buf->str);
+      output->len = buf->len;
+      buf->len = 0;
+    }
+  } else {
+    if( buf->len >= buf->cap/2 ) {
+      output->str = buf->str;
+      output->len = buf->len;
+      buf->cap = buf->len = 0;
+      buf->str = NULL;
+    } else {
+      output->str = strdup(buf->str);
+      output->len = buf->len;
+      buf->len = 0;
+    }
+  }
+}
+
+struct string strbuf_tostring( struct strbuf* buf ) {
+  struct string ret;
+  ret.str = buf->str;
+  ret.len = buf->len;
+  return ret;
+}
+
+
 void* mem_grow( void* ptr , size_t obj_sz,
     size_t append ,
     size_t* old_cap ) {
@@ -316,7 +456,7 @@ unsigned int map_hash( const struct string* key ) {
   const size_t sz = key->len;
   unsigned int h = STRING_HASH_SEED;
   for( i = 0 ; i < sz ; ++i ) {
-    h = h ^((h<<5)+(h>>2)) + (unsigned int)(key->str[i]);
+    h = (h ^((h<<5)+(h>>2))) + (unsigned int)(key->str[i]);
   }
   return h;
 }
@@ -605,6 +745,14 @@ int map_iter_move( const struct map* d , int itr ) {
   return itr;
 }
 
+struct map_pair map_iter_deref( struct map* d, int itr ) {
+  struct map_entry* e = d->entry + itr;
+  struct map_pair ret;
+  assert( e->used && !e->del );
+  ret.key = &(e->key);
+  ret.val = ((char*)(d->value)) + (d->obj_sz*(e-(d->entry)));
+  return ret;
+}
 
 /* =====================
  * Slab implementation
@@ -672,6 +820,15 @@ void slab_destroy( struct slab* sl ) {
 /* ===============================
  * Other
  * =============================*/
+int is_int( double val ) {
+  double i;
+  modf(val,&i);
+  if( i < INT_MAX && i > INT_MIN )
+    return i == val;
+  else
+    return 0;
+}
+
 char* dtoc( double val , size_t* len ) {
   char buf[256];
   if( is_int(val) ) {

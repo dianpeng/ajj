@@ -276,7 +276,7 @@ void test_expr() {
     const struct program* prg;
     assert(obj); prg = ajj_object_jinja_main(obj);
     assert(prg);
-    printf("%s\n",src);
+     
 
   }
 
@@ -287,7 +287,7 @@ void test_expr() {
     const struct program* prg;
     assert(obj); prg = ajj_object_jinja_main(obj);
     assert(prg);
-    printf("%s\n",src);
+     
 
   }
 
@@ -302,7 +302,7 @@ void test_expr() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
-    printf("%s\n",src);
+     
 
   }
 
@@ -321,7 +321,7 @@ void test_expr() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
-    printf("%s\n",src);
+     
 
   }
 
@@ -334,8 +334,20 @@ void test_expr() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
-    printf("%s\n",src);
+     
 
+  }
+
+  { /* tenary */
+    const char* src = "{% do (1+3*2//5 if me is you is he is not tom and i in some_map else 3+5) if None is True else None %}";
+    struct ajj* a = ajj_create();
+    struct ajj_object* obj = parse(a,"Hello World",src,0);
+    const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+    assert(obj);
+    prg = ajj_object_jinja_main(obj);
+    assert(prg);
+     
   }
 
   { /* list */
@@ -410,7 +422,7 @@ void test_macro() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
-    printf("%s\n",src);
+     
     //
     prg = ajj_object_get_jinja_macro(obj,&input);
     assert(prg);
@@ -822,6 +834,7 @@ void test_constexpr() {
 }
 
 int main() {
+#if 0
   test0();
   test_set();
   test_for();
@@ -838,5 +851,17 @@ int main() {
   test_extends();
   test_move();
   test_constexpr();
+#endif
+  { /* tenary */
+    const char* src = "{% do (1+3*2//5 if me is you is he is not tom and i in some_map else 3+5) if None is True(1,[23,4],557) else None %}";
+    struct ajj* a = ajj_create();
+    struct ajj_object* obj = parse(a,"Hello World",src,0);
+    const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+    assert(obj);
+    prg = ajj_object_jinja_main(obj);
+    assert(prg);
+    dump_program(a,src,prg,output);
+  }
   return 0;
 }

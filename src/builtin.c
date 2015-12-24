@@ -3,9 +3,9 @@
 #include "util.h"
 #include "vm.h"
 
-#define FAIL(a,f,...) \
+#define FAIL1(a,f,val) \
   do { \
-    ajj_error(a,f,__VA_ARGS__); \
+    ajj_error(a,f,val); \
     return AJJ_EXEC_FAIL; \
   } while(0)
 
@@ -35,7 +35,7 @@ int list_ctor( struct ajj* a, void* udata /* NULL */,
     size_t len,
     void** ret, int* type ) {
   if( len > 0 ) {
-    FAIL(a,"%s","list::__ctor__ cannot accept arguments!");
+    FAIL1(a,"%s","list::__ctor__ cannot accept arguments!");
   } else {
     struct list* l;
     l = malloc(sizeof(*l));
@@ -68,7 +68,7 @@ int list_append( struct ajj* a ,
     struct ajj_value* ret ) {
   struct list* l = LIST(obj);
   if( arg_len > 1 )
-    FAIL(a,"%s","list::append can only accept 1 argument!");
+    FAIL1(a,"%s","list::append can only accept 1 argument!");
   if( l->len == l->cap ) {
     /* grow the memory */
     l->entry = mem_grow(l->entry,sizeof(struct ajj_value),
@@ -92,7 +92,7 @@ int list_extend( struct ajj* a ,
     struct ajj_value* ret ) {
   struct list* l = LIST(obj);
   if( arg_len > 1 || !IS_A(arg,LIST_TYPE) )
-    FAIL(a,"%s","list::extend can only accept 1 argument as a list!");
+    FAIL1(a,"%s","list::extend can only accept 1 argument as a list!");
   else {
     struct list* t  = LIST(arg);
     size_t i;
@@ -119,11 +119,11 @@ int list_pop_back( struct ajj* a,
     size_t arg_len,
     struct ajj_value* ret ) {
   if( arg_len > 0 ) {
-    FAIL(a,"%s","list::pop_back cannot accept argument!");
+    FAIL1(a,"%s","list::pop_back cannot accept argument!");
   } else {
     struct list* l = LIST(obj);
     if( l->len == 0 ) {
-      FAIL(a,"%s","list::pop_back cannot pop value from "
+      FAIL1(a,"%s","list::pop_back cannot pop value from "
           "list has 0 elements!");
     } else {
       --l->len;
@@ -140,7 +140,7 @@ int list_count( struct ajj* a,
     size_t arg_len,
     struct ajj_value* ret ) {
   if( arg_len > 0 )
-    FAIL(a,"%s","list::count cannot accept argument!");
+    FAIL1(a,"%s","list::count cannot accept argument!");
   else {
     struct list* l = LIST(obj);
     *ret = ajj_value_number(l->len);
@@ -156,7 +156,7 @@ int list_clear( struct ajj* a,
     size_t arg_len,
     struct ajj_value* ret ) {
   if( arg_len > 0 ) {
-    FAIL(a,"%s","list::clear cannot accept argument!");
+    FAIL1(a,"%s","list::clear cannot accept argument!");
   } else {
     struct list* l = LIST(obj);
     l->len = 0;
@@ -433,7 +433,7 @@ int dict_ctor( struct ajj* a ,
   UNUSE_ARG(udata);
 
   if( arg_len != 0 ) {
-    FAIL(a,"%s","dict::__ctor__ cannot accept arguments!");
+    FAIL1(a,"%s","dict::__ctor__ cannot accept arguments!");
   } else {
     struct map* m = malloc(sizeof(*m));
     map_create(m,sizeof(struct ajj_value),DEFAULT_DICT_CAP);
@@ -462,7 +462,7 @@ int dict_get( struct ajj* a ,
   int own;
 
   if( arg_len != 1 || vm_to_string(arg,&key,&own) ) {
-    FAIL(a,"%s","dict::get cannot convert argument to string as key!");
+    FAIL1(a,"%s","dict::get cannot convert argument to string as key!");
   } else {
     struct map* m = DICT(obj);
     struct ajj_value* val;
@@ -488,11 +488,10 @@ int dict_set( struct ajj* a ,
   int own;
 
   if( arg_len != 2 || vm_to_string(arg,&key,&own) ) {
-    FAIL(a,"%s","dict::set can only accept 2 arguments and the "
+    FAIL1(a,"%s","dict::set can only accept 2 arguments and the "
         "first one must be a string!");
   } else {
     struct map* m = DICT(obj);
-    struct ajj_value* val;
     if( map_insert(m,&key,own,arg+1) ) {
       if( own ) string_destroy(&key);
       *ret = AJJ_FALSE;
@@ -513,7 +512,7 @@ int dict_has_key( struct ajj* a ,
   int own;
 
   if( arg_len != 1 || vm_to_string(arg,&key,&own) ) {
-    FAIL(a,"%s","dict::has_key can only accept 1 argument and it "
+    FAIL1(a,"%s","dict::has_key can only accept 1 argument and it "
         "must be a string!");
   } else {
     struct map* m = DICT(obj);
@@ -539,7 +538,7 @@ int dict_update( struct ajj* a ,
   int own;
 
   if( arg_len != 2 || vm_to_string(arg,&key,&own) ) {
-    FAIL(a,"%s","dict::updatae can only accept 2 arguments and the first "
+    FAIL1(a,"%s","dict::updatae can only accept 2 arguments and the first "
         "one must be a string!");
   } else {
     struct map* m = DICT(obj);
@@ -563,7 +562,7 @@ int dict_clear( struct ajj* a ,
     size_t arg_len,
     struct ajj_value* ret ) {
   if( arg_len != 0 ) {
-    FAIL(a,"%s","dict::clear cannot accept argument!");
+    FAIL1(a,"%s","dict::clear cannot accept argument!");
   } else {
     struct map* m = DICT(obj);
     map_clear(m);
@@ -579,7 +578,7 @@ int dict_count( struct ajj* a ,
     size_t arg_len,
     struct ajj_value* ret ) {
   if( arg_len != 0 ) {
-    FAIL(a,"%s","dict::count cannot accept argument!");
+    FAIL1(a,"%s","dict::count cannot accept argument!");
   } else {
     struct map* m = DICT(obj);
     *ret = ajj_value_number(m->len);
@@ -682,7 +681,10 @@ void dict_attr_set( struct ajj* a,
     const struct ajj_value* key,
     const struct ajj_value* val ) {
   struct ajj_value ret;
-  struct ajj_value arg[2] = { *key , *val };
+  struct ajj_value arg[2];
+  arg[0] = *key;
+  arg[1] = *val;
+
   CHECK(dict_set(a,obj,arg,2,&ret)==AJJ_EXEC_OK);
 }
 
@@ -891,7 +893,7 @@ int xrange_ctor( struct ajj* a,
   int val;
 
   if( arg_len != 1 || vm_to_integer(arg,&val) ) {
-    FAIL(a,"%s","xrange::__ctor__ can only accept 1 "
+    FAIL1(a,"%s","xrange::__ctor__ can only accept 1 "
         "argument and it must be a integer!");
   } else {
     x = malloc(sizeof(*x));
@@ -977,8 +979,8 @@ xrange_display( struct ajj* a ,
   char buf[256];
   UNUSE_ARG(a);
   assert( IS_A(val,XRANGE_TYPE) );
-  *len = (size_t)sprintf(buf,"xrange(%zu)",
-      XRANGE(val)->len);
+  *len = (size_t)sprintf(buf,"xrange(" SIZEF ")",
+      SIZEP(XRANGE(val)->len));
   return strdup(buf);
 }
 
@@ -1068,12 +1070,12 @@ int loop_ctor( struct ajj* a,
     int* tp ) {
   UNUSE_ARG(udata);
   if(arg_num != 1)
-    FAIL(a,"%s","__loop__::__ctor__ can only accept 1 argument and "
+    FAIL1(a,"%s","__loop__::__ctor__ can only accept 1 argument and "
         "it must be an integer!");
   else {
     int len;
     if( vm_to_integer(arg,&len) ) {
-      FAIL(a,"__loop__::__ctpr__ can only convert first argument:%s "
+      FAIL1(a,"__loop__::__ctpr__ can only convert first argument:%s "
           "to integer!",ajj_value_get_type_name(arg));
     } else {
       struct loop* lp = malloc(sizeof(*lp));
@@ -1137,15 +1139,23 @@ loop_display( struct ajj* a, const struct ajj_value* obj,
   struct loop* l;
   assert(IS_A(obj,LOOP_TYPE));
   l = LOOP(obj);
-  *len = (size_t)sprintf(buf,"loop(index:%zu;index0:%zu;revindex:%zu;"
-      "revindex0:%zu;first:%d;last:%d;length:%zu)",
-      l->index,
-      l->index0,
-      l->revindex,
-      l->revindex0,
+  *len = (size_t)sprintf(buf,"loop(index:"
+      SIZEF 
+      ";index0:"
+      SIZEF
+      ";revindex:"
+      SIZEF
+      ";revindex0:"
+      SIZEF
+      ";first:%d;last:%d;length:"
+      SIZEF")",
+      SIZEP(l->index),
+      SIZEP(l->index0),
+      SIZEP(l->revindex),
+      SIZEP(l->revindex0),
       l->first,
       l->last,
-      l->length);
+      SIZEP(l->length));
   return strdup(buf);
 }
 
