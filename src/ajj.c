@@ -775,8 +775,11 @@ ajj_display( struct ajj* a, const struct ajj_value* val,
       return obj->val.str.str;
     case AJJ_VALUE_NONE:
       *own = 0;
-      *len = NONE_STRING.len;
-      return NONE_STRING.str;
+      *len = 0;
+      return ""; /* empty string, NONE MUST never display
+                  * anything correctly or out. This makes
+                  * {{ some_function() }} with function returns
+                  * None no harm to the output */
     case AJJ_VALUE_BOOLEAN:
       *own = 0;
       if(val->value.boolean) {
@@ -836,6 +839,18 @@ void ajj_error( struct ajj* a , const char* format , ... ) {
   va_list vl;
   va_start(vl,format);
   vsnprintf(a->err,ERROR_BUFFER_SIZE,format,vl);
+}
+
+struct ajj_object*
+ajj_parse_template( struct ajj* a , const char* filename ) {
+  size_t len;
+  const char* src = ajj_load_file(a,filename,&len);
+  if(!src) {
+    ajj_error(a,"Cannot load file:%s!",filename);
+    return NULL;
+  } else {
+    return parse(a,filename,src,1);
+  }
 }
 
 int ajj_render( struct ajj* a , const char* src ,

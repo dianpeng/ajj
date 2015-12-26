@@ -10,7 +10,7 @@
 #define AJJ_LOCAL_CONSTANT_SIZE 128
 #define AJJ_EXTENDS_MAX_SIZE 8
 #define AJJ_FUNC_LOCAL_BUF_SIZE 16
-#define AJJ_FUNC_ARG_MAX_SIZE 16
+#define AJJ_FUNC_ARG_MAX_SIZE 24
 
 /* Indicate how many functions you could recursively call */
 #define AJJ_MAX_CALL_STACK 128

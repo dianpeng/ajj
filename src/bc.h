@@ -25,11 +25,20 @@
 #define ITERATOR_VAL 1
 #define ITERATOR_KEYVAL 2
 
+/* builtin variables */
+#define ARGNUM_INDEX 0
+#define FUNC_INDEX 1
+#define VARGS_INDEX 2
+#define CALLER_INDEX 3
+#define FUNC_BUILTIN_VAR_SIZE 4
+
 extern struct string THIS;
 extern struct string ARGNUM;
 extern struct string MAIN;
 extern struct string CALLER;
+extern struct string CALLER_STUB;
 extern struct string FUNC;
+extern struct string VARGS;
 extern struct string SUPER;
 extern struct string SELF;
 extern struct string ITER;
@@ -87,6 +96,7 @@ extern struct string LOOP;
   X(VM_DIVTRUCT,0,"divtruct") \
   X(VM_CALL,2,"call") \
   X(VM_RET,0,"ret") \
+  X(VM_BCALL,1,"bcall") \
   X(VM_PRINT,0,"print") \
   X(VM_POP,1,"pop") \
   X(VM_TPUSH,1,"tpush") \
@@ -125,7 +135,7 @@ extern struct string LOOP;
   X(VM_ENTER,0,"enter") \
   X(VM_EXIT,0,"exit") \
   X(VM_INCLUDE,2,"include") \
-  X(VM_IMPORT,2,"import") \
+  X(VM_IMPORT,1,"import") \
   X(VM_EXTENDS,0,"extends") \
   X(VM_NOP0,0,"nop0") \
   X(VM_NOP1,1,"nop1") \

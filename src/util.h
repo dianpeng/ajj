@@ -72,6 +72,9 @@
 #define SIZEF "%zu"
 #endif /* C99 */
 
+#ifndef MIN
+#define MIN(X,Y) ((X)<(Y) ? (X) : (Y))
+#endif
 
 /* grow a piece of memory to a new memory. The size_t obj_sz is used represent
  * the length for each elements and the length is the size of the current array,
@@ -105,8 +108,6 @@ extern struct string NONE_STRING;
 
 #define CONST_STRING(X) { X , ARRAY_SIZE(X)-1 }
 
-int string_null( const struct string* );
-
 struct string string_dup( const struct string* str );
 struct string string_dupc( const char* str );
 
@@ -121,7 +122,12 @@ int string_cmp( const struct string* l , const struct string* r );
 
 void string_destroy( struct string* str );
 
-#define string_null(S) ((S)->str == NULL || (S)->len == 0)
+/* string null means the pointer to the str is NULL */
+#define string_null(S) ((S)->str == NULL)
+
+/* string empty means string is not NULL but it just doesn't
+ * contain any content */
+#define string_empty(S)(!string_null(S) && string_eq(S,&EMPTY_STRING))
 
 struct string
 string_concate( const struct string* l , const struct string* r );

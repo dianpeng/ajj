@@ -398,8 +398,13 @@ int parse_list( struct parser* p , struct emitter* em ) {
  * appending after the each element which makes it context free. We need to parse
  * this sort of thing when we see a leading parenthenses ! Take an extra step to
  * look ahead */
+enum {
+  TUPLE,
+  EXPR
+};
+
 static
-int parse_tuple_or_subexpr( struct parser* p , struct emitter* em ) {
+int parse_tuple_or_subexpr( struct parser* p , struct emitter* em , int* tp ) {
   /* We cannot look back and I don't want to patch the code as well.
    * So we have to spend an extra instruction on top of it in case
    * it is an tuple */
@@ -413,6 +418,7 @@ int parse_tuple_or_subexpr( struct parser* p , struct emitter* em ) {
     /* empty tuple/list */
     tk_move(tk);
     EMIT0_AT(em,instr,VM_LLIST);
+    *tp = TUPLE;
     return 0;
   }
 
@@ -425,11 +431,13 @@ int parse_tuple_or_subexpr( struct parser* p , struct emitter* em ) {
     /* this is an tuple here */
     EMIT0_AT(em,instr,VM_LLIST);
     EMIT0(em,VM_ATTR_PUSH);
+    *tp = TUPLE;
     return parse_seq(p,em,TK_RPAR);
   } else {
     CONSUME(TK_RPAR);
     /* Emit a NOP initially since we don't have a real tuple */
     EMIT0_AT(em,instr,VM_NOP0);
+    *tp = EXPR;
     return 0;
   }
 }
@@ -542,6 +550,12 @@ int parse_invoke_par( struct parser* p , struct emitter* em ) {
   do {
     CALLE((parse_expr(p,em)));
     ++num;
+    if( num > AJJ_FUNC_ARG_MAX_SIZE ) {
+      /* do a check here ? */
+      report_error(p,"Function passing to many parameters!"
+          "At most %d is allowed!",AJJ_FUNC_ARG_MAX_SIZE);
+      return -1;
+    }
     if( tk->tk == TK_COMMA ) {
       tk_move(tk);
     } else {
@@ -549,7 +563,8 @@ int parse_invoke_par( struct parser* p , struct emitter* em ) {
         tk_move(tk);
         break;
       } else {
-        report_error(p,"Function/Method call must be closed by \")\"!");
+        report_error(p,"Function/Method call must be closed"
+              " by \")\"!");
         return -1;
       }
     }
@@ -638,20 +653,19 @@ int parse_pipecmd( struct parser* p , struct emitter* em ,
 }
 
 static
-int parse_prefix( struct parser* p, struct emitter* em ) {
+int parse_prefix( struct parser* p, struct emitter* em ,
+    struct string* prefix ) {
   struct tokenizer* tk = &(p->tk);
-  struct string prefix;
-  assert(tk->tk == TK_VARIABLE);
-  CALLE(symbol(p,&prefix));
-  tk_move(tk);
+
   if( tk->tk == TK_LPAR ) {
-    CALLE(parse_funccall_or_pipe(p,em,&prefix,0));
+    CALLE(parse_funccall_or_pipe(p,em,prefix,0));
   } else {
     if( tk->tk == TK_DOT || tk->tk == TK_LSQR ) {
-      CALLE(parse_attr_or_methodcall(p,em,&prefix));
+      CALLE(parse_attr_or_methodcall(p,em,prefix));
     } else {
       /* Just a variable name */
-      CALLE(parse_var_prefix(p,em,&prefix));
+      if( !string_null(prefix) ) 
+        CALLE(parse_var_prefix(p,em,prefix));
     }
   }
   do {
@@ -660,12 +674,12 @@ int parse_prefix( struct parser* p, struct emitter* em ) {
     } else if( tk->tk == TK_PIPE ) {
       tk_move(tk);
       EXPECT_VARIABLE();
-      CALLE(symbol(p,&prefix));
+      CALLE(symbol(p,prefix));
       tk_move(tk);
       if( tk->tk == TK_LPAR ) {
-        CALLE(parse_funccall_or_pipe(p,em,&prefix,1));
+        CALLE(parse_funccall_or_pipe(p,em,prefix,1));
       } else {
-        CALLE(parse_pipecmd(p,em,&prefix));
+        CALLE(parse_pipecmd(p,em,prefix));
       }
     } else {
       break;
@@ -750,12 +764,15 @@ int parse_atomic( struct parser* p, struct emitter* em ) {
   struct tokenizer* tk = &(p->tk);
   int idx;
   struct string str;
+  int tp;
 
   tk_expect_id(tk); /* rewrite the tokenizer to get more
                      * keyword candidate */
   switch(tk->tk) {
     case TK_VARIABLE:
-      CALLE(parse_prefix(p,em));
+      CALLE(symbol(p,&str)); /* get the symbol name */
+      tk_move(tk); /* move the token */
+      CALLE(parse_prefix(p,em,&str));
       break;
     case TK_STRING:
       strbuf_move(&(tk->lexeme),&str);
@@ -781,16 +798,20 @@ int parse_atomic( struct parser* p, struct emitter* em ) {
       tk_move(tk);
       break;
     case TK_LPAR:
-      CALLE(parse_tuple_or_subexpr(p,em));
+      CALLE(parse_tuple_or_subexpr(p,em,&tp));
+      if(tp == TUPLE)
+        CALLE(parse_prefix(p,em,&NULL_STRING));
       break;
     case TK_LSQR:
       CALLE(parse_list(p,em));
+      CALLE(parse_prefix(p,em,&NULL_STRING));
       break;
     case TK_LBRA:
       CALLE(parse_dict(p,em));
       break;
     default:
-      report_error(p,"Unexpect token here:%s",tk_get_name(tk->tk));
+      report_error(p,"Unexpect token here:%s",
+          tk_get_name(tk->tk));
       return -1;
   }
   if(tk->tk == TK_IS || tk->tk == TK_ISN) {
@@ -1343,6 +1364,25 @@ int parse_func_prolog( struct parser* p , struct emitter* em ) {
   return 0;
 }
 
+/* This function is used to allocate the builtin variable for each
+ * function. The builtin variables for each function has 4, they are:
+ * 1. __argnum__: number of parameters passed into this function.
+ * 2. __func__  : name of the function
+ * 3. vargs     : a list of parameters that is not marked for function.
+ * 4. caller    : the caller's function name
+ * These 4 arguments will be placed right after the last argument passed
+ * by the caller so it is before every arguments defined inside of the
+ * function. The order do matter */
+
+static
+int alloc_func_builtin_var( struct parser* p ) {
+  CALLE(lex_scope_set(p,ARGNUM.str)==-2);
+  CALLE(lex_scope_set(p,FUNC.str)==-2);
+  CALLE(lex_scope_set(p,VARGS.str)==-2);
+  CALLE(lex_scope_set(p,CALLER.str)==-2);
+  return 0;
+}
+
 static int
 parse_func_body( struct parser* p , struct emitter* em ) {
   struct lex_scope* scp = PTOP();
@@ -1353,14 +1393,17 @@ parse_func_body( struct parser* p , struct emitter* em ) {
   assert( PTOP()->end == 0 );
 
   CALLE(parse_func_prolog(p,em)); /* Parsing the prolog */
+  CALLE(alloc_func_builtin_var(p)); /* builtin vars */
+
   /* start to parse the function body ,which is just
    * another small code scope */
   CALLE(parse_scope(p,em,1,1));
+
   /* Generate return instructions */
   EMIT0(em,VM_RET);
+
   /* Notes, after calling this function, the tokenizer should still
    * have tokens related to end of the callin scope */
-
   lex_scope_exit(p);
   assert( PTOP() == scp ); /* Check */
   return 0;
@@ -1474,7 +1517,7 @@ parse_block( struct parser* p , struct emitter* em ) {
   if( p->extends == 0 ) {
     int idx;
     idx=program_const_str(em->prg,&name,0);
-    EMIT2(em,VM_CALL,idx,0);
+    EMIT1(em,VM_BCALL,idx);
   }
   assert(p->tpl->val.obj.fn_tb);
   new_prg = func_table_add_jj_block(
@@ -1517,7 +1560,7 @@ parse_call( struct parser* p , struct emitter* em ) {
 
   /* now generate the code for setting it up as a upvalue */
   name_idx = program_const_str(em->prg,&name,0);
-  caller_idx = program_const_str(em->prg,&CALLER,0);
+  caller_idx = program_const_str(em->prg,&CALLER_STUB,0);
   EMIT1(em,VM_LSTR,name_idx); /* load the name onto stack */
   EMIT1(em,VM_UPVALUE_SET,caller_idx); /* set the value into caller_idx */
 
@@ -1528,6 +1571,8 @@ parse_call( struct parser* p , struct emitter* em ) {
   EXPECT(TK_LPAR); /* must be a function call */
   CALLE(parse_funccall_or_pipe(p,em,&macro_name,0)); /* generate call */
   CONSUME(TK_RSTMT); /* eat the %} */
+  /* generate pop to pop out the return value */
+  EMIT1(em,VM_POP,1);
 
   /* now parse the function body */
   CALLE(parse_func_body(p,&new_em));
@@ -2182,17 +2227,18 @@ parse_include( struct parser* p , struct emitter* em ) {
 }
 
 /* Import
- * Import has 2 types, one starts with import and the other starts with from.
- * In ajj, we only support import file_path as symbol grammar. Also, we change
- * it to support context variables. User can specify an optional upvalue after
- * the typical grammar to indicate we want a context grammar as well.
+ * In jinja2, user could import specific name/macro and then alias it
+ * into different other name. In our implementation, for simplicity,
+ * we don't allow this feature. Everytime, if user trys to do importing,
+ * every macro will be imported into the calling scope.
+ *
+ * Also , jinja2 forces the method with underscore prefix cannot be even
+ * imported. We don't have such constraints since if you really don't want
+ * that function just don't call it. This level of private is really kind
+ * of confusing and useless.
+ *
  * EG:
  * {% import template_path as object %}
- * {% import template_path as object upvalue %}
- *   {% set key=value %}
- *   {% set key=value %}
- *   {% set key=value %}
- * {% endextends %}
  *
  * Import will be parsed as follow, the bottom 2 elements of the stack are
  * imported file path and also the name/symbol for the imported objects.
@@ -2203,7 +2249,6 @@ parse_import( struct parser* p , struct emitter* em ) {
   struct string name;
   int name_idx;
   struct tokenizer* tk = &(p->tk);
-  int cnt = 0;
 
   assert(tk->tk == TK_IMPORT);
   tk_move(tk);
@@ -2218,20 +2263,10 @@ parse_import( struct parser* p , struct emitter* em ) {
 
   /* Get the index */
   name_idx=program_const_str(em->prg,&name,1);
-
-  /* get the context body */
-  if( tk->tk == TK_UPVALUE ) {
-    tk_move(tk);
-    CONSUME(TK_RSTMT);
-    CALLE((cnt=parse_context_body(p,em))<0);
-    CONSUME(TK_ENDIMPORT);
-    CONSUME(TK_RSTMT);
-  } else {
-    CONSUME(TK_RSTMT);
-  }
+  CONSUME(TK_RSTMT);
 
   /* emit the import instruction */
-  EMIT2(em,VM_IMPORT,name_idx,cnt);
+  EMIT1(em,VM_IMPORT,name_idx);
   return 0;
 }
 
@@ -2281,13 +2316,11 @@ parse_scope( struct parser* p , struct emitter* em ,
    * to parse any statements in global scope except block */
   int only_extends = is_in_main(p) && (p->extends > 0);
 
-  if( enter_scope ) {
+  if( enter_scope )
     CALLE(lex_scope_enter(p,0) == NULL);
-  }
 
-  if( emit_gc ) {
+  if( emit_gc )
     ENTER_SCOPE();
-  }
 
 #define HANDLE_CASE(T,t) \
     case TK_##T: \
@@ -2427,6 +2460,8 @@ parse( struct ajj* a, const char* key,
   CHECK((prg = func_table_add_jj_main(
           tmpl->val.obj.fn_tb,&MAIN,0)));
   emitter_init(&em,prg);
+  /* reserve space for builtin values */
+  alloc_func_builtin_var(&p);
   if(parse_scope(&p,&em,1,1)) {
     lex_scope_exit(&p);
     parser_destroy(&p);

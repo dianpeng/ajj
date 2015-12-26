@@ -109,6 +109,12 @@ int vm_to_boolean( const struct ajj_value* );
 int vm_to_string( const struct ajj_value* val ,
         struct string* str , int* own );
 
+/* Get builtin variable from the current stack frame */
+int vm_get_argnum( struct ajj* a );
+const struct string* vm_get_func( struct ajj* a );
+const struct ajj_value* vm_get_vargs( struct ajj* a );
+const struct string* vm_get_caller( struct ajj* a );
+
 /* An internal helper function to allow user redirect a C side function
  * into a script function call. Pay attention, this is not the tradition
  * way for calling a script function from C function, since after the
@@ -119,11 +125,10 @@ int vm_to_string( const struct ajj_value* val ,
  * return vm_call_script_function(a, ... );
  */
 
-int vm_call_script_function( struct ajj* a,
+int vm_call_script_func( struct ajj* a,
     const char* name,
     struct ajj_value* par,
-    size_t par_cnt,
-    int* fail );
+    size_t par_cnt);
 
 /* =============================================
  * Interfaces

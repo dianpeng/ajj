@@ -1,0 +1,9 @@
+{% macro Test(arg1,arg2='UUVV',arg3=[1,2,3,'VV']) %}
+  arg1={{arg1}}
+  arg2={{arg2}}
+  arg3={{arg3}}
+  argnum={{__argnum__}}
+  func={{__func__}}
+  vargs={{vargs}}
+  caller={{caller}}
+{% endmacro %}

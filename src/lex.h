@@ -141,11 +141,8 @@ void tk_get_coordinate( const char* src , size_t until,
     size_t* ln, size_t* pos );
 
 token_id tk_init( struct tokenizer* tk , const char* src );
-
 #define tk_destroy(T) strbuf_destroy(&(T)->lexeme)
-
 int tk_expect( struct tokenizer* tk , token_id t );
-
 #define tk_id_ichar(c) ((c) == '_' || isalpha(c))
 #define tk_not_id_char(C) (!tk_id_ichar(C))
 #define tk_id_rchar(C) ((C) =='_' || isalpha(C) || isdigit(C))

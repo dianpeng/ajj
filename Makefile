@@ -1,16 +1,15 @@
 GCC_PROFILE_FLAGS := -fprofile-arcs -ftest-coverage -o2 -g -Wpedantic -Wall
 LINK := -lm
 
+vm-test:
+	cd src; \
+	gcc $(GCC_PROFILE_FLAGS) ajj.c opt.c util.c gc.c bc.c lex.c parse.c object.c upvalue.c vm.c builtin.c vm-test.c $(LINK) -o vm-test
+
 parser-test:
 	cd src; \
 	gcc $(GCC_PROFILE_FLAGS) ajj.c builtin.c util.c bc.c lex.c parse.c object.c vm.c upvalue.c gc.c parser-test.c $(LINK) -o parser-test; \
 	./parser-test; \
 	gcov ajj.c util.c bc.c lex.c parse.c object.c parser-test.c
-
-
-vm-test:
-	cd src; \
-	gcc $(GCC_PROFILE_FLAGS) ajj.c opt.c util.c gc.c bc.c lex.c parse.c object.c upvalue.c vm.c builtin.c vm-test.c $(LINK) -o vm-test
 
 opt-test2:
 	cd src; \

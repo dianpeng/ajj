@@ -10,7 +10,9 @@ static void do_test( const char* src ) {
     struct ajj* a = ajj_create();
     struct ajj_object* jinja;
     const struct program* prg;
+    const struct program* another_prg;
     struct ajj_io* output = ajj_io_create_file(a,stdout);
+    const struct string NAME = { "Input" , 5 };
     jinja = parse(a,"Hello World",src,0);
     if(!jinja) {
       fprintf(stderr,"%s",a->err);
@@ -22,10 +24,6 @@ static void do_test( const char* src ) {
       fprintf(stderr,"%s",a->err);
       assert(0);
     }
-
-    assert(!optimize(a,jinja));
-    dump_program(a,src,prg,output);
-    assert(!vm_run_jinja(a,jinja,output));
 
     ajj_io_destroy(output);
     ajj_destroy(a); /* all memory should gone */
@@ -258,6 +256,15 @@ void test_expr() {
           "{{ my_dict.abc }}\n" \
           "{{ my_dict['abc'] }}\n");
 
+  do_test("{{ True is not None }}\n"
+          "{{ 2 is odd }}\n"
+          "{{ 3 is odd }}\n"
+          "{{ 4 is even}}\n"
+          "{{ 'UvUv' is upper }}\n"
+          "{{ 'UU' is upper }}\n"
+          "{{ 'VuV' is lower}}\n"
+          "{{ 'vvu' is lower}}\n"
+          "{{ NotDefine is not defined }}\n");
 }
 
 void test_loop() {
@@ -535,6 +542,11 @@ void test_branch() {
     dump_program(a,src,prg,output);
     assert(!vm_run_jinja(a,jinja,output));
   }
+  do_test("{% set c = cycler('a','b','c','UUV',[1,2,3,4,{'b':true,'f':false}]) %}" \
+          "{% for x in xrange(1000) %}" \
+          "x={{x}}\n" \
+          "current = {{ c.next() }}\n" \
+          "{% endfor %}");
 }
 
 /* MOVE operations */
@@ -650,7 +662,19 @@ void test_macro() {
 }
 
 int main() {
-  do_test("{{ 'a' ~ 'b' ~ 'c' ~123 ~ False }}\n"\
-          "{{ [1,2,3,4] ~ 'uvc' }}\n");
+#if 0
+  do_test("{% macro Input(title,class='dialog') %}" \
+            "CallerStub=\n{{ caller('MyBoss','Overwrite') }}\n" \
+            "{% do caller('MyBoos','Overwrite','Watch Me','Whip','Nae Nae') %}" \
+          "{% endmacro %}" \
+          "{% call(args,def='123') Input('Hello World','Caller') %}" \
+          "argnum={{__argnum__}}\n" \
+          "VARGS={{vargs}}\n" \
+          "{% endcall %}");
+  do_test("{% import 'import.txt' as T %}" \
+          "{% import 'import.txt' as T2%}" \
+          "{{ T.Test('Hello World') }}" \
+          "{{ T2.Test('Hello World2') }}");
+#endif
+  do_test("{{ to_jsonc('{ \"Hello\" : \"World\" ,\"None\":null,\"True\":true,\"False\":false,\"UUV\":[1,2,3,4,5] }') }}\n");
 }
-

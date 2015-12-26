@@ -308,6 +308,8 @@ int string_cmp( const struct string* l , const struct string* r ) {
 }
 
 void string_destroy( struct string* str ) {
+  if(string_empty(str))
+    return;
   free((void*)str->str);
   *str = NULL_STRING;
 }

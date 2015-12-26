@@ -57,6 +57,7 @@ int exit_function( struct ajj* a , const struct ajj_value* ret );
 
 #define cur_frame(a) (&(a->rt->call_stk[a->rt->cur_call_stk-1]))
 #define cur_function(a) (cur_frame(a)->entry)
+#define cur_jinja(a) ((a)->rt->cur_obj)
 
 /* stack manipulation routine */
 #ifndef NDEBUG
@@ -92,7 +93,8 @@ int program_const_str( struct program* prg , struct string* str ,
   if( str->len > 128 ) {
 insert:
     if( prg->str_len == prg->str_cap ) {
-      prg->str_tbl = mem_grow(prg->str_tbl, sizeof(struct string),
+      prg->str_tbl = mem_grow(prg->str_tbl,
+          sizeof(struct string),
           0,
           &(prg->str_cap));
     }
@@ -137,11 +139,13 @@ void program_init( struct program* prg ) {
 
   prg->str_len = 0;
   prg->str_cap = AJJ_LOCAL_CONSTANT_SIZE;
-  prg->str_tbl = malloc(sizeof(struct string)*AJJ_LOCAL_CONSTANT_SIZE);
+  prg->str_tbl = malloc(sizeof(
+        struct string)*AJJ_LOCAL_CONSTANT_SIZE);
 
   prg->num_len = 0;
   prg->num_cap = AJJ_LOCAL_CONSTANT_SIZE;
-  prg->num_tbl = malloc(sizeof(double)*AJJ_LOCAL_CONSTANT_SIZE);
+  prg->num_tbl = malloc(sizeof(
+        double)*AJJ_LOCAL_CONSTANT_SIZE);
 
   prg->par_size =0;
 }
@@ -154,25 +158,40 @@ int unwind_stack( struct ajj* a , char* buf ) {
   char* start = buf;
   char* end = a->err + ERROR_BUFFER_SIZE -1 ;
   struct func_frame* fr = a->rt->call_stk;
+  const char* obj_name;
   assert(buf < end);
 
   /* dump the code in reverse order */
   for( i = a->rt->cur_call_stk-1 ; i >= 0 ; --i ) {
-    if( fr[i].obj == NULL ) {
-      buf += snprintf(buf,end-buf,"%d %s:%s arg-num:%d\n",i,
-          "<free-func>",
-          fr[i].name.str,
-          fr[i].par_cnt);
-      if( buf == end ) break;
+    /* if this frame comes from jinja template, also
+     * dump out the code segment in the jinja template */
+    char cbuf[48];
+    if( IS_JINJA(fr[i].entry) ) {
+      const char* src = fr[i].obj->val.obj.src;
+      assert(src);
+      tk_get_code_snippet(
+          src,
+          fr[i].entry->f.jj_fn.spos[fr->ppc],
+          cbuf,
+          ARRAY_SIZE(cbuf));
     } else {
-      const char* obj_name;
-      obj_name = GET_OBJECT_TYPE_NAME(fr[i].obj)->str;
-      buf += snprintf(buf,end-buf,"%d <%s>:%s arg-num:%d\n",i,
-          obj_name,
-          fr[i].name.str,
-          fr[i].par_cnt);
-      if( buf == end ) break;
+      strcpy(cbuf,"<no-source>");
     }
+
+    if(fr[i].obj) {
+      obj_name = GET_OBJECT_TYPE_NAME(fr[i].obj)->str;
+    } else {
+      obj_name = "free-func";
+    }
+
+    buf += snprintf(buf,end-buf,
+        "%d:(... %s ...) <%s>:%s arg-num:%d\n",
+        i,
+        cbuf,
+        obj_name,
+        fr[i].name.str,
+        fr[i].par_cnt);
+    if(buf == end) break;
   }
   return buf - start;
 }
@@ -182,17 +201,11 @@ void report_error( struct ajj* a , const char* fmt , ... ) {
   char* b = a->err;
   va_list vl;
   char* end = a->err + ERROR_BUFFER_SIZE;
-  struct func_frame* fr = cur_frame(a);
-  const char* src = a->rt->cur_obj->val.obj.src;
-  char cbuf[32];
-  assert(a->rt->cur_obj->tp == AJJ_VALUE_JINJA );
-  assert(IS_JINJA(fr->entry));
-  tk_get_code_snippet(src,
-      fr->entry->f.jj_fn.spos[fr->ppc]
-      ,cbuf,32);
-  b += sprintf(b,"(... %s ...)",cbuf);
+  assert(cur_jinja(a)->tp == AJJ_VALUE_JINJA );
   va_start(vl,fmt);
+  b += sprintf(b,"ErrorMessage:(");
   b += vsnprintf(b,end-b,fmt,vl);
+  *b = ')' ; ++b;
   *b = '\n'; ++b;
   b += unwind_stack(a,b);
 }
@@ -248,9 +261,10 @@ double const_num( struct ajj* a, int idx ) {
  * runtime
  * ==========================*/
 static
-struct runtime* runtime_create( struct ajj* a , struct ajj_io* output ) {
+struct runtime* runtime_create( struct ajj* a , 
+    struct ajj_object* obj , struct ajj_io* output ) {
   struct runtime* rt = malloc(sizeof(*rt));
-  rt->cur_obj = NULL;
+  rt->cur_obj = obj;
   rt->cur_call_stk = 0;
   rt->cur_gc = rt->root_gc = 
     gc_scope_create(a,&(a->gc_root));
@@ -268,6 +282,7 @@ void runtime_destroy( struct ajj* a , struct runtime* rt ) {
     gc_scope_destroy(a,c);
     c = n;
   }
+  /* destroy all the global variable scope */
   upvalue_table_destroy(a,rt->global,&(a->env));
   free(rt);
 }
@@ -725,12 +740,7 @@ int call_ctor( struct ajj* a , struct func_table* ft,
   void* udata;
   struct ajj_object* obj;
   struct ajj_value par[AJJ_FUNC_ARG_MAX_SIZE];
-  if( pc >= AJJ_FUNC_ARG_MAX_SIZE ) {
-    report_error(a,"Too much prameters passing "
-        "into a object CTOR. We  only allow at most "
-        ":%d function arguments!",AJJ_FUNC_ARG_MAX_SIZE);
-    return -1;
-  }
+  assert(pc < AJJ_FUNC_ARG_MAX_SIZE);
 
   /* push the parametr into the stack */
   for( i = pc ; i >0 ; --i ) {
@@ -744,33 +754,94 @@ int call_ctor( struct ajj* a , struct func_table* ft,
       pc,
       &udata,
       &tp) ) {
-    return -1;
+    return AJJ_EXEC_FAIL;
+  }
+  obj = ajj_object_create_obj(
+      a,a->rt->cur_gc,ft,udata,tp);
+  *ret = ajj_value_assign(obj);
+
+  /* now call move function to ensure the internal
+   * referenced value of this object is in the correct
+   * gc scope */
+  if( ft->slot.move ) {
+    ft->slot.move(a,ret);
   }
 
-  obj = ajj_object_create_obj(a,a->rt->cur_gc,ft,udata,tp);
-  *ret = ajj_value_assign(obj);
-  return 0; /* finish the call */
+  return AJJ_EXEC_OK;
 }
 
 static
-void set_func_upvalue( struct ajj* a ) {
-  int fail;
+void set_func_builtin_vars( struct ajj* a,
+    int argnum, /* argnum */
+    const struct string* func, /* function name */
+    struct ajj_object* vargs, /* NULL if no */
+    const struct string* caller /* NULL if no */ ) {
+
+  push(a,ajj_value_number(argnum)); /* argnum */
+  push(a,ajj_value_assign(
+        ajj_object_create_const_string(a,a->rt->cur_gc,
+          func))); /* func */
+  push(a,vargs == NULL ? AJJ_NONE :
+      ajj_value_assign(vargs)); /* vargs */
+  if(caller) {
+    push(a,ajj_value_assign(
+          ajj_object_create_const_string(a,a->rt->cur_gc,
+            caller)));
+  } else {
+    push(a,AJJ_NONE);
+  }
+}
+
+/* This function helps to prepare the arguments for a script
+ * call and also set up the 4 bulitin varaibles accordingly*/
+static
+void prepare_script_call( struct ajj* a ) {
   struct func_frame* fr = cur_frame(a);
-  struct ajj_value argnum = ajj_value_number(fr->par_cnt);
-  struct ajj_value fname = ajj_value_assign(
-      ajj_object_create_const_string(a,
-        a->rt->cur_gc,&(fr->name)));
-  set_upvalue(a,&ARGNUM,&argnum,1,1,&fail);
-  assert(!fail);
-  set_upvalue(a,&FUNC,&fname,1,1,&fail);
-  assert(!fail);
+  const struct program* prg = GET_JINJAFUNC(fr->entry);
+  size_t i;
+  struct ajj_object* vargs = NULL;
+  int real_an = fr->par_cnt;
+  assert(fr->par_cnt <= AJJ_FUNC_ARG_MAX_SIZE);
+
+  /* push default parameters if we need to */
+  for( i = fr->par_cnt ; i < prg->par_size ; ++i ) {
+    push(a,prg->par_list[i].def_val);
+  }
+
+  /* check if we have extra args */
+  if( (size_t)fr->par_cnt > prg->par_size ) {
+    /* the extra arguments passed in serves as the vargs
+     * local variables here */
+    vargs = ajj_object_create_list(a,a->rt->cur_gc);
+
+    for( i = fr->par_cnt ; i > prg->par_size ; --i ) {
+      list_push(a,vargs,top(a,1));
+      pop(a,1);
+    }
+    /* we need to modify the stack frame as well since
+     * ESP is wrong here */
+    fr->par_cnt = prg->par_size;
+    fr->esp -= (fr->par_cnt-prg->par_size);
+  }
+
+  /* set up the builtin variables */
+  /* currently the stack only covers the parameter that passed
+   * in the builtin variable is not allocated here, so we need
+   * to allocate the space on stack and set the correct value*/
+  set_func_builtin_vars(a,
+      real_an,
+      &(fr->name),
+      vargs,
+      a->rt->cur_call_stk > 1 ? &((fr-1)->name) : NULL );
 }
 
 /* call */
 /* The precondition of vm_call is that the function calling frame is
  * already setup, and the parameters are on the stack. Since we support
  * default parameters, we need to push arguments on top of stack as well.
- * This vm_call needs to handle that as well. */
+ * This vm_call needs to handle that as well.
+ * Notes: this function must be called right after enter_function since it
+ * will setup function builtin vars which is stack related */
 static
 int
 vm_call(struct ajj* a, struct ajj_object* obj ,
@@ -780,23 +851,11 @@ vm_call(struct ajj* a, struct ajj_object* obj ,
   struct ajj_value v_obj =
     (obj?ajj_value_assign(obj):AJJ_NONE);
 
-  /* set up the upvalue */
-  set_func_upvalue(a);
-
   if( IS_C(fr->entry) ) {
     const struct function* entry = fr->entry;
     struct ajj_value par[AJJ_FUNC_ARG_MAX_SIZE];
     size_t par_sz ;
-    /* Populating the function parameter from stack and pass them
-     * to the c_routine. Why don't use the LUA style to explicitly
-     * pass parameter on a stack ? While, I guess having an array
-     * of parameters making user feel less painful. */
-    if( fr->par_cnt > AJJ_FUNC_ARG_MAX_SIZE ) {
-      report_error(a,"Too much parameters passing into "
-          "a c function/method.We only allow %d function "
-          "arguments!",AJJ_FUNC_ARG_MAX_SIZE);
-      return -1;
-    }
+    assert(fr->par_cnt <= AJJ_FUNC_ARG_MAX_SIZE);
 
     /* The left most parameter is on lower parts of the stack */
     for( par_sz = fr->par_cnt ; par_sz > 0 ; --par_sz ) {
@@ -823,20 +882,8 @@ vm_call(struct ajj* a, struct ajj_object* obj ,
     }
   } else {
     if( IS_JINJA(fr->entry) ) {
-      const struct program* prg = &(fr->entry->f.jj_fn);
-      int i;
-
       assert( obj != NULL );
-      if( fr->par_cnt > AJJ_FUNC_ARG_MAX_SIZE ||
-          fr->par_cnt > prg->par_size ) {
-        report_error(a,"Too much parameters passing "
-            "into a jinja function expect :%zu but "
-            "get:%zu",prg->par_size,fr->par_cnt);
-        return -1;
-      }
-      for( i = fr->par_cnt ; i < prg->par_size ; ++i ) {
-        push(a,prg->par_list[i].def_val);
-      }
+      prepare_script_call(a);
       return VM_FUNC_CALL; /* continue call */
     } else {
       struct func_table* ft;
@@ -857,7 +904,7 @@ vm_attrcall(struct ajj* a, struct ajj_object* obj ,
 }
 
 static
-void vm_test( struct ajj* a, int fn_idx, int an , int* fail ) {
+void vm_test( struct ajj* a, int fn_idx, int an , int pos , int* fail ) {
   const struct string* fn;
   const struct function* f;
   fn = const_str(a,fn_idx);
@@ -885,6 +932,12 @@ void vm_test( struct ajj* a, int fn_idx, int an , int* fail ) {
             "boolean value, all the test function should return "
             "boolean value!",fn->str);
         *fail =1; return;
+      }
+      if(!pos) {
+        if(ret.value.boolean)
+          ret = AJJ_FALSE;
+        else
+          ret = AJJ_TRUE;
       }
       /* test function is always a C function, so we need
        * to pop the function frame right after calling the
@@ -1083,6 +1136,8 @@ void setup_env( struct ajj* a , int cnt , int* fail ) {
   }
 }
 
+/* This function will parse a json file which contains all the needed
+ * information to setup the environment which later used to do rendering */
 static
 void setup_json_env( struct ajj* a , int cnt , int* fail ) {
   assert(0);
@@ -1166,13 +1221,38 @@ fail:
   *fail = 1; return;
 }
 
+static
+void vm_import( struct ajj* a, int arg1 , int* fail ) {
+  const struct string* symbol = const_str(a,arg1);
+  struct ajj_value* fn = top(a,1);
+  if( fn->type != AJJ_VALUE_STRING ) {
+    report_error(a,"The filename for import must be a string,but "
+        "get type:%s",ajj_value_get_type_name(fn));
+    *fail = 1;
+    return;
+  } else {
+    struct ajj_object* jinja = ajj_parse_template(a,
+        ajj_value_to_cstr(fn));
+    struct ajj_value val;
+    if(jinja == NULL) {
+      rewrite_error(a);
+      *fail = 1;
+      return;
+    } else {
+      val = ajj_value_assign(jinja);
+      set_upvalue(a,symbol,&val,0,0,fail);
+      if(*fail) return;
+    }
+  }
+  *fail = 0;
+}
+
 /* Function resolver.
  * All the function resolver will *NOT* report error if
  * they cannot find any function with given name */
-
 static
 const struct function*
-resolve_obj_method( struct ajj* a , struct ajj_object* val,
+resolve_obj_function( struct ajj* a , struct ajj_object* val,
     const struct string* name ) {
   size_t i;
   struct func_table* ft = val->val.obj.fn_tb;
@@ -1184,17 +1264,43 @@ resolve_obj_method( struct ajj* a , struct ajj_object* val,
   return NULL;
 }
 
-/* Use to resolve function when you call it under an object, VM_ATTRCALL */
 static
 const struct function*
-resolve_method( struct ajj* a , struct ajj_object** val ,
+resolve_obj_method( struct ajj* a, struct ajj_object* val,
+    const struct string* name ) {
+  const struct function* f = resolve_obj_function(a,
+      val,name);
+  if( !IS_JJBLOCK(f) ) {
+    assert( !IS_OBJECTCTOR(f) );
+    return f;
+  } else {
+    return NULL;
+  }
+}
+
+static
+const struct function*
+resolve_obj_block( struct ajj* a , struct ajj_object* val,
+    const struct string* name ) {
+  const struct function* f = resolve_obj_function(a,
+      val,name);
+  if( IS_JJBLOCK(f) )
+    return f;
+  else
+    return NULL;
+}
+
+/* Use to resolve function recursively to all its parent */
+static
+const struct function*
+resolve_function( struct ajj* a , struct ajj_object** val ,
     const struct string* name ) {
   struct ajj_object* tmpl = *val;
   int p = 0;
   const struct function* f;
   do {
     /* search the function inside of the template/object */
-    if( (f = resolve_obj_method(a,tmpl,name)) ) {
+    if( (f = resolve_obj_function(a,tmpl,name)) ) {
       *val = tmpl;
       return f;
     }
@@ -1220,10 +1326,10 @@ resolve_free_function( struct ajj* a, const struct string* name ,
     struct ajj_object** obj ) {
   const struct function* f;
   struct upvalue* uv;
-  *obj = a->rt->cur_obj;
-  assert( a->rt->cur_obj );
+  *obj = cur_jinja(a);
+  assert( cur_jinja(a) );
 
-  if((f = resolve_method(a,obj,name)))
+  if((f = resolve_function(a,obj,name)))
     return f;
 
   /* searching through the global function table */
@@ -1283,9 +1389,6 @@ void enter_function( struct ajj* a , const struct function* f,
     fr->method = method;
     fr->obj = obj;
     fr->cur_loops = 0;
-    /* only update the rt->cur_obj when we enter into a function
-     * call that really has a object, otherwise just don't update*/
-    if(obj) a->rt->cur_obj = obj;
     ++rt->cur_call_stk;
     *fail = 0;
   }
@@ -1309,36 +1412,73 @@ int exit_function( struct ajj* a , const struct ajj_value* ret ) {
     assert( fr->esp >= fr->ebp );
     /* push the return value onto the stack */
     push(a,*ret);
-    /* udpate the rt->cur_obj */
-    a->rt->cur_obj = cur_frame(a)->obj;
   }
   return 0;
 }
 
-int call_script_func( struct ajj* a , const char* name,
-    struct ajj_value* par , size_t par_cnt , int* fail ) {
+/* BUILTIN variables */
+int vm_get_argnum( struct ajj* a ) {
+  return cur_frame(a)->par_cnt;
+}
+
+const struct string* vm_get_func( struct ajj* a ) {
+  return &(cur_frame(a)->name);
+}
+
+const struct ajj_value* vm_get_vargs( struct ajj* a ) {
+  struct func_frame* fr = cur_frame(a);
+  if( IS_C(fr->entry) || IS_OBJECTCTOR(fr->entry))
+    return NULL;
+  else {
+    const struct program* prg = GET_JINJAFUNC(fr->entry);
+    struct ajj_value* vargs;
+    assert( IS_JINJA(fr->entry) );
+
+    vargs = a->rt->val_stk + fr->ebp + prg->par_size
+      + VARGS_INDEX;
+    
+    /* check the stack */
+    if( vargs->type == AJJ_VALUE_NONE )
+      return NULL;
+    else {
+      return vargs;
+    }
+  }
+}
+
+const struct string* vm_get_caller( struct ajj* a ) {
+  if( a->rt->cur_call_stk == 1 )
+    return NULL;
+  else {
+    return &(a->rt->call_stk[
+        a->rt->cur_call_stk-2].name);
+  }
+}
+
+int vm_call_script_func( struct ajj* a , const char* name,
+    struct ajj_value* par , size_t par_cnt ) {
   /* resolve the function from the current template object
    * with name "name" */
-  struct ajj_object* root_obj = a->rt->cur_obj;
+  struct ajj_object* tmpl = cur_jinja(a);
   struct string n = string_const(name,strlen(name));
-  const struct function* f = resolve_obj_method(a,root_obj,&n);
+  const struct function* f = resolve_obj_method(a,tmpl,&n);
   size_t i;
-
+  int fail;
   assert(f); /* internal usage, should never return NULL */
-
-  assert( IS_JINJA(f) );
-  set_func_upvalue(a);
-
-  /* push the object value onto the stack */
-  push(a,*par);
+  assert( IS_JINJA(f) ); /* this function should always be script */
 
   /* push all the function ON TO the stack */
   for( i = 0 ; i < par_cnt ; ++i ) {
     push(a,par[i]);
   }
 
-  enter_function(a,f,par_cnt,0,root_obj,fail);
-  if(!*fail) return -1;
+  /* now enter the function frame , acting as the function
+   * arguments is pushed by the caller */
+  enter_function(a,f,par_cnt,0,tmpl,&fail);
+  if(fail) return AJJ_EXEC_FAIL;
+
+  /* prepare the script call */
+  prepare_script_call(a);
 
   /* notify the VM to execute the current script function */
   return VM_FUNC_CALL;
@@ -1529,8 +1669,14 @@ int vm_main( struct ajj* a ) {
       vm_beg(TEST) {
         int fn_idx = instr_1st_arg(c);
         int an = instr_2nd_arg(a);
-        vm_test(a,fn_idx,an,RCHECK);
+        vm_test(a,fn_idx,an,1,RCHECK);
       } vm_end(TEST)
+
+      vm_beg(TESTN) {
+        int fn_idx = instr_1st_arg(c);
+        int an = instr_2nd_arg(a);
+        vm_test(a,fn_idx,an,0,RCHECK);
+      } vm_end(TESTN)
 
       vm_beg(CALL) {
         int fn_idx= instr_1st_arg(c);
@@ -1562,6 +1708,25 @@ int vm_main( struct ajj* a ) {
           }
         }
       } vm_end(CALL)
+
+      vm_beg(BCALL) {
+        int fn_idx = instr_1st_arg(c);
+        const struct string* fn = const_str(a,fn_idx);
+        struct ajj_object* obj = cur_frame(a)->obj;
+        const struct function* f = resolve_obj_block(a,
+            obj,fn);
+
+        if( f == NULL ) {
+          report_error(a,"Cannot find block:%s!",fn->str);
+          goto fail;
+        } else {
+          struct ajj_value ret;
+          int r;
+          enter_function(a,f,0,0,obj,RCHECK);
+          r = vm_call(a,obj,&ret);
+          assert( r == VM_FUNC_CALL );
+        }
+      } vm_end(BCALL)
 
       vm_beg(ATTR_CALL) {
         int fn_idx = instr_1st_arg(c);
@@ -1607,14 +1772,7 @@ int vm_main( struct ajj* a ) {
         /* check if we have return value here or not !
          * if not, put a dummy NONE on top of the caller stack */
         struct func_frame* fr = cur_frame(a);
-        struct ajj_value ret;
-        if( fr->ebp + fr->par_cnt == fr->esp ) {
-          /* nothing return */
-          ret = AJJ_NONE;
-        } else {
-          ret = *top(a,1); /* on top of the stack should be the
-                            * return value in this situations */
-        }
+        struct ajj_value ret = AJJ_NONE; /* always NONE */
         /* do clean up things */
         exit_function(a,&ret);
         /* check the current function frame to see whether we previously
@@ -1640,9 +1798,13 @@ int vm_main( struct ajj* a ) {
         struct string t;
         const char* text = ajj_display(
             a,top(a,1),&l,&own);
+
+        assert(text); /* should never fail */
+
         t.str = text;
         t.len = l;
-        vm_print(a,&t);
+        if(!string_empty(&t))
+          vm_print(a,&t);
         pop(a,1);
         if(own) free((void*)text);
       } vm_end(PRINT)
@@ -1974,6 +2136,11 @@ int vm_main( struct ajj* a ) {
         vm_include(a,a1,a2,RCHECK);
       } vm_end(INCLUDE)
 
+      vm_beg(IMPORT) {
+        vm_import(a,instr_1st_arg(c),RCHECK);
+        pop(a,1); /* pop the filename */
+      } vm_end(IMPORT)
+
       /* NOPS, should not exist after optimization */
       vm_beg(NOP0) {
       } vm_end(NOP0)
@@ -2000,7 +2167,7 @@ done:
 
 int vm_run_jinja( struct ajj* a , struct ajj_object* jj,
     struct ajj_io* output ) {
-  struct runtime* rt = runtime_create(a,output);
+  struct runtime* rt = runtime_create(a,jj,output);
   const struct function* m;
   int fail;
   a->rt = rt;
@@ -2010,11 +2177,17 @@ int vm_run_jinja( struct ajj* a , struct ajj_object* jj,
   enter_function(a,m,0,0,jj,&fail);
   assert(!fail);
   /* set up builtin upvalue */
-  set_func_upvalue(a);
+  set_func_builtin_vars(a,
+      0,
+      &(cur_frame(a)->name),
+      NULL,
+      NULL);
   /* let's rock */
   fail = vm_main(a);
+
   /* finish some crap then we are done */
   runtime_destroy(a,rt);
+
   a->rt = NULL;
   return fail;
 }

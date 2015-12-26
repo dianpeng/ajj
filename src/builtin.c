@@ -2,10 +2,21 @@
 #include "ajj-priv.h"
 #include "util.h"
 #include "vm.h"
+#include "upvalue.h"
+#include "bc.h"
+#include <ctype.h>
+#include <stdlib.h>
+#include <errno.h>
 
 #define FAIL1(a,f,val) \
   do { \
     ajj_error(a,f,val); \
+    return AJJ_EXEC_FAIL; \
+  } while(0)
+
+#define FAIL2(a,f,v1,v2) \
+  do { \
+    ajj_error(a,f,v1,v2); \
     return AJJ_EXEC_FAIL; \
   } while(0)
 
@@ -67,20 +78,25 @@ int list_append( struct ajj* a ,
     size_t arg_len,
     struct ajj_value* ret ) {
   struct list* l = LIST(obj);
-  if( arg_len > 1 )
-    FAIL1(a,"%s","list::append can only accept 1 argument!");
+  size_t i;
+  if( arg_len == 0 )
+    FAIL1(a,"%s","list::append must have at least 1 arguments!");
   if( l->len == l->cap ) {
     /* grow the memory */
     l->entry = mem_grow(l->entry,sizeof(struct ajj_value),
-        0,
+        arg_len,
         &(l->cap));
   }
   assert(l->len < l->cap);
-  /* move the target value to THIS gc scope */
-  l->entry[l->len++] = ajj_value_move(a,
-      obj->value.object->scp,arg);
 
-  RETURN_VOID;
+  /* move the target value to THIS gc scope */
+  for( i = 0 ; i < arg_len ; ++i ) {
+    l->entry[l->len++] = ajj_value_move(a,
+        obj->value.object->scp,arg+i);
+  }
+
+  *ret = *obj;
+  return AJJ_EXEC_OK;
 }
 
 /* extend */
@@ -107,7 +123,8 @@ int list_extend( struct ajj* a ,
         ajj_value_move(a,obj->value.object->scp,t->entry+i);
     }
 
-    RETURN_VOID;
+    *ret = *obj;
+    return AJJ_EXEC_OK;
   }
 }
 
@@ -128,7 +145,8 @@ int list_pop_back( struct ajj* a,
     } else {
       --l->len;
     }
-    RETURN_VOID;
+    *ret = *obj;
+    return AJJ_EXEC_OK;
   }
 }
 
@@ -1204,6 +1222,1118 @@ struct ajj_class LOOP_CLASS = {
   NULL
 };
 
+/* Cycler object */
+struct cycler {
+  struct ajj_value data[ AJJ_FUNC_ARG_MAX_SIZE ];
+  size_t len;
+  int cur; /* current cursor position. Use int is
+            * because we could assign value -1 to
+            * it initially, then we will not lose
+            * the very first element at very first
+            * shot */
+};
+
+#define CYCLER_TYPE (AJJ_VALUE_BUILTIN_TYPE+5)
+#define CYCLER(V) ((struct cycler*)(OBJECT(V)))
+
+static
+int cycler_ctor( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_num,
+    void** ret,
+    int* tp ) {
+  struct cycler* c;
+  size_t i;
+  UNUSE_ARG(a);
+  UNUSE_ARG(udata);
+  assert(arg_num <= AJJ_FUNC_ARG_MAX_SIZE);
+  c = malloc(sizeof(*c));
+  c->len = arg_num;
+  for( i = 0 ; i < arg_num ; ++i ) {
+    /* we don't care about the scope rules
+     * because after the ctor gets called,
+     * the our move function will be called
+     * to ensure we have correct gc scope */
+    c->data[i] = arg[i];
+  }
+
+  c->cur = -1; /* ensure we don't miss the first
+                * shot if user try to put a next
+                * function in the loop */
+  *ret = c;
+  *tp = CYCLER_TYPE;
+  return AJJ_EXEC_OK;
+}
+
+static
+void cycler_dtor( struct ajj* a,
+    void* udata,
+    void* obj ) {
+  UNUSE_ARG(a);
+  UNUSE_ARG(udata);
+  free(obj);
+}
+
+/* member functions */
+static
+int cycler_reset( struct ajj* a,
+    struct ajj_value* obj,
+    struct ajj_value* arg,
+    size_t arg_num,
+    struct ajj_value* ret ) {
+  struct cycler* c;
+  UNUSE_ARG(a);
+  assert(IS_A(obj,CYCLER_TYPE));
+  if(arg_num != 0) {
+    FAIL1(a,"%s","cycler::reset cannot accept any arguments!");
+  }
+
+  c = CYCLER(obj);
+  c->cur = 0;
+  return AJJ_EXEC_OK;
+}
+
+static
+int cycler_next( struct ajj* a,
+    struct ajj_value* obj,
+    struct ajj_value* arg,
+    size_t arg_num,
+    struct ajj_value* ret ) {
+  struct cycler* c;
+
+  UNUSE_ARG(a);
+  assert(IS_A(obj,CYCLER_TYPE));
+
+  if(arg_num != 0) {
+    FAIL1(a,"%s","cycler::next cannot accept any arguments!");
+  }
+
+  c = CYCLER(obj);
+  ++(c->cur);
+  if(c->cur == (int)(c->len))
+    c->cur = 0;
+  /* return current item */
+  *ret = c->data[c->cur];
+  return AJJ_EXEC_OK;
+}
+
+/* slot */
+
+static
+struct ajj_value
+cycler_attr_get( struct ajj* a,
+    const struct ajj_value* obj ,
+    const struct ajj_value* key ) {
+  struct string str;
+  int own;
+
+  UNUSE_ARG(a);
+  assert( IS_A(obj,CYCLER_TYPE) );
+  
+  if(vm_to_string(key,&str,&own))
+    return AJJ_NONE;
+  else {
+    if(string_eqc(&str,"current")) {
+      struct cycler* c = CYCLER(obj);
+      int idx = c->cur <0 ? 0 : c->cur;
+      return c->data[idx];
+    }
+    return AJJ_NONE;
+  }
+}
+
+static
+void cycler_move( struct ajj* a, struct ajj_value* obj ) {
+  size_t i;
+  struct cycler* c;
+  UNUSE_ARG(a);
+  assert( IS_A(obj,CYCLER_TYPE) );
+  c = CYCLER(obj);
+  for( i = 0 ; i < c->len ; ++i ) {
+    ajj_value_move(a,obj->value.object->scp,
+        c->data+i);
+  }
+}
+
+static
+const char* cycler_display( struct ajj* a,
+    const struct ajj_value* obj ,
+    size_t* len ) {
+  char buf[1024];
+  struct cycler* c;
+
+  UNUSE_ARG(a);
+  assert( IS_A(obj,CYCLER_TYPE) );
+  c = CYCLER(obj);
+  
+  *len = (size_t)sprintf(buf,
+      "cycler(current:%d"
+      ";length:" SIZEF
+      ")", c->cur,c->len);
+
+  return strdup(buf);
+}
+
+static 
+struct ajj_class_method AJJ_METHOD[] = {
+  { cycler_reset , "reset" },
+  { cycler_next , "next" }
+};
+
+static
+struct ajj_class CYCLER_CLASS = {
+  "cycler",
+  cycler_ctor,
+  cycler_dtor,
+  AJJ_METHOD,
+  ARRAY_SIZE(AJJ_METHOD),
+  {
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    cycler_attr_get,
+    NULL,
+    NULL,
+    cycler_move,
+    cycler_display,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
+    NULL
+  },
+  NULL
+};
+  
+
+/* Builtin Test -------------------------------- */
+static
+int test_true( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_num,
+    struct ajj_value* ret ) {
+  const char* fn = (const char*)udata;
+  if(arg_num != 1) {
+    FAIL1(a,"Test function:%s cannot accept extra arguments!",fn);
+  } else {
+    if(arg->type == AJJ_VALUE_BOOLEAN &&
+       arg->value.boolean ) {
+      *ret = AJJ_TRUE;
+    } else {
+      *ret = AJJ_FALSE;
+    }
+    return AJJ_EXEC_OK;
+  }
+}
+
+static
+int test_false( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_num,
+    struct ajj_value* ret ) {
+  const char* fn = (const char*)udata;
+  if(arg_num != 1) {
+    FAIL1(a,"Test function:%s cannot accept extra arguments!",fn);
+  } else {
+    if(arg->type == AJJ_VALUE_BOOLEAN &&
+       !arg->value.boolean) {
+      *ret = AJJ_TRUE;
+    } else {
+      *ret = AJJ_FALSE;
+    }
+    return AJJ_EXEC_OK;
+  }
+}
+
+static
+int test_none( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_num,
+    struct ajj_value* ret ) {
+  const char* fn = (const char*)udata;
+  if(arg_num != 1) {
+    FAIL1(a,"Test function:%s cannot accept extra arguments!",fn);
+  } else {
+    if(arg->type == AJJ_VALUE_NONE) {
+      *ret = AJJ_TRUE;
+    } else {
+      *ret = AJJ_FALSE;
+    }
+    return AJJ_EXEC_OK;
+  }
+}
+
+static
+int test_divisableby( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_num,
+    struct ajj_value* ret ) {
+  UNUSE_ARG(udata);
+  if(arg_num != 2) {
+    FAIL1(a,"%s","Test function:divisableby can only accept 2 argument!");
+  } else {
+    if(arg[1].type != AJJ_VALUE_NUMBER ||
+       arg[0].type != AJJ_VALUE_NUMBER) {
+      FAIL2(a,"Test function:divisableby's all arguments "
+          "must be a number, but only get:(%s,%s)!",
+          ajj_value_get_type_name(arg),
+          ajj_value_get_type_name(arg+1));
+    } else {
+      int arg1,arg2;
+      CHECK(!vm_to_integer(arg+1,&arg2));
+      CHECK(!vm_to_integer(arg,&arg1));
+      if( arg1 % arg2 == 0 )
+        *ret = AJJ_TRUE;
+      else
+        *ret = AJJ_FALSE;
+    }
+    return AJJ_EXEC_OK;
+  }
+}
+
+static
+int test_even( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_num,
+    struct ajj_value* ret ) {
+  UNUSE_ARG(udata);
+  if(arg_num != 1) {
+    FAIL1(a,"%s","Test function:even cannot accept extra arguments!");
+  } else {
+    if(arg[0].type != AJJ_VALUE_NUMBER ) {
+      FAIL1(a,"Test function:even's argument must be number,"
+          "but get:%s!",
+          ajj_value_get_type_name(arg));
+    } else {
+      int arg1;
+      CHECK(!vm_to_integer(arg,&arg1));
+      if( arg1 % 2 == 0 ) {
+        *ret = AJJ_TRUE;
+      } else {
+        *ret = AJJ_FALSE;
+      }
+    }
+    return AJJ_EXEC_OK;
+  }
+}
+
+static
+int test_iterator( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_num,
+    struct ajj_value* ret ) {
+  UNUSE_ARG(udata);
+  if(arg_num != 1) {
+    FAIL1(a,"%s","Test function:iterator cannot "
+        "accept extra arguments!");
+  } else {
+    switch(arg[0].type) {
+      case AJJ_VALUE_NONE:
+      case AJJ_VALUE_NUMBER:
+      case AJJ_VALUE_BOOLEAN:
+      case AJJ_VALUE_STRING:
+        *ret = AJJ_FALSE;
+        break;
+      case AJJ_VALUE_OBJECT:
+        {
+          const struct object* o =
+            ajj_value_to_obj(arg);
+          if(o->fn_tb->slot.iter_start) {
+            *ret = AJJ_TRUE;
+          } else {
+            *ret = AJJ_FALSE;
+          }
+          break;
+        }
+      default:
+        break;
+    }
+    return AJJ_EXEC_OK;
+  }
+}
+
+static
+int test_lower( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_num,
+    struct ajj_value* ret ) {
+  UNUSE_ARG(udata);
+  if(arg_num != 1) {
+    FAIL1(a,"%s","Test function:lower cannot "
+        "accept extra arguments!");
+  } else {
+    if(arg[0].type != AJJ_VALUE_STRING) {
+      FAIL1(a,"%s","Test function:lower can only "
+          "accept string type as its argument!");
+    } else {
+      const char* str = ajj_value_to_cstr(arg);
+      for( ; *str ; ++str ) {
+        if(isupper(*str))
+          break;
+      }
+      if(*str) {
+        *ret = AJJ_FALSE;
+      } else {
+        *ret = AJJ_TRUE;
+      }
+    }
+    return AJJ_EXEC_OK;
+  }
+}
+
+static
+int test_mapping( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_num,
+    struct ajj_value* ret ) {
+  const char* fn = (const char*)udata;
+  if(arg_num != 1) {
+    FAIL1(a,"Test function:%s cannot accept "
+        "extra arguments!",
+        fn);
+  } else {
+    if( IS_A(arg,DICT_TYPE) ) {
+      *ret = AJJ_TRUE;
+    } else {
+      *ret = AJJ_FALSE;
+    }
+  }
+  return AJJ_EXEC_OK;
+}
+
+static
+int test_number( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_num,
+    struct ajj_value* ret ) {
+  if(arg_num != 1) {
+    FAIL1(a,"%s","Test function:number cannot accept "
+        "extra arguments!");
+  } else {
+    if( arg->type == AJJ_VALUE_NUMBER ) {
+      *ret = AJJ_TRUE;
+    } else {
+      *ret = AJJ_FALSE;
+    }
+  }
+  return AJJ_EXEC_OK;
+}
+
+static
+int test_odd( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_num,
+    struct ajj_value* ret ) {
+  if(arg_num != 1) {
+    FAIL1(a,"%s","Test function:odd cannot accept "
+        "extra arguments!");
+  } else {
+    if(arg->type != AJJ_VALUE_NUMBER){ 
+      FAIL1(a,"Test function:odd's argument must be number,"
+          "but get:%s!",
+          ajj_value_get_type_name(arg));
+    } else {
+      int val;
+      CHECK(!vm_to_integer(arg,&val));
+      if( val % 2 == 1 ) {
+        *ret = AJJ_TRUE;
+      } else {
+        *ret = AJJ_FALSE;
+      }
+    }
+  }
+  return AJJ_EXEC_OK;
+}
+
+static
+int test_sameas( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_num,
+    struct ajj_value* ret ) {
+  if(arg_num != 2) {
+    FAIL1(a,"%s","Test function:sameas must accept one extra "
+        "arguments!");
+  } else {
+    switch(arg->type) {
+      case AJJ_VALUE_NONE:
+        if(arg[1].type == AJJ_VALUE_NONE) {
+          *ret = AJJ_TRUE;
+        } else {
+          *ret = AJJ_FALSE;
+        }
+        break;
+      case AJJ_VALUE_BOOLEAN:
+        if(arg[1].type == AJJ_VALUE_BOOLEAN &&
+           arg[1].value.boolean == arg->value.boolean)
+          *ret = AJJ_TRUE;
+        else
+          *ret = AJJ_FALSE;
+        break;
+      case AJJ_VALUE_NUMBER:
+        if(arg[1].type == AJJ_VALUE_NUMBER &&
+           arg[1].value.number == arg->value.number)
+          *ret = AJJ_TRUE;
+        else
+          *ret = AJJ_FALSE;
+        break;
+      case AJJ_VALUE_STRING:
+      case AJJ_VALUE_OBJECT:
+        if(arg[1].type == AJJ_VALUE_STRING &&
+           arg[1].value.object == arg->value.object)
+          *ret = AJJ_TRUE;
+        else
+          *ret = AJJ_FALSE;
+        break;
+      default:
+        UNREACHABLE();
+        break;
+    }
+    return AJJ_EXEC_OK;
+  }
+}
+
+static
+int test_string( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_num,
+    struct ajj_value* ret ) {
+  if( arg_num != 1 )
+    FAIL1(a,"%s","Test function:string cannot accept "
+        "extra arguments!");
+  else {
+    if(arg->type == AJJ_VALUE_STRING)
+      *ret = AJJ_TRUE;
+    else
+      *ret = AJJ_FALSE;
+    return AJJ_EXEC_OK;
+  }
+}
+
+static
+int test_defined( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_num,
+    struct ajj_value* ret ) {
+  if(arg_num != 1) {
+    FAIL1(a,"%s","Test function:defined cannot accept "
+        "extra arguments!");
+  } else {
+    if(arg->type != AJJ_VALUE_NONE)
+      *ret = AJJ_TRUE;
+    else
+      *ret = AJJ_FALSE;
+    return AJJ_EXEC_OK;
+  }
+}
+
+static
+int test_upper( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_num,
+    struct ajj_value* ret ) {
+  if(arg_num != 1) {
+    FAIL1(a,"%s","Test function:upper cannot accept "
+        "extra arguments!");
+  } else {
+    if(arg->type != AJJ_VALUE_STRING) {
+      FAIL1(a,"Test function:upper's argument must be string,"
+          "but get type:%s!",ajj_value_get_type_name(arg));
+    } else {
+      const char* str = ajj_value_to_cstr(arg);
+      for( ; *str; ++str ) {
+        if(islower(*str))
+          break;
+      }
+      if(*str) 
+        *ret = AJJ_FALSE;
+      else 
+        *ret = AJJ_TRUE;
+      return AJJ_EXEC_OK;
+    }
+  }
+}
+
+/* =====================================
+ * GLOBAL FUNCTION
+ * ===================================*/
+
+/* This function is used internally to achieve calling a macro's
+ * caller block inside of the macro's body. It is entirely a re-
+ * dispatch function that takes the argument in and check the script
+ * function name and then invoke it */
+static
+int caller( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_num,
+    struct ajj_value* ret ) {
+  struct upvalue* uv;
+  assert(a->rt && a->rt->global);
+
+  uv = upvalue_table_find(a->rt->global,
+      &CALLER_STUB,NULL);
+
+  if(!uv) {
+    FAIL1(a,"The upvalue variable:%s for internal usage is not "
+        "set!This is seriously wrong and it is possibly caused "
+        "by user delete this value using C-API manually! Please "
+        "do not delete internal variable!",
+        CALLER_STUB.str);
+  }
+
+  if(uv->type != UPVALUE_VALUE ||
+     uv->gut.val.type != AJJ_VALUE_STRING) {
+    FAIL2(a,"The upvalue variable:%s for internal usage is not "
+        "a string value but %s!Possibly collide with user defined "
+        "value !Do not use builtin variable ,PLEASE!",
+        CALLER_STUB.str,
+        uv->type == UPVALUE_VALUE ? ajj_value_get_type_name(
+          &(uv->gut.val)) :"global function/test/filter");
+
+  } else {
+    const char* name = ajj_value_to_cstr(&(uv->gut.val));
+    /* now redispatch this function */
+    return vm_call_script_func(a,
+        name,
+        arg,
+        arg_num);
+  }
+
+  return AJJ_EXEC_FAIL;
+}
+
+/* JSON ---------------------------------------------------------
+ * This provides a builtin json parser that is used for two
+ * purpose:
+ * 1. Help setup environment which is used for rendering some
+ * extra documents.
+ * 2. Provide builtin function for user to parse a json document
+ * but it won't be very useful.
+ * --------------------------------------------------------------*/
+
+
+/* We use a none-recursive way to do parsing , the reason to prefer
+ * a none recursive method is simply because this is safer to avoid
+ * too many nested json scopes which makes parsing prone to be attack.For
+ * jinja grammar parsing, although we use a recursive parser , but we
+ * have limitation on how much recursion we could have */
+
+enum {
+  COMMA=1,        /* expect a comma */
+  KEY=1<<1,          /* expect a key   */
+  VALUE=1<<2,        /* expect a value */
+  COLON=1<<3         /* expect a colon */
+};
+
+#define STATE_MASK (~15)
+#define JSON_ERROR_CODE_SNIPPET_SIZE 32
+
+static
+void json_report_error(struct ajj* a, const char* beg,
+    const char* pos , const char* fmt , ... ) {
+  /* get the code snippet */
+  size_t start = pos - beg;
+  size_t end = strlen(pos);
+  char cbuf[ JSON_ERROR_CODE_SNIPPET_SIZE + 1 ];
+  char* buf = a->err;
+  char* bend= a->err + ERROR_BUFFER_SIZE;
+  va_list vl;
+
+  va_start(vl,fmt);
+
+  start = MIN(JSON_ERROR_CODE_SNIPPET_SIZE/2,
+      start);
+
+  end = MIN(JSON_ERROR_CODE_SNIPPET_SIZE/2,
+      end);
+
+  strncpy(cbuf,pos-start,end+start);
+  cbuf[end+start] = 0;
+
+  buf += snprintf(buf,ERROR_BUFFER_SIZE,
+      "Json parsing error:(... %s ...):",
+      cbuf);
+
+  vsnprintf(buf, bend-buf, fmt,vl); 
+}
+
+#define JSON_MAX_NESTED_SIZE 128
+
+#define ARRAY_MASK (1<<30)
+#define OBJECT_MASK (1<<29)
+#define ROOT_MASK (1<<31)
+
+#define IS_ROOT(I) ((I) & ROOT_MASK)
+#define IS_ARRAY(I) ((I) & ARRAY_MASK)
+#define IS_OBJECT(I) ((I) & OBJECT_MASK)
+#define SET_ARRAY(I) ((I) = ((I) | ARRAY_MASK))
+#define SET_OBJECT(I) ((I) = ((I) | OBJECT_MASK))
+
+struct ajj_object*
+json_parsec( struct ajj* a , struct gc_scope* scp,
+    const char* src ) {
+  const char* beg = src;
+  unsigned int st[JSON_MAX_NESTED_SIZE];
+  struct ajj_value val[JSON_MAX_NESTED_SIZE];
+  struct string key[JSON_MAX_NESTED_SIZE];
+  struct ajj_value ret;
+  int cur = 0;
+  int c;
+  size_t i;
+
+  st[cur] = VALUE | ROOT_MASK;
+  val[0] = AJJ_NONE;
+
+#define CUR() (st[cur])
+#define SET(X) (st[cur] =((st[cur] & STATE_MASK) | (X)))
+#define IS(X) (CUR()&(X))
+#define PUSH() (++cur)
+#define POP() (--cur)
+
+  for( ; (c=*src) ; ++src ) {
+    switch(c) {
+      case '[':
+        if ( IS(VALUE) ) {
+          PUSH();
+          SET_ARRAY(CUR());
+          SET(VALUE);
+          val[cur] = ajj_value_assign(
+              ajj_object_create_list(a,scp));
+        } else {
+          json_report_error(a,beg,src,
+              "Unexpected array here!");
+          goto fail;
+        }
+        break;
+      case '{':
+        if( IS(VALUE) ) {
+          PUSH();
+          SET_OBJECT(CUR());
+          SET(KEY);
+          val[cur] = ajj_value_assign(
+              ajj_object_create_dict(a,scp));
+          key[cur] = NULL_STRING;
+        } else {
+          json_report_error(a,beg,src,
+              "Unexpected object here!");
+          goto fail;
+        }
+        break;
+      case ']':
+        if( (IS(VALUE) || IS(COMMA)) && IS_ARRAY(CUR())) {
+          POP();
+          if( IS_ARRAY(CUR()) ) {
+            CHECK(list_append(a,
+                  val+cur,
+                  val+cur+1,
+                  1,
+                  &ret) == AJJ_EXEC_OK );
+            SET(COMMA);
+          } else if( IS_OBJECT(CUR()) ) {
+            /* directly call map_insert instead of using
+             * dict_set since dict_set may allocate memory */
+            struct map* m;
+            assert( IS_OBJECT(CUR()) );
+            assert( IS_A(val+cur,DICT_TYPE) );
+            m = OBJECT(val+cur);
+            map_insert(m,key+cur,1,val+cur+1); /* ignore the result */
+            key[cur] = NULL_STRING;
+            SET(COMMA);
+          } else {
+            val[cur]=val[cur+1];
+            goto done;
+          }
+        } else {
+          json_report_error(a,beg,src,
+              "Unexpected ] here!");
+          goto fail;
+        }
+        break;
+      case '}':
+        if( (IS(KEY) || IS(COMMA)) && IS_OBJECT(CUR())) {
+          POP();
+          if( IS_ARRAY(CUR()) ) {
+            CHECK(list_append(a,
+                  val+cur,
+                  val+cur+1,
+                  1,
+                  &ret) == AJJ_EXEC_OK );
+            SET(COMMA);
+          } else if( IS_OBJECT(CUR()) ) {
+            /* directly call map_insert instead of using
+             * dict_set since dict_set may allocate memory */
+            struct map* m;
+            assert( IS_OBJECT(CUR()) );
+            assert( IS_A(val+cur,DICT_TYPE) );
+            m = OBJECT(val+cur);
+            map_insert(m,key+cur,1,val+cur+1); /* ignore the result */
+            key[cur] = NULL_STRING;
+            SET(COMMA);
+          } else {
+            val[cur]=val[cur+1];
+            goto done;
+          }
+        } else {
+          json_report_error(a,beg,src,
+              "Unexpected } here!");
+          goto fail;
+        }
+      break;
+      case '-':
+      case '0':case '1':case '2':case '3':case '4':
+      case '5':case '6':case '7':case '8':case '9':
+        if( IS(VALUE) && !IS_ROOT(CUR()) ) {
+          /* using strtod is a perfect fit here */
+          double num;
+          char* end;
+          struct ajj_value dval;
+          errno = 0;
+          num = strtod(src,&end);
+          if(errno) {
+            json_report_error(a,beg,src,
+                "Cannot parse number for:%s!",
+                strerror(errno));
+            goto fail;
+          }
+          src = end-1; /* we have an extra increment */
+          dval = ajj_value_number(num);
+          if( IS_ARRAY(CUR()) ) {
+            CHECK(list_append(a,
+                  val+cur,
+                  &dval,
+                  1,
+                  &ret) == AJJ_EXEC_OK );
+          } else {
+            /* directly call map_insert instead of using
+             * dict_set since dict_set may allocate memory */
+            struct map* m;
+            assert( IS_OBJECT(CUR()) );
+            assert( IS_A(val+cur,DICT_TYPE) );
+            m = OBJECT(val+cur);
+            map_insert(m,key+cur,1,&dval); /* ignore the result */
+            key[cur] = NULL_STRING;
+          }
+        } else {
+          json_report_error(a,beg,src,
+              "Unexpected number!");
+          goto fail;
+        }
+        SET(COMMA); /* expect a comma */
+        break;
+      case '\"':
+        if( ( IS(VALUE) && IS_ARRAY(CUR())) ||
+            (( IS(VALUE) || IS(KEY)) && IS_OBJECT(CUR()))) {
+          struct strbuf sbuf;
+          strbuf_init_cap(&sbuf,256); /* default buffer */
+          ++src;
+          for( ; (c = *src) ; ++src ) {
+            if( c == '\\' ) {
+              /* we do a blind escape here, we don't
+               * check whether the escape is valid or
+               * not */
+              c = *(++src);
+            } else if( c == '\"' ) {
+              break;
+            }
+            strbuf_push(&sbuf,c);
+          }
+          if(!c) {
+            json_report_error(a,beg,src,
+                "Unexpected EOF!");
+            goto fail;
+          } else {
+            if( IS_OBJECT(CUR())) {
+              if( IS(KEY) ) {
+                key[cur] = strbuf_tostring(&sbuf);
+              } else {
+                struct map* m;
+                struct ajj_value str_val;
+                struct string str = strbuf_tostring(&sbuf);
+
+                assert( !string_null(key+cur) );
+                str_val = ajj_value_assign(ajj_object_create_string(
+                      a,scp,str.str,str.len,1));
+
+                assert( IS_A(val+cur,DICT_TYPE) );
+
+                m = OBJECT(val+cur);
+                map_insert(m,key+cur,1,&str_val);
+                key[cur] = NULL_STRING;
+              }
+            } else {
+              struct ajj_value str_val;
+              struct string str = strbuf_tostring(&sbuf);
+
+              assert( IS_ARRAY(CUR()) );
+              str_val = ajj_value_assign(
+                  ajj_object_create_string(a,scp,str.str,str.len,1));
+
+              CHECK(list_append(a,
+                    val+cur,
+                    &str_val,
+                    1,
+                    &ret) == AJJ_EXEC_OK);
+            }
+          }
+        } else {
+          json_report_error(a,beg,src,
+              "Unexpected string!");
+          goto fail;
+        }
+        if( IS_ARRAY(CUR()) ) {
+          SET(COMMA);
+        } else {
+          if( IS_OBJECT(CUR()) ) {
+            if( IS(VALUE) ) {
+              SET(COMMA);
+            } else {
+              SET(COLON);
+            }
+          }
+        }
+        break;
+      case ':':
+        if( IS_OBJECT(CUR()) && IS(COLON) ) {
+          SET(VALUE);
+        } else {
+          json_report_error(a,beg,src,
+              "Unexpected \":\"!");
+          goto fail;
+        }
+        break;
+      case ',':
+        if( IS(COMMA) ) {
+          if(IS_ARRAY(CUR()))
+            SET(VALUE);
+          else
+            SET(KEY);
+        }
+        break;
+        /* skip whitespaces */
+      case ' ':case '\n':case '\r':
+      case '\b':case '\t':
+        break;
+      case 't':
+        if(src[1] =='r' && src[2] =='u' &&
+           src[3] =='e' ) {
+          if( IS(VALUE) && !IS_ROOT(CUR()) ) {
+            src += 3;
+            if( IS_ARRAY(CUR()) ) {
+              CHECK(list_append(a,
+                    val+cur,
+                    &AJJ_TRUE,
+                    1,
+                    &ret) == AJJ_EXEC_OK );
+            } else {
+              /* directly call map_insert instead of using
+               * dict_set since dict_set may allocate memory */
+              struct map* m;
+              assert( IS_OBJECT(CUR()) );
+              assert( IS_A(val+cur,DICT_TYPE) );
+              m = OBJECT(val+cur);
+              map_insert(m,key+cur,1,&AJJ_TRUE); /* ignore the result */
+              key[cur] = NULL_STRING;
+            }
+          } else {
+            json_report_error(a,beg,src,
+                "Unexpected token 't'!");
+            goto fail;
+          }
+          SET(COMMA); /* expect a comma */
+        }
+        break;
+      case 'f':
+        if(src[1] == 'a' && src[2] =='l' &&
+           src[3] == 's' && src[4] =='e') {
+          if( IS(VALUE) && !IS_ROOT(CUR()) ) {
+            src += 4;
+            if( IS_ARRAY(CUR()) ) {
+              CHECK(list_append(a,
+                    val+cur,
+                    &AJJ_FALSE,
+                    1,
+                    &ret) == AJJ_EXEC_OK );
+            } else {
+              /* directly call map_insert instead of using
+               * dict_set since dict_set may allocate memory */
+              struct map* m;
+              assert( IS_OBJECT(CUR()) );
+              assert( IS_A(val+cur,DICT_TYPE) );
+              m = OBJECT(val+cur);
+              map_insert(m,key+cur,1,&AJJ_FALSE); /* ignore the result */
+              key[cur] = NULL_STRING;
+            }
+          } else {
+            json_report_error(a,beg,src,
+                "Unexpected token 'f'!");
+            goto fail;
+          }
+          SET(COMMA); /* expect a comma */
+        }
+        break;
+      case 'n':
+        if(src[1] == 'u' && src[2] == 'l' &&
+           src[3] == 'l' ) {
+          if( IS(VALUE) && !IS_ROOT(CUR()) ) {
+            src += 3;
+            if( IS_ARRAY(CUR()) ) {
+              CHECK(list_append(a,
+                    val+cur,
+                    &AJJ_NONE,
+                    1,
+                    &ret) == AJJ_EXEC_OK );
+            } else {
+              /* directly call map_insert instead of using
+               * dict_set since dict_set may allocate memory */
+              struct map* m;
+              assert( IS_OBJECT(CUR()) );
+              assert( IS_A(val+cur,DICT_TYPE) );
+              m = OBJECT(val+cur);
+              map_insert(m,key+cur,1,&AJJ_NONE); /* ignore the result */
+              key[cur] = NULL_STRING;
+            }
+          } else {
+            json_report_error(a,beg,src,
+                "Unexpected token 'n'!");
+            goto fail;
+          }
+          SET(COMMA); /* expect a comma */
+        }
+        break;
+      default:
+        if(!c) {
+          json_report_error(a,beg,src,
+              "Unexpected EOF!");
+        } else {
+          json_report_error(a,beg,src,
+              "Unexpected token!");
+        }
+        goto fail;
+    }
+  }
+
+done:
+  assert( cur == 0 );
+  assert( IS_A(val,LIST_TYPE) || IS_A(val,DICT_TYPE) );
+  return val->value.object;
+
+fail:
+  /* do clean up here */
+  for( i = 0; i < cur ; ++i ) {
+    if(!string_null(cur+key))
+      string_destroy(cur+key);
+  }
+  return NULL;
+}
+
+#undef ARRAY_MASK
+#undef ROOT_MASK
+#undef OBJECT_MASK
+#undef IS_ARRAY
+#undef IS_OBJECT
+#undef IS_ROOT
+#undef SET_OBJECT
+#undef SET_ARRAY
+#undef CUR
+#undef SET
+#undef IS
+#undef PUSH
+#undef POP
+
+struct ajj_object*
+json_parse( struct ajj* a, struct gc_scope* scp,
+    const char* filename , const char* func ) {
+  size_t len;
+  const char* src = ajj_load_file(a,filename,&len);
+  if(src == NULL) {
+    ajj_error(a,"Function::%s cannot load file with name:%s!",
+        func,filename);
+    return NULL;
+  } else {
+    struct ajj_object* ret = json_parsec(a,scp,src);
+    free((void*)src);
+    return ret;
+  }
+}
+
+static
+int to_json( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_len,
+    struct ajj_value* ret ) {
+
+  if( arg_len != 1 ) {
+    FAIL1(a,"%s","Function::to_json can only accept one argument,"
+        "and it must be a string!");
+    return AJJ_EXEC_FAIL;
+  } else {
+    if(arg->type != AJJ_VALUE_STRING) {
+      FAIL1(a,"Function::to_json can only accept one string "
+          "argument,but get type:%s!",ajj_value_get_type_name(arg));
+    } else {
+      struct ajj_object* r;
+      if( (r = json_parse(a,ajj_cur_gc_scope(a),
+              ajj_value_to_cstr(arg), "to_json")) == NULL ) {
+        *ret = AJJ_NONE;
+        return AJJ_EXEC_FAIL;
+      } else {
+        *ret = ajj_value_assign(r);
+        return AJJ_EXEC_OK;
+      }
+    }
+  }
+}
+
+static
+int to_jsonc( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_len,
+    struct ajj_value* ret ) {
+  if( arg_len != 1 ) {
+    FAIL1(a,"%s","Function::to_jsonc can only accept one argument,"
+        "and it must be a string!");
+    return AJJ_EXEC_FAIL;
+  } else {
+    if(arg->type != AJJ_VALUE_STRING) {
+      FAIL1(a,"Function::to_jsonc can only accept one string "
+          "argument,but get type:%s!",ajj_value_get_type_name(arg));
+    } else {
+      struct ajj_object* r;
+      if( (r = json_parsec(a,ajj_cur_gc_scope(a),
+              ajj_value_to_cstr(arg))) == NULL ) {
+        *ret = AJJ_NONE;
+        return AJJ_EXEC_FAIL;
+      } else {
+        *ret = ajj_value_assign(r);
+        return AJJ_EXEC_OK;
+      }
+    }
+  }
+}
+
 void ajj_builtin_load( struct ajj* a ) {
   /* list */
   a->list =  ajj_add_class(a,&(a->builtins),
@@ -1217,4 +2347,79 @@ void ajj_builtin_load( struct ajj* a ) {
   /* loop */
   a->loop = ajj_add_class(a,&(a->builtins),
       &LOOP_CLASS);
+  /* cycler */
+  ajj_add_class(a,&(a->builtins),
+      &CYCLER_CLASS);
+
+  /* builtin functions */
+  ajj_add_function(a,&(a->builtins),
+      "caller",
+      caller,
+      NULL);
+
+  ajj_add_function(a,&(a->builtins),
+      "to_json",
+      to_json,
+      NULL);
+
+  ajj_add_function(a,&(a->builtins),
+      "to_jsonc",
+      to_jsonc,
+      NULL);
+
+  /* builtin test */
+  ajj_add_test(a,&(a->builtins),
+      "True",test_true,"True");
+
+  ajj_add_test(a,&(a->builtins),
+      "true",test_true,"true");
+
+  ajj_add_test(a,&(a->builtins),
+      "False",test_false,"False");
+
+  ajj_add_test(a,&(a->builtins),
+      "false",test_false,"false");
+
+  ajj_add_test(a,&(a->builtins),
+      "None",test_none,"None");
+
+  ajj_add_test(a,&(a->builtins),
+      "none",test_none,"none");
+
+  ajj_add_test(a,&(a->builtins),
+      "undefined",test_none,"undefined");
+
+  ajj_add_test(a,&(a->builtins),
+      "defined",test_defined,NULL);
+
+  ajj_add_test(a,&(a->builtins),
+      "divisableby",test_divisableby,NULL);
+
+  ajj_add_test(a,&(a->builtins),
+      "even",test_even,NULL);
+
+  ajj_add_test(a,&(a->builtins),
+      "iterable",test_iterator,NULL);
+
+  ajj_add_test(a,&(a->builtins),
+      "lower",test_lower,NULL);
+
+  ajj_add_test(a,&(a->builtins),
+      "mapping",test_mapping,NULL);
+
+  ajj_add_test(a,&(a->builtins),
+      "number",test_number,NULL);
+
+  ajj_add_test(a,&(a->builtins),
+      "odd",test_odd,NULL);
+
+  ajj_add_test(a,&(a->builtins),
+      "sameas",test_sameas,NULL);
+
+  ajj_add_test(a,&(a->builtins),
+      "string",test_string,NULL);
+
+  ajj_add_test(a,&(a->builtins),
+      "upper",test_upper,NULL);
+
 }
