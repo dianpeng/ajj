@@ -1843,10 +1843,12 @@ enum {
   COMMA=1,        /* expect a comma */
   KEY=1<<1,          /* expect a key   */
   VALUE=1<<2,        /* expect a value */
-  COLON=1<<3         /* expect a colon */
+  COLON=1<<3,        /* expect a colon */
+  VALUEE=1<<4,       /* expect a value or END */
+  KEYE=1<<5          /* expect a value or END */
 };
 
-#define STATE_MASK (~15)
+#define STATE_MASK (~63)
 #define JSON_ERROR_CODE_SNIPPET_SIZE 32
 
 static
@@ -1917,7 +1919,7 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
         if ( IS(VALUE) ) {
           PUSH();
           SET_ARRAY(CUR());
-          SET(VALUE);
+          SET(VALUEE);
           val[cur] = ajj_value_assign(
               ajj_object_create_list(a,scp));
         } else {
@@ -1930,7 +1932,7 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
         if( IS(VALUE) ) {
           PUSH();
           SET_OBJECT(CUR());
-          SET(KEY);
+          SET(KEYE);
           val[cur] = ajj_value_assign(
               ajj_object_create_dict(a,scp));
           key[cur] = NULL_STRING;
@@ -1941,7 +1943,7 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
         }
         break;
       case ']':
-        if( (IS(VALUE) || IS(COMMA)) && IS_ARRAY(CUR())) {
+        if( (IS(VALUEE) || IS(COMMA)) && IS_ARRAY(CUR())) {
           POP();
           if( IS_ARRAY(CUR()) ) {
             CHECK(list_append(a,
@@ -1971,7 +1973,7 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
         }
         break;
       case '}':
-        if( (IS(KEY) || IS(COMMA)) && IS_OBJECT(CUR())) {
+        if( (IS(KEYE) || IS(COMMA)) && IS_OBJECT(CUR())) {
           POP();
           if( IS_ARRAY(CUR()) ) {
             CHECK(list_append(a,
@@ -2003,7 +2005,7 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
       case '-':
       case '0':case '1':case '2':case '3':case '4':
       case '5':case '6':case '7':case '8':case '9':
-        if( IS(VALUE) && !IS_ROOT(CUR()) ) {
+        if( (IS(VALUEE) || IS(VALUE)) && !IS_ROOT(CUR()) ) {
           /* using strtod is a perfect fit here */
           double num;
           char* end;
@@ -2042,8 +2044,8 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
         SET(COMMA); /* expect a comma */
         break;
       case '\"':
-        if( ( IS(VALUE) && IS_ARRAY(CUR())) ||
-            (( IS(VALUE) || IS(KEY)) && IS_OBJECT(CUR()))) {
+        if( (( IS(VALUE) || IS(VALUEE))&& IS_ARRAY(CUR())) ||
+            (( IS(VALUE) || IS(KEY) || IS(KEYE)) && IS_OBJECT(CUR()))) {
           struct strbuf sbuf;
           strbuf_init_cap(&sbuf,256); /* default buffer */
           ++src;
@@ -2064,7 +2066,7 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
             goto fail;
           } else {
             if( IS_OBJECT(CUR())) {
-              if( IS(KEY) ) {
+              if( IS(KEY) || IS(KEYE) ) {
                 key[cur] = strbuf_tostring(&sbuf);
               } else {
                 struct map* m;
@@ -2105,7 +2107,7 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
           SET(COMMA);
         } else {
           if( IS_OBJECT(CUR()) ) {
-            if( IS(VALUE) ) {
+            if( IS(VALUE) || IS(VALUEE) ) {
               SET(COMMA);
             } else {
               SET(COLON);
@@ -2137,7 +2139,7 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
       case 't':
         if(src[1] =='r' && src[2] =='u' &&
            src[3] =='e' ) {
-          if( IS(VALUE) && !IS_ROOT(CUR()) ) {
+          if( (IS(VALUE) || IS(VALUEE)) && !IS_ROOT(CUR()) ) {
             src += 3;
             if( IS_ARRAY(CUR()) ) {
               CHECK(list_append(a,
@@ -2166,7 +2168,7 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
       case 'f':
         if(src[1] == 'a' && src[2] =='l' &&
            src[3] == 's' && src[4] =='e') {
-          if( IS(VALUE) && !IS_ROOT(CUR()) ) {
+          if( (IS(VALUE) || IS(VALUEE)) && !IS_ROOT(CUR()) ) {
             src += 4;
             if( IS_ARRAY(CUR()) ) {
               CHECK(list_append(a,
@@ -2195,7 +2197,7 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
       case 'n':
         if(src[1] == 'u' && src[2] == 'l' &&
            src[3] == 'l' ) {
-          if( IS(VALUE) && !IS_ROOT(CUR()) ) {
+          if( (IS(VALUE) || IS(VALUEE)) && !IS_ROOT(CUR()) ) {
             src += 3;
             if( IS_ARRAY(CUR()) ) {
               CHECK(list_append(a,

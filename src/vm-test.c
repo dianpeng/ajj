@@ -676,5 +676,15 @@ int main() {
           "{{ T.Test('Hello World') }}" \
           "{{ T2.Test('Hello World2') }}");
 #endif
-  do_test("{{ to_jsonc('{ \"Hello\" : \"World\" ,\"None\":null,\"True\":true,\"False\":false,\"UUV\":[1,2,3,4,5] }') }}\n");
+  do_test("{{ to_jsonc(' \
+  { \"Y\":[] , \
+    \"V\":{},  \
+    \"Hello\" : \
+    \"World\" , \
+    \"None\":null,\
+    \"True\":true,\
+    \"False\":\
+    false,\
+    \"UUV\":[1,2,3,4,5] \
+    }') }}\n");
 }
