@@ -152,4 +152,3 @@ int vm_run_jinja( struct ajj* a, struct ajj_object* jj,
     struct ajj_io* output );
 
 #endif /* _VM_H_ */
-

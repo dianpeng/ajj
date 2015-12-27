@@ -294,97 +294,71 @@ void emit2( struct opt* o , int pos , int bc , int a1, int a2 ) {
  * ajj_value which is opaque to all the vm_to_XXX function
  * ==========================================================*/
 static
-int to_number( struct opt* o , const struct ajj_value* v,
+int to_number( struct opt* o , struct ajj_value* v,
     double* val ) {
-  switch(v->type) {
-    case AJJ_VALUE_BOOLEAN:
-      *val = ajj_value_to_boolean(v);
-      return 0;
-    case AJJ_VALUE_NUMBER:
-      *val = ajj_value_to_number(v);
-      return 0;
-    case AJJ_VALUE_STRING:
-      {
-        double d;
-        errno = 0;
-        d = strtod(((struct string*)(v->value.__private__))->str,NULL);
-        if( errno ) {
-          report_error(o,"Cannot convert str:%s to number because:%s",
-              ((struct string*)(v->value.__private__))->str,
-              strerror(errno));
-          return -1;
-        }
-        *val = d;
-        return 0;
-      }
-    default:
+  struct ajj_object obj;
+
+  if(v->type == AJJ_VALUE_STRING) {
+    v->value.object = &obj;
+    v->value.object->tp = AJJ_VALUE_STRING;
+    obj.val.str = *((struct string*)v->value.__private__);
+  }
+
+  if(vm_to_number(v,val)) {
+    if(v->type == AJJ_VALUE_STRING) {
+      report_error(o,"Cannot convert string:%s to number!",
+          obj.val.str.str);
+    } else {
       report_error(o,"Cannot convert type:%s to number!",
           ajj_value_get_type_name(v));
-      return -1;
+    }
+    return -1;
   }
+  return 0;
 }
 
 static
-int to_integer( struct opt* o , const struct ajj_value* v,
+int to_integer( struct opt* o , struct ajj_value* v,
     int* val ) {
-  switch( v->type ) {
-    case AJJ_VALUE_BOOLEAN:
-      *val = ajj_value_to_boolean(v);
-      return 0;
-    case AJJ_VALUE_NUMBER:
-      {
-        double ip;
-        double re = modf(v->value.number,&ip);
-        if( re > INT_MAX || re < INT_MIN ) {
-          report_error(o,"Cannot convert number:%d to integer,overflow!",
-              re);
-          return -1;
-        }
-        *val = (int)(ip);
-        return 0;
-      }
-    default:
+  struct ajj_object obj;
+  if(v->type == AJJ_VALUE_STRING) {
+    v->value.object = &obj;
+    v->value.object->tp = AJJ_VALUE_STRING;
+    obj.val.str = *((struct string*)v->value.__private__);
+  }
+  if(vm_to_integer(v,val)) {
+    if(v->type == AJJ_VALUE_STRING) {
+      report_error(o,"Cannot convert string:%s to integer!",
+          obj.val.str.str);
+    } else {
       report_error(o,"Cannot convert type:%s to integer!",
           ajj_value_get_type_name(v));
-      return -1;
+    }
+    return -1;
   }
+  return 0;
 }
 
 static
-int to_string( struct opt* o , const struct ajj_value* v,
+int to_string( struct opt* o , struct ajj_value* v,
     struct str* val ) {
-  switch(v->type) {
-    case AJJ_VALUE_BOOLEAN:
-      if(v->value.boolean) {
-        val->s = TRUE_STRING.str;
-        val->own = 0;
-      } else {
-        val->s = FALSE_STRING.str;
-        val->own = 0;
-      }
-      return 0;
-    case AJJ_VALUE_NUMBER:
-      {
-        char buf[256];
-        double d = ajj_value_to_number(v);
-        if( is_int(d) ) {
-          sprintf(buf,"%d",(int)(d));
-        } else {
-          sprintf(buf,"%f",ajj_value_to_number(v));
-        }
-        val->s = strdup(buf);
-        val->own = 1;
-        return 0;
-      }
-    case AJJ_VALUE_STRING:
-      val->s = ((struct string*)(v->value.__private__))->str;
-      val->own= 0;
-      return 0;
-    default:
-      report_error(o,"Cannot convert type:%s to string!",
-          ajj_value_get_type_name(v));
-      return -1;
+  struct ajj_object obj;
+  int own;
+  struct string s;
+  if(v->type == AJJ_VALUE_STRING) {
+    v->value.object = &obj;
+    v->value.object->tp = AJJ_VALUE_STRING;
+    obj.val.str = *((struct string*)v->value.__private__);
   }
+  if(vm_to_string(v,&s,&own)) {
+    assert(v->type != AJJ_VALUE_STRING);
+    report_error(o,"Cannot convert type:%s to string!",
+        ajj_value_get_type_name(v));
+    return -1;
+  }
+  val->own = own;
+  val->s = s.str;
+  return 0;
 }
 
 static

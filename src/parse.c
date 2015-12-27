@@ -2150,13 +2150,12 @@ parse_context_body( struct parser* p , struct emitter* em ) {
        * be pushed onto the stack. They are:
        * 1. variable name index in constant string table
        * 2. value of this variable needs to be setup
-       * 3. attributes for this value.
-       */
+       * 3. attributes for this value. */
 
       EMIT1(em,VM_LIMM,var_idx); /* symbol name index */
       CALLE(parse_expr(p,em));   /* value */
-      if( tk->tk == TK_FIX ) {
-        opt = UPVALUE_FIX;
+      if( tk->tk == TK_OPTIONAL ) {
+        opt = UPVALUE_OPTIONAL;
         tk_move(tk);
       } else if( tk->tk == TK_OVERRIDE ) {
         tk_move(tk);

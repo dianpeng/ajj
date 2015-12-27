@@ -20,6 +20,8 @@ static void do_test( const char* src ) {
     }
     prg = ajj_object_jinja_main(jinja);
     dump_program(a,src,prg,output);
+    assert(!optimize(a,jinja));
+    dump_program(a,src,prg,output);
     if(vm_run_jinja(a,jinja,output)) {
       fprintf(stderr,"%s",a->err);
       assert(0);
@@ -686,9 +688,12 @@ int main() {
     false,\
     \"UUV\":[1,2,3,4,5] \
     }') }}\n");
-#endif
 do_test("{% for x in xrange(10)%} III={{x}}\n {% endfor %}" \
         "{% extends 'base.txt' %}" \
         "{% block Test3 %} vargs={{vargs}} {% endblock %}");
+#endif
+
+do_test("{% include 'include.txt' %}"
+       "Hello World From Child!\n");
 
 }

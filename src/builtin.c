@@ -849,6 +849,13 @@ int dict_ne( struct ajj* a,
   }
 }
 
+int object_is_map( struct ajj_value* v ) {
+  return IS_A(v,DICT_TYPE);
+}
+struct map* object_cast_to_map( struct ajj_value* v ) {
+  assert(IS_A(v,DICT_TYPE));
+  return DICT(v);
+}
 static struct ajj_class_method DICT_METHOD[] = {
   { dict_set , "set" },
   { dict_get , "get" },

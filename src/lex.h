@@ -43,7 +43,7 @@ enum {
   X(TK_ENDUPVALUE,"endupvalue") \
   X(TK_JSON,"json") \
   X(TK_OVERRIDE,"override") \
-  X(TK_FIX,"fix")
+  X(TK_OPTIONAL,"optional")
 
 #define TOKEN_LIST(X) \
   X(TK_TEXT,"<text>") \

@@ -17,7 +17,7 @@
 #define INCLUDE_JSON 1
 
 /* upvalue modifier */
-#define UPVALUE_FIX 0
+#define UPVALUE_OPTIONAL 0
 #define UPVALUE_OVERRIDE 1
 
 /* iterator */

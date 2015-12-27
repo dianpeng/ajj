@@ -40,7 +40,8 @@ struct function* func_table_add_func( struct func_table* tb ) {
      nf = malloc( sizeof(struct function)*(tb->func_cap)*2 );
      memcpy(nf,tb->func_tb,tb->func_len*sizeof(struct function));
    } else {
-     nf = mem_grow(tb->func_tb,sizeof(struct function),0,&(tb->func_cap));
+     nf = mem_grow(tb->func_tb,sizeof(struct function),0,
+         &(tb->func_cap));
    }
    tb->func_tb = nf;
   }

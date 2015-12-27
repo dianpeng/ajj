@@ -194,7 +194,7 @@ size_t skip_whitespace( const char* src, size_t pos ) {
  * L: -
  * M: macro,move
  * N: None,none
- * O: or,override
+ * O: or,override, optional
  * P: -
  * Q: -
  * R: -
@@ -302,9 +302,6 @@ token_id tk_lex_keyword_or_id( struct tokenizer* tk ) {
       else if( (len = tk_keyword_check(tk,"alse",i+1)) == 4 &&
           tk_not_id_rchar(tk->src[i+5]))
         RETURN(TK_FALSE,5);
-      else if( (len = tk_keyword_check(tk,"ix",i+1)) == 2 &&
-          tk_not_id_rchar(tk->src[i+3]))
-        RETURN(TK_FIX,3);
       else if( (len = tk_keyword_check(tk,"or",i+1)) == 2 &&
           tk_not_id_rchar(tk->src[i+3]))
         RETURN(TK_FOR,3);
@@ -386,6 +383,9 @@ token_id tk_lex_keyword_or_id( struct tokenizer* tk ) {
       else if( (len = tk_keyword_check(tk,"verride",i+1)) == 7 &&
           tk_not_id_rchar(tk->src[i+8]))
         RETURN(TK_OVERRIDE,8);
+      else if( (len = tk_keyword_check(tk,"ptional",i+1)) == 7 &&
+          tk_not_id_rchar(tk->src[i+8]))
+        RETURN(TK_OPTIONAL,8);
       else
         return tk_lex_keyword(tk,len+1);
     case 's':

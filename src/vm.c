@@ -45,7 +45,7 @@ int run_jinja(struct ajj*);
 
 /* This FUNC_CALL actually means we want a TAIL call of a
  * new script functions. The return from the LOWEST script function
- * will end up its caller been poped as well. We don't return the
+ * will end up its caller been stk_poped as well. We don't return the
  * continuation from VM to the external C script again if it tries
  * to call a script function.
  * The called script function's return value will be carried over
@@ -71,11 +71,11 @@ stack_value( struct ajj* a , int x ) {
   return x + a->rt->val_stk;
 }
 
-#define bot(A,X) stack_value((A),cur_frame((A))->ebp+(X))
-#define top(A,X) stack_value((A),cur_frame((A))->esp-(X))
+#define stk_bot(A,X) stack_value((A),cur_frame((A))->ebp+(X))
+#define stk_top(A,X) stack_value((A),cur_frame((A))->esp-(X))
 #else
-#define bot(A,X) ((A)->rt->val_stk[cur_frame((A))->ebp+(X)])
-#define top(A,X) ((A)->rt->val_stk[cur_frame((A))->esp-(X)])
+#define stk_bot(A,X) ((A)->rt->val_stk[cur_frame((A))->ebp+(X)])
+#define stk_top(A,X) ((A)->rt->val_stk[cur_frame((A))->esp-(X)])
 #endif /* NDEBUG */
 
 int program_add_par( struct program* prg , struct string* name ,
@@ -221,9 +221,9 @@ void rewrite_error( struct ajj* a ) {
   report_error(a,"%s",msg);
 }
 
-/* push/pop to manipulate the value stack */
+/* stk_push/stk_pop to manipulate the value stack */
 static
-void pop(struct ajj* a , int off ) {
+void stk_pop(struct ajj* a , int off ) {
   int val = off;
   struct func_frame* fr = cur_frame(a);
   assert(fr->esp >= val);
@@ -231,7 +231,7 @@ void pop(struct ajj* a , int off ) {
 }
 
 static
-int push( struct ajj* a , struct ajj_value v ) {
+int stk_push( struct ajj* a , struct ajj_value v ) {
   struct func_frame* fr = cur_frame(a);
   if( fr->esp == AJJ_MAX_VALUE_STACK_SIZE ) {
     report_error(a,"Too much value on value stack!");
@@ -744,9 +744,9 @@ int call_ctor( struct ajj* a , struct func_table* ft,
   struct ajj_value par[AJJ_FUNC_ARG_MAX_SIZE];
   assert(pc < AJJ_FUNC_ARG_MAX_SIZE);
 
-  /* push the parametr into the stack */
+  /* stk_push the parametr into the stack */
   for( i = pc ; i >0 ; --i ) {
-    par[i-1] = *top(a,pc-i+1);
+    par[i-1] = *stk_top(a,pc-i+1);
   }
 
   if( ft->ctor(
@@ -779,18 +779,18 @@ void set_func_builtin_vars( struct ajj* a,
     struct ajj_object* vargs, /* NULL if no */
     const struct string* caller /* NULL if no */ ) {
 
-  push(a,ajj_value_number(argnum)); /* argnum */
-  push(a,ajj_value_assign(
+  stk_push(a,ajj_value_number(argnum)); /* argnum */
+  stk_push(a,ajj_value_assign(
         ajj_object_create_const_string(a,a->rt->cur_gc,
           func))); /* func */
-  push(a,vargs == NULL ? AJJ_NONE :
+  stk_push(a,vargs == NULL ? AJJ_NONE :
       ajj_value_assign(vargs)); /* vargs */
   if(caller) {
-    push(a,ajj_value_assign(
+    stk_push(a,ajj_value_assign(
           ajj_object_create_const_string(a,a->rt->cur_gc,
             caller)));
   } else {
-    push(a,AJJ_NONE);
+    stk_push(a,AJJ_NONE);
   }
 }
 
@@ -805,9 +805,9 @@ void prepare_script_call( struct ajj* a ) {
   int real_an = fr->par_cnt;
   assert(fr->par_cnt <= AJJ_FUNC_ARG_MAX_SIZE);
 
-  /* push default parameters if we need to */
+  /* stk_push default parameters if we need to */
   for( i = fr->par_cnt ; i < prg->par_size ; ++i ) {
-    push(a,prg->par_list[i].def_val);
+    stk_push(a,prg->par_list[i].def_val);
   }
 
   /* check if we have extra args */
@@ -817,8 +817,8 @@ void prepare_script_call( struct ajj* a ) {
     vargs = ajj_object_create_list(a,a->rt->cur_gc);
 
     for( i = fr->par_cnt ; i > prg->par_size ; --i ) {
-      list_push(a,vargs,top(a,1));
-      pop(a,1);
+      list_push(a,vargs,stk_top(a,1));
+      stk_pop(a,1);
     }
   }
 
@@ -836,7 +836,7 @@ void prepare_script_call( struct ajj* a ) {
 /* call */
 /* The precondition of vm_call is that the function calling frame is
  * already setup, and the parameters are on the stack. Since we support
- * default parameters, we need to push arguments on top of stack as well.
+ * default parameters, we need to stk_push arguments on stk_top of stack as well.
  * This vm_call needs to handle that as well.
  * Notes: this function must be called right after enter_function since it
  * will setup function builtin vars which is stack related */
@@ -857,7 +857,7 @@ vm_call(struct ajj* a, struct ajj_object* obj ,
 
     /* The left most parameter is on lower parts of the stack */
     for( par_sz = fr->par_cnt ; par_sz > 0 ; --par_sz ) {
-      par[par_sz-1] = *top(a,fr->par_cnt-par_sz+1);
+      par[par_sz-1] = *stk_top(a,fr->par_cnt-par_sz+1);
     }
     par_sz = fr->par_cnt;
     /* c function and test function has same prototype. */
@@ -938,7 +938,7 @@ void vm_test( struct ajj* a, int fn_idx, int an , int pos , int* fail ) {
           ret = AJJ_TRUE;
       }
       /* test function is always a C function, so we need
-       * to pop the function frame right after calling the
+       * to stk_pop the function frame right after calling the
        * function */
       exit_function(a,&ret);
     }
@@ -982,7 +982,7 @@ struct ajj_value vm_ldict( struct ajj* a ) {
 
 static
 void vm_lift( struct ajj* a , int pos , int level ) {
-  struct ajj_value* val = bot(a,pos);
+  struct ajj_value* val = stk_bot(a,pos);
   if( AJJ_IS_PRIMITIVE(val) ) {
     return;
   } else {
@@ -1070,17 +1070,17 @@ vm_attrget( struct ajj* a , struct ajj_value* obj,
 }
 
 static
-void vm_attrpush( struct ajj* a , struct ajj_value* obj,
+void vm_attrstk_push( struct ajj* a , struct ajj_value* obj,
     const struct ajj_value* val , int* fail ) {
   if( obj->type != AJJ_VALUE_OBJECT ) {
     *fail = 1;
-    report_error(a,"Cannot push attributes on type:%s which is not an "
+    report_error(a,"Cannot stk_push attributes on type:%s which is not an "
         "object!",ajj_value_get_type_name(obj));
   } else {
     struct object* o = &(obj->value.object->val.obj);
     if( o->fn_tb->slot.attr_push == NULL ) {
       *fail = 1;
-      report_error(a,"Type:%s cannot support attribute push operation!",
+      report_error(a,"Type:%s cannot support attribute stk_push operation!",
           o->fn_tb->name.str);
     } else {
       *fail = 0;
@@ -1116,13 +1116,84 @@ void vm_exit( struct ajj* a , int loops ) {
  * That new runtime includes all the independent information
  * about the new template. */
 static
-int setup_env( struct ajj* a , struct runtime* nrt ) {
-  return -1;
+void setup_env( struct ajj* a , int cnt , struct runtime* nrt ) {
+  int i;
+  for( i = 0 ; i < cnt ; --i ) {
+    struct ajj_value* name = stk_top(a,3*i+1);
+    struct ajj_value* value= stk_top(a,3*i+2);
+    struct ajj_value* opt = stk_top(a,3*i+3);
+    const struct string* symbol;
+    int iopt;
+    int isys;
+    struct upvalue* uv;
+
+    assert(opt->type == AJJ_VALUE_NUMBER);
+    assert(name->type == AJJ_VALUE_NUMBER);
+
+    iopt = opt->value.number;
+    isys = name->value.number;
+    symbol = const_str(a,isys);
+    if(iopt == UPVALUE_OPTIONAL) {
+      if( upvalue_table_find(nrt->global,
+            symbol,&(a->env)) != NULL )
+        continue; /* just skip it since we don't care */
+    }
+    uv = upvalue_table_overwrite(a,
+        nrt->global,
+        symbol,
+        0,
+        0);
+    assert(uv);
+
+    /* setup the upvalue as value */
+    uv->type = UPVALUE_FUNCTION;
+    uv->gut.val = *value;
+  }
 }
 
 static
-int setup_json_env( struct ajj* a , struct runtime* nrt) {
-  return -1;
+int setup_json_env( struct ajj* a , int cnt ,struct runtime* nrt) {
+  struct ajj_value* fn = stk_top(a,3*cnt+2);
+  struct ajj_object* json;
+  struct map* d;
+  struct ajj_value json_v;
+  int itr;
+  
+  if(fn->type != AJJ_VALUE_STRING) {
+    report_error(a,"Json file name must be a string,but got:%s!",
+        ajj_value_get_type_name(fn));
+  }
+
+  json = json_parse(a,a->rt->cur_gc,ajj_value_to_cstr(fn),"include");
+  if(json == NULL) {
+    rewrite_error(a);
+    return -1;
+  }
+
+  json_v = ajj_value_assign(json);
+  if( !object_is_map(&json_v) ) {
+    report_error(a,"Json file:%s's root element must be an object!",
+        ajj_value_to_cstr(fn));
+    return -1;
+  }
+
+  d = object_cast_to_map(&json_v);
+  itr = map_iter_start(d);
+
+  while( map_iter_has(d,itr) ) {
+    struct map_pair e = map_iter_deref(d,itr);
+    struct upvalue *uv = upvalue_table_overwrite(a,
+        nrt->global,
+        e.key,
+        0,
+        0);
+    uv->type = UPVALUE_VALUE;
+    uv->gut.val = *(struct ajj_value*)(e.val);
+    itr = map_iter_move(d,itr);
+  }
+
+  setup_env(a,cnt,nrt);
+  return 0;
 }
 
 static
@@ -1139,10 +1210,10 @@ void vm_include( struct ajj* a , int type,
   }
 
   if(type == INCLUDE_UPVALUE) {
-    jinja_na = top(a,3*cnt+1);
+    jinja_na = stk_top(a,3*cnt+1);
   } else {
     assert( type == INCLUDE_JSON );
-    jinja_na = top(a,3*cnt+2);
+    jinja_na = stk_top(a,3*cnt+2);
   }
   if( jinja_na->type != AJJ_VALUE_STRING ) {
     report_error(a,"The template name for include "
@@ -1168,10 +1239,9 @@ void vm_include( struct ajj* a , int type,
    * user defined upvalue are passed into the global
    * table right now */
   if(type == INCLUDE_UPVALUE) {
-    if(setup_env(a,&nrt))
-      goto fail;
+    setup_env(a,cnt,&nrt);
   } else {
-    if(setup_json_env(a,&nrt))
+    if(setup_json_env(a,cnt,&nrt))
       goto fail;
   }
 
@@ -1195,7 +1265,7 @@ fail:
 static
 void vm_import( struct ajj* a, int arg1 , int* fail ) {
   const struct string* symbol = const_str(a,arg1);
-  struct ajj_value* fn = top(a,1);
+  struct ajj_value* fn = stk_top(a,1);
   if( fn->type != AJJ_VALUE_STRING ) {
     report_error(a,"The filename for import must be a string,but "
         "get type:%s",ajj_value_get_type_name(fn));
@@ -1253,7 +1323,7 @@ void vm_import( struct ajj* a, int arg1 , int* fail ) {
 
 static
 void vm_extends( struct ajj* a , int* fail ) {
-  struct ajj_value* temp_na = top(a,1);
+  struct ajj_value* temp_na = stk_top(a,1);
   struct ajj_object* jinja;
   struct runtime nrt;
   struct runtime* ort = a->rt; /* old runtime */
@@ -1436,8 +1506,8 @@ int exit_function( struct ajj* a , const struct ajj_value* ret ) {
     fr = cur_frame(a); /* must be assigned AFTER cur_all_stk changed */
     fr->esp -= stk_sz;
     assert( fr->esp >= fr->ebp );
-    /* push the return value onto the stack */
-    push(a,*ret); /* block will _never_ return anything on stack */
+    /* stk_push the return value onto the stack */
+    stk_push(a,*ret); /* block will _never_ return anything on stack */
   }
   return 0;
 }
@@ -1493,13 +1563,13 @@ int vm_call_script_func( struct ajj* a , const char* name,
   assert(f); /* internal usage, should never return NULL */
   assert( IS_JINJA(f) ); /* this function should always be script */
 
-  /* push all the function ON TO the stack */
+  /* stk_push all the function ON TO the stack */
   for( i = 0 ; i < par_cnt ; ++i ) {
-    push(a,par[i]);
+    stk_push(a,par[i]);
   }
 
   /* now enter the function frame , acting as the function
-   * arguments is pushed by the caller */
+   * arguments is stk_pushed by the caller */
   enter_function(a,f,par_cnt,0,tmpl,&fail);
   if(fail) return AJJ_EXEC_FAIL;
 
@@ -1517,7 +1587,7 @@ int vm_call_script_func( struct ajj* a , const char* name,
 
 /* The function for invoke a certain code. Before entering into this
  * function user should already prepared well for the stack and the
- * target the function must be already on the top of the stack */
+ * target the function must be already on the stk_top of the stack */
 static
 int vm_main( struct ajj* a ) {
 
@@ -1533,163 +1603,163 @@ int vm_main( struct ajj* a ) {
     switch(instr) {
       vm_beg(ADD) {
         struct ajj_value o = vm_add(a,
-          top(a,2),top(a,1),RCHECK);
-        pop(a,2);
-        push(a,o);
+          stk_top(a,2),stk_top(a,1),RCHECK);
+        stk_pop(a,2);
+        stk_push(a,o);
       } vm_end(ADD)
 
       vm_beg(SUB) {
         double l , r;
         struct ajj_value o;
-        l = to_number(a,top(a,2),RCHECK);
-        r = to_number(a,top(a,1),RCHECK);
+        l = to_number(a,stk_top(a,2),RCHECK);
+        r = to_number(a,stk_top(a,1),RCHECK);
         o = ajj_value_number(l+r);
-        pop(a,2);
-        push(a,o);
+        stk_pop(a,2);
+        stk_push(a,o);
       } vm_end(SUB)
 
       vm_beg(DIV) {
         double l , r;
         struct ajj_value o;
-        l = to_number(a,top(a,2),RCHECK);
-        r = to_number(a,top(a,1),RCHECK);
+        l = to_number(a,stk_top(a,2),RCHECK);
+        r = to_number(a,stk_top(a,1),RCHECK);
         if( r == 0 ) {
           report_error(a,"Divid by zero!");
           return -1;
         }
         o = ajj_value_number(l/r);
-        pop(a,2);
-        push(a,o);
+        stk_pop(a,2);
+        stk_push(a,o);
       } vm_end(DIV)
 
       vm_beg(MUL) {
         struct ajj_value o = vm_mul(a,
-            top(a,2),top(a,1),RCHECK);
-        pop(a,2);
-        push(a,o);
+            stk_top(a,2),stk_top(a,1),RCHECK);
+        stk_pop(a,2);
+        stk_push(a,o);
       } vm_end(MUL)
 
       vm_beg(POW) {
         double l , r;
         struct ajj_value o;
-        l = to_number(a,top(a,2),RCHECK);
-        r = to_number(a,top(a,1),RCHECK);
+        l = to_number(a,stk_top(a,2),RCHECK);
+        r = to_number(a,stk_top(a,1),RCHECK);
         o = ajj_value_number(pow(l,r));
-        pop(a,2);
-        push(a,o);
+        stk_pop(a,2);
+        stk_push(a,o);
       } vm_end(POW)
 
       vm_beg(MOD) {
         int l , r;
         struct ajj_value o;
-        l = to_integer(a,top(a,2),RCHECK);
-        r = to_integer(a,top(a,1),RCHECK);
+        l = to_integer(a,stk_top(a,2),RCHECK);
+        r = to_integer(a,stk_top(a,1),RCHECK);
         o = ajj_value_number(l%r);
-        pop(a,2);
-        push(a,o);
+        stk_pop(a,2);
+        stk_push(a,o);
       } vm_end(MOD)
 
       vm_beg(EQ) {
         struct ajj_value o = vm_eq(a,
-            top(a,2),top(a,1),RCHECK);
-        pop(a,2);
-        push(a,o);
+            stk_top(a,2),stk_top(a,1),RCHECK);
+        stk_pop(a,2);
+        stk_push(a,o);
       } vm_end(EQ)
 
       vm_beg(NE) {
         struct ajj_value o = vm_ne(a,
-            top(a,2),top(a,1),RCHECK);
-        pop(a,2);
-        push(a,o);
+            stk_top(a,2),stk_top(a,1),RCHECK);
+        stk_pop(a,2);
+        stk_push(a,o);
       } vm_end(NE)
 
       vm_beg(LT) {
         struct ajj_value o = vm_lt(a,
-            top(a,2),top(a,1),RCHECK);
-        pop(a,2);
-        push(a,o);
+            stk_top(a,2),stk_top(a,1),RCHECK);
+        stk_pop(a,2);
+        stk_push(a,o);
       } vm_end(LT)
 
       vm_beg(LE) {
         struct ajj_value o = vm_le(a,
-            top(a,2),top(a,1),RCHECK);
-        pop(a,2);
-        push(a,o);
+            stk_top(a,2),stk_top(a,1),RCHECK);
+        stk_pop(a,2);
+        stk_push(a,o);
       } vm_end(LE)
 
       vm_beg(GT) {
         struct ajj_value o = vm_gt(a,
-            top(a,2),top(a,1),RCHECK);
-        pop(a,2);
-        push(a,o);
+            stk_top(a,2),stk_top(a,1),RCHECK);
+        stk_pop(a,2);
+        stk_push(a,o);
       } vm_end(GT)
 
       vm_beg(GE) {
         struct ajj_value o = vm_ge(a,
-            top(a,2),top(a,1),RCHECK);
-        pop(a,2);
-        push(a,o);
+            stk_top(a,2),stk_top(a,1),RCHECK);
+        stk_pop(a,2);
+        stk_push(a,o);
       } vm_end(GE)
 
       vm_beg(NOT) {
         struct ajj_value o = vm_not(a,
-            top(a,1),RCHECK);
-        pop(a,1);
-        push(a,o);
+            stk_top(a,1),RCHECK);
+        stk_pop(a,1);
+        stk_push(a,o);
       } vm_end(NOT)
 
       vm_beg(NEG) {
         double val;
         struct ajj_value o;
-        val = to_number(a,top(a,1),RCHECK);
+        val = to_number(a,stk_top(a,1),RCHECK);
         o = ajj_value_number(-val);
-        pop(a,1);
-        push(a,o);
+        stk_pop(a,1);
+        stk_push(a,o);
       } vm_end(NEG)
 
       vm_beg(DIVTRUCT) {
         double l,r;
         struct ajj_value o;
-        l = to_number(a,top(a,2),RCHECK);
-        r = to_number(a,top(a,1),RCHECK);
+        l = to_number(a,stk_top(a,2),RCHECK);
+        r = to_number(a,stk_top(a,1),RCHECK);
         if(r == 0.0) {
           report_error(a,"Divide by 0!");
           goto fail;
         }
         /* should be painful, but portable */
         o = ajj_value_number( (int64_t)(l/r) );
-        pop(a,2);
-        push(a,o);
+        stk_pop(a,2);
+        stk_push(a,o);
       } vm_end(DIVTRUCT)
 
       vm_beg(IN) {
         struct ajj_value o = vm_in(a,
-            top(a,1),top(a,2),RCHECK);
-        pop(a,2);
-        push(a,o);
+            stk_top(a,1),stk_top(a,2),RCHECK);
+        stk_pop(a,2);
+        stk_push(a,o);
       } vm_end(IN)
 
       vm_beg(NIN) {
         struct ajj_value o = vm_in(a,
-            top(a,1),top(a,2),RCHECK);
-        pop(a,2);
+            stk_top(a,1),stk_top(a,2),RCHECK);
+        stk_pop(a,2);
         assert(o.type == AJJ_VALUE_BOOLEAN);
         if(o.value.boolean)
-          push(a,AJJ_FALSE);
+          stk_push(a,AJJ_FALSE);
         else
-          push(a,AJJ_TRUE);
+          stk_push(a,AJJ_TRUE);
       } vm_end(NIN)
 
       vm_beg(LEN) {
-        struct ajj_value o = vm_len(a,top(a,1),RCHECK);
-        pop(a,1);
-        push(a,o);
+        struct ajj_value o = vm_len(a,stk_top(a,1),RCHECK);
+        stk_pop(a,1);
+        stk_push(a,o);
       } vm_end(LEN)
 
       vm_beg(CAT) {
-        struct ajj_value o = vm_cat(a,top(a,2),top(a,1));
-        pop(a,2);
-        push(a,o);
+        struct ajj_value o = vm_cat(a,stk_top(a,2),stk_top(a,1));
+        stk_pop(a,2);
+        stk_push(a,o);
       } vm_end(CAT)
 
       vm_beg(TEST) {
@@ -1729,7 +1799,7 @@ int vm_main( struct ajj* a ) {
              * anything, but just return, since the VM_RET will take care
              * of everything. However, if we are calling a C functions, then
              * we need to exit the current function calling frame and also
-             * push the return value on to the stack */
+             * stk_push the return value on to the stack */
             exit_function(a,&ret);
           }
         }
@@ -1761,7 +1831,7 @@ int vm_main( struct ajj* a ) {
       vm_beg(ATTR_CALL) {
         int fn_idx = instr_1st_arg(c);
         int an = instr_2nd_arg(a);
-        struct ajj_value obj = *top(a,an+1);
+        struct ajj_value obj = *stk_top(a,an+1);
         const struct string* fn;
         struct ajj_object* o;
         const struct function* f;
@@ -1800,20 +1870,20 @@ int vm_main( struct ajj* a ) {
 
       vm_beg(RET) {
         /* check if we have return value here or not !
-         * if not, put a dummy NONE on top of the caller stack */
+         * if not, put a dummy NONE on stk_top of the caller stack */
         struct func_frame* fr = cur_frame(a);
         struct ajj_value ret = AJJ_NONE; /* always NONE */
         /* do clean up things */
         exit_function(a,&ret);
         /* check the current function frame to see whether we previously
          * had a c function directly calls into a script function. If so,
-         * we just pop that c function again, looks like one return pops
+         * we just stk_pop that c function again, looks like one return stk_pops
          * 2 function frames */
         if( a->rt->cur_call_stk > 0 ) {
           fr = cur_frame(a);
           if( IS_C(fr->entry) ) {
-            /* do a consecutive pop here */
-            pop(a,1); /* pop the original return value on stack */
+            /* do a consecutive stk_pop here */
+            stk_pop(a,1); /* stk_pop the original return value on stack */
             exit_function(a,&ret);
           }
         } else {
@@ -1827,7 +1897,7 @@ int vm_main( struct ajj* a ) {
         size_t l;
         struct string t;
         const char* text = ajj_display(
-            a,top(a,1),&l,&own);
+            a,stk_top(a,1),&l,&own);
 
         assert(text); /* should never fail */
 
@@ -1835,33 +1905,33 @@ int vm_main( struct ajj* a ) {
         t.len = l;
         if(!string_empty(&t))
           vm_print(a,&t);
-        pop(a,1);
+        stk_pop(a,1);
         if(own) free((void*)text);
       } vm_end(PRINT)
 
       vm_beg(POP) {
         int arg = instr_1st_arg(c);
-        pop(a,arg);
+        stk_pop(a,arg);
       } vm_end(POP)
 
       vm_beg(TPUSH) {
         int arg = instr_1st_arg(c);
-        struct ajj_value val = *top(a,arg);
-        push(a,val);
+        struct ajj_value val = *stk_top(a,arg);
+        stk_push(a,val);
       } vm_end(TPUSH)
 
       vm_beg(BPUSH) {
         int arg = instr_1st_arg(c);
-        struct ajj_value val = *bot(a,arg);
-        push(a,val);
+        struct ajj_value val = *stk_bot(a,arg);
+        stk_push(a,val);
       } vm_end(BPUSH)
 
       vm_beg(MOVE) {
         int l = instr_1st_arg(c);
         int r = instr_2nd_arg(a);
-        struct ajj_value temp = *bot(a,l);
-        *bot(a,l) = *bot(a,r);
-        *bot(a,r) = temp;
+        struct ajj_value temp = *stk_bot(a,l);
+        *stk_bot(a,l) = *stk_bot(a,r);
+        *stk_bot(a,r) = temp;
       } vm_end(MOVE)
 
       vm_beg(LIFT) {
@@ -1873,88 +1943,88 @@ int vm_main( struct ajj* a ) {
 
       vm_beg(STORE) {
         int dst = instr_1st_arg(c);
-        struct ajj_value src = *top(a,1);
-        *bot(a,dst) = src;
-        pop(a,1);
+        struct ajj_value src = *stk_top(a,1);
+        *stk_bot(a,dst) = src;
+        stk_pop(a,1);
       } vm_end(STORE)
 
       vm_beg(LSTR) {
         int arg = instr_1st_arg(c);
         struct ajj_value val = vm_lstr(a,arg);
-        push(a,val);
+        stk_push(a,val);
       } vm_end(LSTR)
 
       vm_beg(LTRUE) {
-        push(a,AJJ_TRUE);
+        stk_push(a,AJJ_TRUE);
       } vm_end(LTRUE)
 
       vm_beg(LFALSE) {
-        push(a,AJJ_FALSE);
+        stk_push(a,AJJ_FALSE);
       } vm_end(LFALSE)
 
       vm_beg(LZERO) {
         struct ajj_value val = ajj_value_number(0);
-        push(a,val);
+        stk_push(a,val);
       } vm_end(LZERO)
 
       vm_beg(LNONE) {
-        push(a,AJJ_NONE);
+        stk_push(a,AJJ_NONE);
       } vm_end(LNONE)
 
       vm_beg(LNUM) {
         int arg = instr_1st_arg(c);
         struct ajj_value val = vm_lnum(a,arg);
-        push(a,val);
+        stk_push(a,val);
       } vm_end(LNUM)
 
       vm_beg(LIMM) {
         int imm = instr_1st_arg(c);
         struct ajj_value val = ajj_value_number(imm);
-        push(a,val);
+        stk_push(a,val);
       } vm_end(LIMM)
 
       vm_beg(LLIST) {
         struct ajj_value val = vm_llist(a);
-        push(a,val);
+        stk_push(a,val);
       } vm_end(LLIST)
 
       vm_beg(LDICT) {
         struct ajj_value val = vm_ldict(a);
-        push(a,val);
+        stk_push(a,val);
       } vm_end(LDICT)
 
       vm_beg(ATTR_SET) {
-        struct ajj_value obj = *top(a,3);
-        struct ajj_value key = *top(a,2);
-        struct ajj_value val = *top(a,1);
+        struct ajj_value obj = *stk_top(a,3);
+        struct ajj_value key = *stk_top(a,2);
+        struct ajj_value val = *stk_top(a,1);
         vm_attrset(a,&obj,&key,&val,RCHECK);
-        pop(a,2);
+        stk_pop(a,2);
       } vm_end(ATTRSET)
 
       vm_beg(ATTR_GET) {
-        struct ajj_value obj = *top(a,2);
-        struct ajj_value key = *top(a,1);
+        struct ajj_value obj = *stk_top(a,2);
+        struct ajj_value key = *stk_top(a,1);
         struct ajj_value val =
           vm_attrget( a,&obj,&key,RCHECK);
-        pop(a,2);
-        push(a,val);
+        stk_pop(a,2);
+        stk_push(a,val);
       } vm_end(ATTR_GET)
 
       vm_beg(ATTR_PUSH) {
-        struct ajj_value obj = *top(a,2);
-        struct ajj_value val = *top(a,1);
-        vm_attrpush(a,&obj,&val,RCHECK);
-        pop(a,1);
+        struct ajj_value obj = *stk_top(a,2);
+        struct ajj_value val = *stk_top(a,1);
+        vm_attrstk_push(a,&obj,&val,RCHECK);
+        stk_pop(a,1);
       } vm_end(ATTR_PUSH)
 
       vm_beg(UPVALUE_SET) {
         int par = instr_1st_arg(c);
         const struct string* upvalue_name =
           const_str(a,par);
-        struct ajj_value val = *top(a,1);
+        struct ajj_value val = *stk_top(a,1);
         /* deteach the value to be owned by upvalue */
         set_upvalue(a,upvalue_name,&val,0,0,RCHECK);
-        pop(a,1);
+        stk_pop(a,1);
       } vm_end(UPVALUE_SET)
 
       vm_beg(UPVALUE_GET) {
@@ -1963,7 +2033,7 @@ int vm_main( struct ajj* a ) {
           const_str(a,par);
         struct ajj_value val = get_upvalue(a,
             upvalue_name);
-        push(a,val);
+        stk_push(a,val);
       } vm_end(UPVALUE_GET)
 
       vm_beg(UPVALUE_DEL) {
@@ -1988,45 +2058,45 @@ int vm_main( struct ajj* a ) {
 
       vm_beg(JT) {
         int pos = instr_1st_arg(c);
-        struct ajj_value cond = *top(a,1);
+        struct ajj_value cond = *stk_top(a,1);
         if( vm_is_true(&cond) ) {
           cur_frame(a)->pc = pos;
         }
-        pop(a,1);
+        stk_pop(a,1);
       } vm_end(JT)
 
       vm_beg(JF) {
         int pos = instr_1st_arg(c);
-        struct ajj_value cond = *top(a,1);
+        struct ajj_value cond = *stk_top(a,1);
         if( vm_is_false(&cond) ) {
           cur_frame(a)->pc = pos;
         }
-        pop(a,1);
+        stk_pop(a,1);
       } vm_end(JF)
 
       vm_beg(JLT) {
         int pos = instr_1st_arg(c);
-        struct ajj_value cond = *top(a,1);
+        struct ajj_value cond = *stk_top(a,1);
         if( vm_is_true(&cond) ) {
           cur_frame(a)->pc = pos;
         } else {
-          pop(a,1);
+          stk_pop(a,1);
         }
       } vm_end(JLT)
 
       vm_beg(JLF) {
         int pos = instr_1st_arg(c);
-        struct ajj_value cond = *top(a,1);
+        struct ajj_value cond = *stk_top(a,1);
         if( vm_is_false(&cond) ) {
           cur_frame(a)->pc = pos;
         } else {
-          pop(a,1);
+          stk_pop(a,1);
         }
       } vm_end(JLF)
 
       vm_beg(JEPT) {
         int pos = instr_1st_arg(c);
-        struct ajj_value cond = *top(a,1);
+        struct ajj_value cond = *stk_top(a,1);
         int res = is_empty(a,&cond,&fail);
         /* We should always have an non-failed result since our object
          * should never be an incompatible object. The code generate this
@@ -2037,13 +2107,13 @@ int vm_main( struct ajj* a ) {
         if( res ) {
           cur_frame(a)->pc = pos;
         }
-        pop(a,1);
+        stk_pop(a,1);
       } vm_end(JEPT)
 
       /* ITERATORS ------------------ */
       vm_beg(ITER_START) {
         int itr;
-        struct ajj_value* obj = top(a,1);
+        struct ajj_value* obj = stk_top(a,1);
         if(obj->type != AJJ_VALUE_OBJECT) {
           report_error(a,"Type:%s doesn't support iterator!",
               ajj_value_get_type_name(obj));
@@ -2064,13 +2134,13 @@ int vm_main( struct ajj* a ) {
             goto fail;
           }
         }
-        /* do not pop the object out */
-        push(a,ajj_value_iter(itr));
+        /* do not stk_pop the object out */
+        stk_push(a,ajj_value_iter(itr));
       } vm_end(ITER_START)
 
       vm_beg(ITER_HAS) {
-        struct ajj_value* itr = top(a,1);
-        struct ajj_value* obj = top(a,2);
+        struct ajj_value* itr = stk_top(a,1);
+        struct ajj_value* obj = stk_top(a,2);
         struct object* o;
         int has;
 
@@ -2080,14 +2150,14 @@ int vm_main( struct ajj* a ) {
         assert( o->fn_tb->slot.iter_has );
         has = o->fn_tb->slot.iter_has(
             a,obj,ajj_value_to_iter(itr));
-        /* re-push the iterator onto the stack */
-        push(a,ajj_value_boolean(has));
+        /* re-stk_push the iterator onto the stack */
+        stk_push(a,ajj_value_boolean(has));
       } vm_end(ITER_HAS)
 
       vm_beg(ITER_DEREF) {
         int arg = instr_1st_arg(c);
-        struct ajj_value* obj = top(a,2);
-        struct ajj_value* itr = top(a,1);
+        struct ajj_value* obj = stk_top(a,2);
+        struct ajj_value* itr = stk_top(a,1);
         struct object* o;
         assert( itr->type == AJJ_VALUE_ITERATOR );
         assert( obj->type == AJJ_VALUE_OBJECT );
@@ -2096,11 +2166,11 @@ int vm_main( struct ajj* a ) {
           case ITERATOR_VAL:
             {
               struct ajj_value v;
-              /* just push the value on to the stack */
+              /* just stk_push the value on to the stack */
               assert( o->fn_tb->slot.iter_get_val );
               v = o->fn_tb->slot.iter_get_val(a,
                   obj, ajj_value_to_iter(itr));
-              push(a,v);
+              stk_push(a,v);
             }
             break;
           case ITERATOR_KEYVAL:
@@ -2112,18 +2182,18 @@ int vm_main( struct ajj* a ) {
                   ajj_value_to_iter(itr));
               v = o->fn_tb->slot.iter_get_val(a,obj,
                   ajj_value_to_iter(itr));
-              push(a,k);
-              push(a,v);
+              stk_push(a,k);
+              stk_push(a,v);
             }
             break;
           case ITERATOR_KEY:
             {
               struct ajj_value k;
-              /* just push the value on to the stack */
+              /* just stk_push the value on to the stack */
               assert( o->fn_tb->slot.iter_get_key );
               k = o->fn_tb->slot.iter_get_key(a,
                   obj, ajj_value_to_iter(itr));
-              push(a,k);
+              stk_push(a,k);
             }
             break;
           default:
@@ -2133,15 +2203,15 @@ int vm_main( struct ajj* a ) {
       }vm_end(ITER_DEREF)
 
       vm_beg(ITER_MOVE){
-        struct ajj_value* obj = top(a,2);
-        struct ajj_value* itr = top(a,1);
+        struct ajj_value* obj = stk_top(a,2);
+        struct ajj_value* itr = stk_top(a,1);
         struct object* o ;
         assert( itr->type == AJJ_VALUE_ITERATOR );
         assert( obj->type == AJJ_VALUE_OBJECT );
         o = &(obj->value.object->val.obj);
         assert( o->fn_tb->slot.iter_move );
-        pop(a,1); /* pop the top iterator */
-        push( a , ajj_value_iter(
+        stk_pop(a,1); /* stk_pop the stk_top iterator */
+        stk_push( a , ajj_value_iter(
             o->fn_tb->slot.iter_move(
               a,obj,ajj_value_to_iter(itr))));
         move_loop(a); /* step the loop object */
@@ -2168,12 +2238,12 @@ int vm_main( struct ajj* a ) {
 
       vm_beg(IMPORT) {
         vm_import(a,instr_1st_arg(c),RCHECK);
-        pop(a,1); /* pop the filename */
+        stk_pop(a,1); /* stk_pop the filename */
       } vm_end(IMPORT)
 
       vm_beg(EXTENDS) {
         vm_extends(a,RCHECK);
-        pop(a,1); /* pop the filename */
+        stk_pop(a,1); /* stk_pop the filename */
       } vm_end(EXTENDS)
 
       /* NOPS, should not exist after optimization */

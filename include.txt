@@ -1,0 +1,4 @@
+{% for i in xrange(100) if i is odd %}
+I={{i}}
+{% endfor %}
+Hello World From Include Text
