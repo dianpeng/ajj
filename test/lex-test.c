@@ -7,7 +7,7 @@ void test_basic() {
   {
     struct tokenizer tk;
     const char* source= \
-      "ThisIsAText AlsoThisIsAText!" \
+      "ThisIsAText \\{{\\{{\\{ AlsoThisIsAText!" \
       "{{ new.object }} " \
       "{% for endfor variable else elif endif macro endmacro macroX %}" \
       "{% call endcall filter endfilter do set endset with endwith "\
@@ -191,7 +191,7 @@ void test_basic() {
   {
     struct tokenizer tk;
     const char* source = \
-      "{% 1.2345 123 \'HelloWorld\' True true false False None none %}";
+      "{% 1.2345 123 'Hello\\\'World' True true false False None none %}";
 
     tk_init(&tk,source);
     assert(tk.tk == TK_LSTMT);
@@ -206,7 +206,7 @@ void test_basic() {
     tk_move(&tk);
 
     assert(tk.tk == TK_STRING);
-    assert(strcmp(tk.lexeme.str,"HelloWorld")==0);
+    assert(strcmp(tk.lexeme.str,"Hello'World")==0);
     tk_move(&tk);
 
     assert(tk.tk == TK_TRUE);
@@ -236,7 +236,7 @@ void test_basic() {
   }
   {
     const char* source = \
-      "{% 1.2345 123 \'HelloWorld\' True true FFFFF %}";
+      "{% 1.2345 123 \'Hello World\' True true FFFFF %}";
     char buf[CODE_SNIPPET_SIZE];
     tk_get_code_snippet(source,4,buf,256);
     printf("%s\n",buf);

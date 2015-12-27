@@ -91,7 +91,7 @@ token_id tk_lex_str( struct tokenizer* tk ) {
     strbuf_push(&(tk->lexeme),c);
   }
   /* include the quotes length for this token length */
-  RETURN(TK_STRING,tk->lexeme.len+2);
+  RETURN(TK_STRING,i+1-tk->pos);
 }
 
 static

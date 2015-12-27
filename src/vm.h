@@ -62,7 +62,10 @@ struct func_frame {
 
   struct ajj_object* obj; /* if it is an object call, then the object pointer
                            * to the corresponding caller object */
-  int par_cnt : 31;  /* parameter count when calling this function */
+  int par_cnt : 31;  /* parameter count that resides on the caller's stack,
+                      * it is not the actual number of arguments number for
+                      * called function. Called function arguments number
+                      * is always the defined number */
   int method  : 1 ;  /* indicate whether this call is a method call or not */
 
   /* Optimization for LOOP object */
@@ -70,15 +73,26 @@ struct func_frame {
   size_t cur_loops;
 };
 
+/* Represent a instance state when we start doing template inheritance,
+ * this doesn't reflect the whole inheritance chain. So each node can
+ * has one child and one parent but it doesn't mean that each node cannot
+ * have more than one children or more parents */
+struct inher_node {
+  struct ajj_object* jinja;
+  struct inher_node* child;
+  struct inher_node* parent;
+};
 
 /* Runtime object is the internal VM data structure which contains all the VM
  * execution resources. It has a pointer points to the main jinja template and
  * contains a value stack + an function frame stack. Also a gc_scope pointer always
  * points to the current gc scope and a output FILE points to where the output
  * of the jinja template should go to. */
-
 struct runtime {
-  struct ajj_object* cur_obj; /* current calling object */
+  size_t inc_cnt; /* nested inclusion count, if too much include is
+                   * met, we just return falure. This avoid crash on
+                   * stack overflow */
+  struct inher_node tmpl; /* current template */
   struct func_frame call_stk[ AJJ_MAX_CALL_STACK ];
   int cur_call_stk; /* Current stk position */
   struct ajj_value val_stk[AJJ_MAX_VALUE_STACK_SIZE]; /* current value stack size */

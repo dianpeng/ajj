@@ -1506,18 +1506,25 @@ parse_block( struct parser* p , struct emitter* em ) {
   struct program* new_prg;
   struct emitter new_em;
   struct tokenizer* tk = &(p->tk);
+  int num = 0;
 
   assert(tk->tk == TK_BLOCK);
   tk_move(tk);
   EXPECT_VARIABLE();
   CALLE(symbol(p,&name));
   tk_move(tk);
-  CONSUME(TK_RSTMT); /* eat }% */
 
-  if( p->extends == 0 ) {
+  if( tk->tk != TK_RSTMT && !(p->extends) ) {
+    EXPECT(TK_LPAR);
+    num = parse_invoke_par(p,em);
+  }
+  CONSUME(TK_RSTMT);
+
+  if( !(p->extends) ) {
     int idx;
     idx=program_const_str(em->prg,&name,0);
-    EMIT1(em,VM_BCALL,idx);
+    EMIT2(em,VM_BCALL,idx,num);
+    EMIT1(em,VM_POP,1); /* pop the return value */
   }
   assert(p->tpl->val.obj.fn_tb);
   new_prg = func_table_add_jj_block(

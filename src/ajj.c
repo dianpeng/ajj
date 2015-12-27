@@ -852,14 +852,3 @@ ajj_parse_template( struct ajj* a , const char* filename ) {
     return parse(a,filename,src,1);
   }
 }
-
-int ajj_render( struct ajj* a , const char* src ,
-    const char* key , struct ajj_io* output ) {
-  struct ajj_object* obj = parse(a,key,src,0);
-  if(!obj) return -1;
-#if 0
-  return vm_run_jinja(a,obj,output);
-#else
-  return -1;
-#endif
-}

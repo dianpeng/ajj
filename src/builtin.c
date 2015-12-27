@@ -1913,6 +1913,16 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
 #define PUSH() (++cur)
 #define POP() (--cur)
 
+#define MAP_INSERT(V) \
+  do { \
+    struct map* m; \
+    assert( IS_OBJECT(CUR()) ); \
+    assert( IS_A(val+cur,DICT_TYPE) ); \
+    m = OBJECT(val+cur); \
+    map_insert(m,key+cur,1,(V)); \
+    key[cur] = NULL_STRING; \
+  } while(0)
+
   for( ; (c=*src) ; ++src ) {
     switch(c) {
       case '[':
@@ -1953,14 +1963,7 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
                   &ret) == AJJ_EXEC_OK );
             SET(COMMA);
           } else if( IS_OBJECT(CUR()) ) {
-            /* directly call map_insert instead of using
-             * dict_set since dict_set may allocate memory */
-            struct map* m;
-            assert( IS_OBJECT(CUR()) );
-            assert( IS_A(val+cur,DICT_TYPE) );
-            m = OBJECT(val+cur);
-            map_insert(m,key+cur,1,val+cur+1); /* ignore the result */
-            key[cur] = NULL_STRING;
+            MAP_INSERT(val+cur+1);
             SET(COMMA);
           } else {
             val[cur]=val[cur+1];
@@ -1983,14 +1986,7 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
                   &ret) == AJJ_EXEC_OK );
             SET(COMMA);
           } else if( IS_OBJECT(CUR()) ) {
-            /* directly call map_insert instead of using
-             * dict_set since dict_set may allocate memory */
-            struct map* m;
-            assert( IS_OBJECT(CUR()) );
-            assert( IS_A(val+cur,DICT_TYPE) );
-            m = OBJECT(val+cur);
-            map_insert(m,key+cur,1,val+cur+1); /* ignore the result */
-            key[cur] = NULL_STRING;
+            MAP_INSERT(val+cur+1);
             SET(COMMA);
           } else {
             val[cur]=val[cur+1];
@@ -2027,14 +2023,7 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
                   1,
                   &ret) == AJJ_EXEC_OK );
           } else {
-            /* directly call map_insert instead of using
-             * dict_set since dict_set may allocate memory */
-            struct map* m;
-            assert( IS_OBJECT(CUR()) );
-            assert( IS_A(val+cur,DICT_TYPE) );
-            m = OBJECT(val+cur);
-            map_insert(m,key+cur,1,&dval); /* ignore the result */
-            key[cur] = NULL_STRING;
+            MAP_INSERT(&dval);
           }
         } else {
           json_report_error(a,beg,src,
@@ -2069,28 +2058,19 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
               if( IS(KEY) || IS(KEYE) ) {
                 key[cur] = strbuf_tostring(&sbuf);
               } else {
-                struct map* m;
                 struct ajj_value str_val;
                 struct string str = strbuf_tostring(&sbuf);
-
                 assert( !string_null(key+cur) );
                 str_val = ajj_value_assign(ajj_object_create_string(
                       a,scp,str.str,str.len,1));
-
-                assert( IS_A(val+cur,DICT_TYPE) );
-
-                m = OBJECT(val+cur);
-                map_insert(m,key+cur,1,&str_val);
-                key[cur] = NULL_STRING;
+                MAP_INSERT(&str_val);
               }
             } else {
               struct ajj_value str_val;
               struct string str = strbuf_tostring(&sbuf);
-
               assert( IS_ARRAY(CUR()) );
               str_val = ajj_value_assign(
                   ajj_object_create_string(a,scp,str.str,str.len,1));
-
               CHECK(list_append(a,
                     val+cur,
                     &str_val,
@@ -2148,14 +2128,7 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
                     1,
                     &ret) == AJJ_EXEC_OK );
             } else {
-              /* directly call map_insert instead of using
-               * dict_set since dict_set may allocate memory */
-              struct map* m;
-              assert( IS_OBJECT(CUR()) );
-              assert( IS_A(val+cur,DICT_TYPE) );
-              m = OBJECT(val+cur);
-              map_insert(m,key+cur,1,&AJJ_TRUE); /* ignore the result */
-              key[cur] = NULL_STRING;
+              MAP_INSERT(&AJJ_TRUE);
             }
           } else {
             json_report_error(a,beg,src,
@@ -2177,14 +2150,7 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
                     1,
                     &ret) == AJJ_EXEC_OK );
             } else {
-              /* directly call map_insert instead of using
-               * dict_set since dict_set may allocate memory */
-              struct map* m;
-              assert( IS_OBJECT(CUR()) );
-              assert( IS_A(val+cur,DICT_TYPE) );
-              m = OBJECT(val+cur);
-              map_insert(m,key+cur,1,&AJJ_FALSE); /* ignore the result */
-              key[cur] = NULL_STRING;
+              MAP_INSERT(&AJJ_FALSE);
             }
           } else {
             json_report_error(a,beg,src,
@@ -2206,14 +2172,7 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
                     1,
                     &ret) == AJJ_EXEC_OK );
             } else {
-              /* directly call map_insert instead of using
-               * dict_set since dict_set may allocate memory */
-              struct map* m;
-              assert( IS_OBJECT(CUR()) );
-              assert( IS_A(val+cur,DICT_TYPE) );
-              m = OBJECT(val+cur);
-              map_insert(m,key+cur,1,&AJJ_NONE); /* ignore the result */
-              key[cur] = NULL_STRING;
+              MAP_INSERT(&AJJ_NONE);
             }
           } else {
             json_report_error(a,beg,src,

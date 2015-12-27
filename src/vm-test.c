@@ -675,7 +675,6 @@ int main() {
           "{% import 'import.txt' as T2%}" \
           "{{ T.Test('Hello World') }}" \
           "{{ T2.Test('Hello World2') }}");
-#endif
   do_test("{{ to_jsonc(' \
   { \"Y\":[] , \
     \"V\":{},  \
@@ -687,4 +686,9 @@ int main() {
     false,\
     \"UUV\":[1,2,3,4,5] \
     }') }}\n");
+#endif
+do_test("{% for x in xrange(10)%} III={{x}}\n {% endfor %}" \
+        "{% extends 'base.txt' %}" \
+        "{% block Test3 %} vargs={{vargs}} {% endblock %}");
+
 }

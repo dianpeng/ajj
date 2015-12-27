@@ -40,6 +40,9 @@ void enter_function( struct ajj* a , const struct function* f,
 static
 int exit_function( struct ajj* a , const struct ajj_value* ret );
 
+static
+int run_jinja(struct ajj*);
+
 /* This FUNC_CALL actually means we want a TAIL call of a
  * new script functions. The return from the LOWEST script function
  * will end up its caller been poped as well. We don't return the
@@ -57,7 +60,7 @@ int exit_function( struct ajj* a , const struct ajj_value* ret );
 
 #define cur_frame(a) (&(a->rt->call_stk[a->rt->cur_call_stk-1]))
 #define cur_function(a) (cur_frame(a)->entry)
-#define cur_jinja(a) ((a)->rt->cur_obj)
+#define cur_jinja(a) ((a)->rt->tmpl.jinja)
 
 /* stack manipulation routine */
 #ifndef NDEBUG
@@ -201,7 +204,6 @@ void report_error( struct ajj* a , const char* fmt , ... ) {
   char* b = a->err;
   va_list vl;
   char* end = a->err + ERROR_BUFFER_SIZE;
-  assert(cur_jinja(a)->tp == AJJ_VALUE_JINJA );
   va_start(vl,fmt);
   b += sprintf(b,"ErrorMessage:(");
   b += vsnprintf(b,end-b,fmt,vl);
@@ -261,16 +263,17 @@ double const_num( struct ajj* a, int idx ) {
  * runtime
  * ==========================*/
 static
-struct runtime* runtime_create( struct ajj* a , 
-    struct ajj_object* obj , struct ajj_io* output ) {
-  struct runtime* rt = malloc(sizeof(*rt));
-  rt->cur_obj = obj;
+void runtime_init( struct ajj* a , struct runtime* rt,
+    struct ajj_object* obj , struct ajj_io* output , int cnt ) {
+  rt->inc_cnt = cnt;
+  rt->tmpl.child = NULL;
+  rt->tmpl.parent= NULL;
+  rt->tmpl.jinja = obj;
   rt->cur_call_stk = 0;
   rt->cur_gc = rt->root_gc = 
     gc_scope_create(a,&(a->gc_root));
   rt->output = output;
   rt->global = upvalue_table_create(&(a->env));
-  return rt;
 }
 
 static
@@ -284,7 +287,6 @@ void runtime_destroy( struct ajj* a , struct runtime* rt ) {
   }
   /* destroy all the global variable scope */
   upvalue_table_destroy(a,rt->global,&(a->env));
-  free(rt);
 }
 
 static
@@ -818,10 +820,6 @@ void prepare_script_call( struct ajj* a ) {
       list_push(a,vargs,top(a,1));
       pop(a,1);
     }
-    /* we need to modify the stack frame as well since
-     * ESP is wrong here */
-    fr->par_cnt = prg->par_size;
-    fr->esp -= (fr->par_cnt-prg->par_size);
   }
 
   /* set up the builtin variables */
@@ -1112,113 +1110,86 @@ void vm_exit( struct ajj* a , int loops ) {
   }
 }
 
+/* Include template.
+ * The include of a separate template is done as followed,
+ * we will setup a new runtime and then re-enter the VM_MAIN. 
+ * That new runtime includes all the independent information
+ * about the new template. */
 static
-void setup_env( struct ajj* a , int cnt , int* fail ) {
-  assert(cnt>0);
-  a->rt->global = upvalue_table_create( a->rt->global );
-  for( ; cnt > 0 ; --cnt ) {
-    const int idx = 3*cnt;
-    struct ajj_value* sym = top(a,idx);
-    struct ajj_value* val = top(a,idx-1);
-    struct ajj_value* opt = top(a,idx-2);
-    int iopt = (int)(opt->value.number);
-    int isym = (int)(sym->value.number);
-    const struct string* k = const_str(a,isym);
-    assert( sym->type == AJJ_VALUE_NUMBER );
-    assert( opt->type == AJJ_VALUE_NUMBER );
-    /* check the options */
-    if( iopt == UPVALUE_FIX ) {
-      if( upvalue_table_find(a->rt->global,k,NULL) != NULL )
-        continue;
-    }
-    /* set up the value thing */
-    set_upvalue(a,k,val,1,0,fail);
-  }
-}
-
-/* This function will parse a json file which contains all the needed
- * information to setup the environment which later used to do rendering */
-static
-void setup_json_env( struct ajj* a , int cnt , int* fail ) {
-  assert(0);
+int setup_env( struct ajj* a , struct runtime* nrt ) {
+  return -1;
 }
 
 static
-void remove_env( struct ajj* a ) {
-  a->rt->global = upvalue_table_destroy_one(
-      a,a->rt->global);
-}
-
-static
-char* load_template( struct ajj* a , const struct ajj_value* fn ) {
-  char* fc; /* file content */
-  if( fn->type != AJJ_VALUE_STRING ) {
-    report_error(a,"Include file name is not a string!");
-    return NULL;
-  }
-  if((fc = ajj_load_file(a,
-          ajj_value_to_cstr(fn),NULL))==NULL){
-    return NULL;
-  }
-  return fc;
+int setup_json_env( struct ajj* a , struct runtime* nrt) {
+  return -1;
 }
 
 static
 void vm_include( struct ajj* a , int type,
     int cnt , int* fail ) {
-  struct ajj_value* fn;
-  char* fc = NULL;
-  struct runtime* rt;
-  switch(type) {
-    case INCLUDE_UPVALUE:
-      fn = top(a,3*cnt+1); /* filename */
-      break;
-    case INCLUDE_JSON:
-      fn = top(a,3*cnt+2); /* filename */
-      break;
-    default:
-      UNREACHABLE();
-      break;
+  struct runtime nrt; /* new runtime */
+  struct runtime*ort = a->rt;
+  struct ajj_object* jinja; /* jinja template */
+  struct ajj_value* jinja_na; /* jinja template name */
+  if( a->rt->inc_cnt >= AJJ_MAX_NESTED_INCLUDE_SIZE ) {
+    report_error(a,"You cannot include more file, you can at most "
+        "include %d files!",AJJ_MAX_NESTED_INCLUDE_SIZE);
+    *fail = 1; return;
   }
-  if((fc=load_template(a,fn))==NULL) {
+
+  if(type == INCLUDE_UPVALUE) {
+    jinja_na = top(a,3*cnt+1);
+  } else {
+    assert( type == INCLUDE_JSON );
+    jinja_na = top(a,3*cnt+2);
+  }
+  if( jinja_na->type != AJJ_VALUE_STRING ) {
+    report_error(a,"The template name for include "
+        "directive is not a string type,but get type:%s!",
+        ajj_value_get_type_name(jinja_na));
     *fail = 1;
     return;
   }
-  if( type == INCLUDE_UPVALUE ) {
-    if(cnt>0)
-      setup_env(a,cnt,fail);
-    if(*fail) goto fail;
-  } else if( type == INCLUDE_JSON ) {
-    setup_json_env(a,cnt,fail);
-    if(*fail) goto fail;
+  /* now we get the jinja template file name,
+   * so we just need to load it into the mem */
+  jinja = ajj_parse_template(a,ajj_value_to_cstr(jinja_na));
+  if(jinja == NULL) {
+    rewrite_error(a);
+    *fail = 1;
+    return;
   }
-  rt = a->rt;
-  if( ajj_render(a,fc,ajj_value_to_cstr(
-          fn),a->rt->output) )
-    goto fail;
-  a->rt = rt;
-  free(fc);
-  /* remove the environment if it uses */
-  switch(type) {
-    case INCLUDE_UPVALUE:
-      pop(a,3*cnt+1);
-      if(cnt >0 ) remove_env(a);
-      break;
-    case INCLUDE_JSON:
-      pop(a,3*cnt+2);
-      remove_env(a);
-      break;
-    default:
-      UNREACHABLE();
-      break;
+
+  /* create new runtime for vm_include */
+  runtime_init(a, &nrt,jinja,a->rt->output,ort->inc_cnt+1);
+
+  /* Before we do the rendering , we need to setup the
+   * environment accordingly here. All the C side or
+   * user defined upvalue are passed into the global
+   * table right now */
+  if(type == INCLUDE_UPVALUE) {
+    if(setup_env(a,&nrt))
+      goto fail;
+  } else {
+    if(setup_json_env(a,&nrt))
+      goto fail;
   }
-  *fail = 0; return;
+
+  a->rt = &nrt; /* new runtime set up */
+  *fail = run_jinja(a); /* start run the jinja */
+  runtime_destroy(a,&nrt); /* destroy the new runtime */
+  a->rt = ort; /* restore the old runtime */
+  if(*fail) {
+    /* the error report happened when parsing
+     * *that* jinja template is dumped by its
+     * own runtime, so we need to rewrite it*/
+    rewrite_error(a);
+  }
+  return;
+
 fail:
-  free(fc);
-  if( (type == INCLUDE_UPVALUE && cnt >  0) ||
-      type == INCLUDE_JSON )
-    remove_env(a);
-  *fail = 1; return;
+  runtime_destroy(a,&nrt);
+  a->rt = ort;
 }
 
 static
@@ -1247,12 +1218,80 @@ void vm_import( struct ajj* a, int arg1 , int* fail ) {
   *fail = 0;
 }
 
+/* Extension.
+ * Jinja's inheritance chain is really wired, it is possibly easy for
+ * jinja to model it inside of python, but for our work it can be
+ * way complicated. First, in our code, each block is actually compiled
+ * into a function and automatically gets called. Although the behavior
+ * for calling each function model's OOP's polymorphism but the big
+ * difference is the main function. The main function should be invoked
+ * is actually the parent's main function but not children's main function,
+ * but we are stuck in the children's main function when we see extends.
+ *
+ * To solve this problem, we use following method to solve it,
+ * 1. Everytime we meet a new extends instruction, we load the template
+ * and start to render the main function of this parental template.
+ * 2. Meantime, we build a linked list to describe the current inheritance
+ * graph for this specific parent template.
+ * 3. Every blocks executed inside of the parent function will try to be
+ * resolved by look at its children first and then goes back to parent.
+ * This ensure the newly extended block gets called correctly.
+ *
+ * There's another problem is that jinja allows a block to access the variable
+ * outside of the scope by tag a keyword. Since we have compiled the block
+ * into function, we allow user to use a function call syntax for a block
+ * then user is able to access variable outside of the scope, that is just
+ * because this function gets called. However some block function will be
+ * called after extends instruction happened, at that time this block may
+ * not be called at all since probably a children's block function gets picked
+ * up and called. But the function parameter is actually on the stack, so
+ * the calling parameter may not be matched. But, we are safe since our
+ * function call allows arbitary number of arguments. Lastly, the picked
+ * up function will always be called in the parent ( inner most ) template's
+ * runtime stack, not on its own stack! This ensure we could pass the correct
+ * function argument*/
+
+static
+void vm_extends( struct ajj* a , int* fail ) {
+  struct ajj_value* temp_na = top(a,1);
+  struct ajj_object* jinja;
+  struct runtime nrt;
+  struct runtime* ort = a->rt; /* old runtime */
+
+  if(ort->inc_cnt == AJJ_MAX_NESTED_INCLUDE_SIZE) {
+    report_error(a,"Cannot extends more file, you can extends/include at "
+        "most %d files!",AJJ_MAX_NESTED_INCLUDE_SIZE);
+    *fail = 1; return;
+  }
+
+  if(temp_na->type != AJJ_VALUE_STRING) {
+    report_error(a,"The template name for import is not a string,"
+        "but get type:%s!",ajj_value_get_type_name(temp_na));
+    *fail = 1; return;
+  }
+  jinja = ajj_parse_template(a,ajj_value_to_cstr(temp_na));
+  if(!jinja) {
+    *fail = 1; return;
+  }
+
+  runtime_init(a,&nrt,jinja,ort->output,ort->inc_cnt+1);
+  /* build the correct inheritance chain */
+  nrt.tmpl.child = &(ort->tmpl);
+  ort->tmpl.parent = &(nrt.tmpl);
+  a->rt = &nrt; /* hook the new runtime */
+  *fail = run_jinja(a); /* run jinja */
+  runtime_destroy(a,&nrt);
+  a->rt = ort;
+  if(*fail) rewrite_error(a);
+  ort->tmpl.parent = NULL;
+}
+
 /* Function resolver.
  * All the function resolver will *NOT* report error if
  * they cannot find any function with given name */
 static
 const struct function*
-resolve_obj_function( struct ajj* a , struct ajj_object* val,
+resolve_obj_function(struct ajj_object* val,
     const struct string* name ) {
   size_t i;
   struct func_table* ft = val->val.obj.fn_tb;
@@ -1266,10 +1305,9 @@ resolve_obj_function( struct ajj* a , struct ajj_object* val,
 
 static
 const struct function*
-resolve_obj_method( struct ajj* a, struct ajj_object* val,
+resolve_obj_method(struct ajj_object* val,
     const struct string* name ) {
-  const struct function* f = resolve_obj_function(a,
-      val,name);
+  const struct function* f = resolve_obj_function(val,name);
   if( !IS_JJBLOCK(f) ) {
     assert( !IS_OBJECTCTOR(f) );
     return f;
@@ -1280,35 +1318,23 @@ resolve_obj_method( struct ajj* a, struct ajj_object* val,
 
 static
 const struct function*
-resolve_obj_block( struct ajj* a , struct ajj_object* val,
+resolve_obj_block( struct ajj* a , struct ajj_object** val,
     const struct string* name ) {
-  const struct function* f = resolve_obj_function(a,
-      val,name);
-  if( IS_JJBLOCK(f) )
-    return f;
-  else
-    return NULL;
-}
-
-/* Use to resolve function recursively to all its parent */
-static
-const struct function*
-resolve_function( struct ajj* a , struct ajj_object** val ,
-    const struct string* name ) {
-  struct ajj_object* tmpl = *val;
-  int p = 0;
   const struct function* f;
+  struct inher_node* cur = &(a->rt->tmpl); /* current */
+
+  /* Find the inner most template or the KIDS */
+  while( cur->child ) { cur = cur->child; }
+
+  /* Do search from CHILDREN -> PARENT, until we hit one */
   do {
-    /* search the function inside of the template/object */
-    if( (f = resolve_obj_function(a,tmpl,name)) ) {
-      *val = tmpl;
+    f = resolve_obj_function(cur->jinja,name);
+    if(f && IS_JJBLOCK(f) ) {
+      *val = cur->jinja;
       return f;
     }
-    if( (size_t)(p) < (*val)->parent_len )
-      tmpl = (*val)->parent[ p++ ];
-    else
-      break;
-  } while(1);
+    cur = cur->parent;
+  } while(cur);
   return NULL;
 }
 
@@ -1327,9 +1353,9 @@ resolve_free_function( struct ajj* a, const struct string* name ,
   const struct function* f;
   struct upvalue* uv;
   *obj = cur_jinja(a);
-  assert( cur_jinja(a) );
 
-  if((f = resolve_function(a,obj,name)))
+  /* try to resolve function from object method */
+  if((f = resolve_obj_function(*obj,name)))
     return f;
 
   /* searching through the global function table */
@@ -1411,7 +1437,7 @@ int exit_function( struct ajj* a , const struct ajj_value* ret ) {
     fr->esp -= stk_sz;
     assert( fr->esp >= fr->ebp );
     /* push the return value onto the stack */
-    push(a,*ret);
+    push(a,*ret); /* block will _never_ return anything on stack */
   }
   return 0;
 }
@@ -1461,7 +1487,7 @@ int vm_call_script_func( struct ajj* a , const char* name,
    * with name "name" */
   struct ajj_object* tmpl = cur_jinja(a);
   struct string n = string_const(name,strlen(name));
-  const struct function* f = resolve_obj_method(a,tmpl,&n);
+  const struct function* f = resolve_obj_method(tmpl,&n);
   size_t i;
   int fail;
   assert(f); /* internal usage, should never return NULL */
@@ -1711,18 +1737,22 @@ int vm_main( struct ajj* a ) {
 
       vm_beg(BCALL) {
         int fn_idx = instr_1st_arg(c);
+        int an = instr_2nd_arg(a);
         const struct string* fn = const_str(a,fn_idx);
-        struct ajj_object* obj = cur_frame(a)->obj;
-        const struct function* f = resolve_obj_block(a,
-            obj,fn);
+        struct ajj_object* obj;
+        const struct function* f = resolve_obj_block(a,&obj,fn);
+        /* After resolving, the object returned from resolve_obj_block
+         * can be not the same template currently rendering, because
+         * it could be some template that is extends */
 
         if( f == NULL ) {
-          report_error(a,"Cannot find block:%s!",fn->str);
+          report_error(a,"Cannot find block:%s in its inhertiance "
+              "chain!",fn->str);
           goto fail;
         } else {
           struct ajj_value ret;
           int r;
-          enter_function(a,f,0,0,obj,RCHECK);
+          enter_function(a,f,an,0,obj,RCHECK);
           r = vm_call(a,obj,&ret);
           assert( r == VM_FUNC_CALL );
         }
@@ -1744,7 +1774,7 @@ int vm_main( struct ajj* a ) {
 
         fn = const_str(a,fn_idx);
         o = obj.value.object;
-        f = resolve_obj_method(a,o,fn);
+        f = resolve_obj_method(o,fn);
 
         if( f == NULL ) {
           report_error(a,"Cannot find object method:%s for object:%s!",
@@ -2141,6 +2171,11 @@ int vm_main( struct ajj* a ) {
         pop(a,1); /* pop the filename */
       } vm_end(IMPORT)
 
+      vm_beg(EXTENDS) {
+        vm_extends(a,RCHECK);
+        pop(a,1); /* pop the filename */
+      } vm_end(EXTENDS)
+
       /* NOPS, should not exist after optimization */
       vm_beg(NOP0) {
       } vm_end(NOP0)
@@ -2165,29 +2200,35 @@ done:
   return 0;
 }
 
-int vm_run_jinja( struct ajj* a , struct ajj_object* jj,
-    struct ajj_io* output ) {
-  struct runtime* rt = runtime_create(a,jj,output);
-  const struct function* m;
+#undef vm_beg
+#undef vm_end
+
+static
+int run_jinja( struct ajj* a ) {
   int fail;
-  a->rt = rt;
-  /* get the main function */
-  m = ajj_object_jinja_main_func(jj);
-  /* set up main function stack frame */
-  enter_function(a,m,0,0,jj,&fail);
+  const struct function* m;
+  assert(a->rt && cur_jinja(a));
+  m = ajj_object_jinja_main_func(cur_jinja(a));
+  assert(m);
+  enter_function(a,m,0,0,cur_jinja(a),&fail);
   assert(!fail);
-  /* set up builtin upvalue */
   set_func_builtin_vars(a,
       0,
       &(cur_frame(a)->name),
       NULL,
       NULL);
-  /* let's rock */
   fail = vm_main(a);
+  return fail;
+}
 
-  /* finish some crap then we are done */
-  runtime_destroy(a,rt);
-
+int vm_run_jinja( struct ajj* a , struct ajj_object* jj,
+    struct ajj_io* output ) {
+  struct runtime rt;
+  int fail;
+  runtime_init(a,&rt,jj,output,0);
+  a->rt = &rt;
+  fail = run_jinja(a);
+  runtime_destroy(a,&rt);
   a->rt = NULL;
   return fail;
 }

@@ -22,5 +22,10 @@ struct ajj_object*
 json_parse( struct ajj* a , struct gc_scope* scp,
     const char* filename , const char* func );
 
+/* helper function for our VM to cast an object to the
+ * internal map object */
+int object_is_map( struct ajj_value* );
+struct map* object_cast_to_map( struct ajj_value* );
+
 
 #endif /* _BUILTIN_H_ */

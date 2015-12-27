@@ -23,6 +23,9 @@ opt-test:
 	./opt-test; \
 	gcov ajj.c opt.c util.c bc.c lex.c parse.c object.c opt-test.c
 
+lex-test:
+	gcc -g test/lex-test.c src/lex.c src/util.c -o test-lex
+
 clean:
 	rm src/*.gcno
 	rm src/*.gcda
