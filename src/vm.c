@@ -1261,6 +1261,12 @@ void vm_include( struct ajj* a , int type,
      * own runtime, so we need to rewrite it*/
     rewrite_error(a);
   }
+  /* take care of the stack status */
+  if(type == INCLUDE_UPVALUE) {
+    stk_pop(a,3*cnt+1);
+  } else {
+    stk_pop(a,3*cnt+2);
+  }
   return;
 
 fail:
@@ -2363,7 +2369,7 @@ int vm_main( struct ajj* a ) {
       vm_beg(INCLUDE) {
         int a1 = instr_1st_arg(c);
         int a2 = instr_2nd_arg(a);
-        vm_include(a,a1,a2,RCHECK);
+        vm_include(a,a1,a2,RCHECK); /* vm_include takes care of pop */
       } vm_end(INCLUDE)
 
       vm_beg(IMPORT) {
