@@ -1785,51 +1785,6 @@ int test_upper( struct ajj* a,
  * GLOBAL FUNCTION
  * ===================================*/
 
-/* This function is used internally to achieve calling a macro's
- * caller block inside of the macro's body. It is entirely a re-
- * dispatch function that takes the argument in and check the script
- * function name and then invoke it */
-static
-int caller( struct ajj* a,
-    void* udata,
-    struct ajj_value* arg,
-    size_t arg_num,
-    struct ajj_value* ret ) {
-  struct upvalue* uv;
-  assert(a->rt && a->rt->global);
-
-  uv = upvalue_table_find(a->rt->global,
-      &CALLER_STUB,NULL);
-
-  if(!uv) {
-    FAIL1(a,"The upvalue variable:%s for internal usage is not "
-        "set!This is seriously wrong and it is possibly caused "
-        "by user delete this value using C-API manually! Please "
-        "do not delete internal variable!",
-        CALLER_STUB.str);
-  }
-
-  if(uv->type != UPVALUE_VALUE ||
-     uv->gut.val.type != AJJ_VALUE_STRING) {
-    FAIL2(a,"The upvalue variable:%s for internal usage is not "
-        "a string value but %s!Possibly collide with user defined "
-        "value !Do not use builtin variable ,PLEASE!",
-        CALLER_STUB.str,
-        uv->type == UPVALUE_VALUE ? ajj_value_get_type_name(
-          &(uv->gut.val)) :"global function/test/filter");
-
-  } else {
-    const char* name = ajj_value_to_cstr(&(uv->gut.val));
-    /* now redispatch this function */
-    return vm_call_script_func(a,
-        name,
-        arg,
-        arg_num);
-  }
-
-  return AJJ_EXEC_FAIL;
-}
-
 /* JSON ---------------------------------------------------------
  * This provides a builtin json parser that is used for two
  * purpose:
@@ -2321,8 +2276,13 @@ void ajj_builtin_load( struct ajj* a ) {
 
   /* builtin functions */
   ajj_add_function(a,&(a->builtins),
-      "caller",
-      caller,
+      CALLER.str,
+      vm_caller,
+      NULL);
+
+  ajj_add_function(a,&(a->builtins),
+      SUPER.str,
+      vm_super,
       NULL);
 
   ajj_add_function(a,&(a->builtins),

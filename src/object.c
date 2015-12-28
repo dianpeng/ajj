@@ -271,6 +271,42 @@ ajj_object_create( struct ajj* a , struct gc_scope* scope ) {
   return ret;
 }
 
+/* Jinja */
+
+/* We define a builtin display for debugging purpose of each jinja object */
+static
+const char* jinja_display( struct ajj* a,
+    const struct ajj_value* jinja,
+    size_t* len ) {
+  struct strbuf sbuf;
+  struct object* obj;
+  size_t i;
+  UNUSE_ARG(a);
+
+  assert(jinja->type == AJJ_VALUE_OBJECT);
+  assert(jinja->value.object->tp == AJJ_VALUE_JINJA);
+  obj = &(jinja->value.object->val.obj);
+  strbuf_init(&sbuf);
+  strbuf_printf(&sbuf,"jinja-template:%s {\n",obj->fn_tb->name.str);
+  for( i = 0 ; i < obj->fn_tb->func_len; ++i ) {
+    struct function *f = obj->fn_tb->func_tb + i;
+    if( IS_JJBLOCK(f) ) {
+      strbuf_printf(&sbuf,"%d:(B|" SIZEF ")%s\n",(int)(i+1),
+          SIZEP(f->f.jj_fn.par_size),f->name.str);
+    } else if( IS_JJMAIN(f) ) {
+      strbuf_printf(&sbuf,"%d:(M|" SIZEF ")%s\n",(int)(i+1),
+          SIZEP(f->f.jj_fn.par_size),f->name.str);
+    } else {
+      assert( IS_JJMACRO(f) );
+      strbuf_printf(&sbuf,"%d:(M|" SIZEF ")%s\n",(int)(i+1),
+          SIZEP(f->f.jj_fn.par_size),f->name.str);
+    }
+  }
+  strbuf_printf(&sbuf,"}");
+  *len = sbuf.len;
+  return sbuf.str;
+}
+
 struct ajj_object*
 ajj_object_jinja( struct ajj* a , struct ajj_object* obj ,
     const char* name , const char* src , int own ) {
@@ -281,6 +317,7 @@ ajj_object_jinja( struct ajj* a , struct ajj_object* obj ,
       NULL,NULL, /* slot and udata */
       &fn,
       1);
+  ft->slot.display = jinja_display;
   obj->tp = AJJ_VALUE_JINJA;
   obj->val.obj.data = NULL;
   obj->val.obj.fn_tb = ft;

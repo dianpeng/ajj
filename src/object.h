@@ -303,4 +303,6 @@ ajj_value_move( struct ajj* ,
 void
 ajj_value_delete_string( struct ajj* a, struct ajj_value* str);
 
+/* Exported builtin function related to the object model */
+
 #endif /* _OBJECT_H_ */

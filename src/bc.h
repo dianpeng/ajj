@@ -30,7 +30,8 @@
 #define FUNC_INDEX 1
 #define VARGS_INDEX 2
 #define CALLER_INDEX 3
-#define FUNC_BUILTIN_VAR_SIZE 4
+#define SELF_INDEX 4
+#define FUNC_BUILTIN_VAR_SIZE 5
 
 extern struct string THIS;
 extern struct string ARGNUM;
@@ -69,7 +70,7 @@ extern struct string LOOP;
  * you are not even sure that where to find an arbitary entry for an instruction.
  * Which is extreamly painful to do patch ! A fixed length instruction will save
  * us much efforts when we want to locate a random instruction or go forward
- * orbackward
+ * or backward
  */
 
 #define VM_INSTRUCTIONS(X) \

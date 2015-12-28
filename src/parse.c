@@ -1380,6 +1380,7 @@ int alloc_func_builtin_var( struct parser* p ) {
   CALLE(lex_scope_set(p,FUNC.str)==-2);
   CALLE(lex_scope_set(p,VARGS.str)==-2);
   CALLE(lex_scope_set(p,CALLER.str)==-2);
+  CALLE(lex_scope_set(p,SELF.str)==-2);
   return 0;
 }
 
@@ -2276,25 +2277,7 @@ parse_import( struct parser* p , struct emitter* em ) {
   return 0;
 }
 
-/* Inheritance
- *
- * We support inheritance in Jinaj2. And we support multiple inheritance as well.
- * Internally any jinja template will be compiled into a n AJJ object, this object
- * will have its functions and variables. And each object will automatically have
- * a main function serves as the entry for rendering this template. Also each object
- * is able to inherit some other objects as well. The extends instruction will end
- * up with a function call that calls its parent's __main__ function right in the
- * children's template. By this we could render parent template's content into this
- * template. And because function lookup are followed by the inheritance chain ,so
- * user will see the overrided block been rendered.
- *
- *
- * The trick part is the super() call. This call will be handled by a specialized
- * C function on the context. It will skip the current object but call the function
- * of its parent's corresponding part. The super call is actually handed as a special
- * instructions internally , VM will not dispatch any function has such name
- */
-
+/* Inheritance */
 static int
 parse_extends( struct parser * p , struct emitter* em ) {
   struct tokenizer* tk = &(p->tk);

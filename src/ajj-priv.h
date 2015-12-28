@@ -54,11 +54,7 @@ enum {
 struct ajj_io {
   union {
     FILE* f; /* make c89 initilization happy */
-    struct {
-      char* mem;
-      size_t len;
-      size_t cap;
-    } m;
+    struct strbuf m;
   } out;
   int tp;
 };

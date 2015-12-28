@@ -13,7 +13,7 @@
 #define AJJ_FUNC_ARG_MAX_SIZE 24
 
 /* Indicate how many functions you could recursively call */
-#define AJJ_MAX_CALL_STACK 128
+#define AJJ_MAX_CALL_STACK 4
 #define AJJ_MAX_VALUE_STACK_SIZE 1024
 #define AJJ_MAX_NESTED_INCLUDE_SIZE 128
 

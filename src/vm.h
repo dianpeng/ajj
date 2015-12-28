@@ -73,26 +73,20 @@ struct func_frame {
   size_t cur_loops;
 };
 
-/* Represent a instance state when we start doing template inheritance,
- * this doesn't reflect the whole inheritance chain. So each node can
- * has one child and one parent but it doesn't mean that each node cannot
- * have more than one children or more parents */
-struct inher_node {
-  struct ajj_object* jinja;
-  struct inher_node* child;
-  struct inher_node* parent;
-};
-
 /* Runtime object is the internal VM data structure which contains all the VM
  * execution resources. It has a pointer points to the main jinja template and
  * contains a value stack + an function frame stack. Also a gc_scope pointer always
  * points to the current gc scope and a output FILE points to where the output
  * of the jinja template should go to. */
 struct runtime {
+  /* Runtime inheritance chain when extends happened */
+  struct runtime* prev;
+  struct runtime* next;
+  
   size_t inc_cnt; /* nested inclusion count, if too much include is
                    * met, we just return falure. This avoid crash on
                    * stack overflow */
-  struct inher_node tmpl; /* current template */
+  struct ajj_object* jinja; /* jinja template related to this runtime */
   struct func_frame call_stk[ AJJ_MAX_CALL_STACK ];
   int cur_call_stk; /* Current stk position */
   struct ajj_value val_stk[AJJ_MAX_VALUE_STACK_SIZE]; /* current value stack size */
@@ -128,21 +122,19 @@ int vm_get_argnum( struct ajj* a );
 const struct string* vm_get_func( struct ajj* a );
 const struct ajj_value* vm_get_vargs( struct ajj* a );
 const struct string* vm_get_caller( struct ajj* a );
+const struct ajj_object* vm_get_self( struct ajj* a );
 
-/* An internal helper function to allow user redirect a C side function
- * into a script function call. Pay attention, this is not the tradition
- * way for calling a script function from C function, since after the
- * script function finishes its call , the VM will NOT return back to the
- * C function calls it. Please be aware, this is only for internal use.
- * And also please be aware the only correct way to use it is as follow:
- *
- * return vm_call_script_function(a, ... );
- */
+/* VM BUILTIN function */
+int vm_caller( struct ajj* ,
+    void*,
+    struct ajj_value*,size_t,
+    struct ajj_value*);
 
-int vm_call_script_func( struct ajj* a,
-    const char* name,
-    struct ajj_value* par,
-    size_t par_cnt);
+int vm_super( struct ajj* ,
+    void*,
+    struct ajj_value* ,
+    size_t,
+    struct ajj_value*);
 
 /* =============================================
  * Interfaces

@@ -691,9 +691,12 @@ int main() {
 do_test("{% for x in xrange(10)%} III={{x}}\n {% endfor %}" \
         "{% extends 'base.txt' %}" \
         "{% block Test3 %} vargs={{vargs}} {% endblock %}");
-#endif
-
 do_test("{% include 'include.txt' %}"
        "Hello World From Child!\n");
+#endif
+  do_test("{% block MyBlock %} Hello World {% endblock %}" 
+          "{% extends 'extends2.txt' %}"
+          "{% block MyBlock2%} {{ self.MyBlock3() }} {% endblock %}"
+          "{% block MyBlock3%} {{ self }} {% endblock %}");
 
 }

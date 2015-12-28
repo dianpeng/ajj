@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <math.h>
 #include <limits.h>
+#include <stdarg.h>
 
 #ifndef UNREACHABLE
 #define UNREACHABLE() assert(!"UNREACHABLE!")
@@ -167,6 +168,9 @@ void strbuf_reset( struct strbuf* buf );
 void strbuf_move( struct strbuf* buf , struct string* output );
 
 struct string strbuf_tostring( struct strbuf* buf );
+
+int strbuf_printf( struct strbuf* buf , const char* format , ... );
+int strbuf_vprintf(struct strbuf* buf , const char* format , va_list );
 
 
 /* ===========================================

@@ -408,6 +408,32 @@ struct string strbuf_tostring( struct strbuf* buf ) {
   return ret;
 }
 
+int strbuf_printf( struct strbuf* buf, const char* format, ... ) {
+  va_list vl;
+  va_start(vl,format);
+  return strbuf_vprintf(buf,format,vl);
+}
+
+int strbuf_vprintf( struct strbuf* buf, const char* format, va_list vl ) {
+  if( buf->cap == buf->len+1 ) {
+    /* resize the memory */
+    buf->str = mem_grow(buf->str,sizeof(char),0,&(buf->cap));
+  }
+  do {
+    int ret = vsnprintf(
+        buf->str + buf->len,
+        buf->cap - buf->len,
+        format,
+        vl);
+    if( ret == (int)(buf->cap-buf->len) ) {
+      /* resize the memory again */
+      buf->str = mem_grow(buf->str,sizeof(char),0,&(buf->cap));
+    } else {
+      if(ret >0) buf->len += ret;
+      return ret;
+    }
+  } while(1);
+}
 
 void* mem_grow( void* ptr , size_t obj_sz,
     size_t append ,

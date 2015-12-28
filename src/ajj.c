@@ -386,15 +386,6 @@ void ajj_io_init_file( struct ajj_io* io , FILE* f ) {
   io->out.f = f;
 }
 
-static
-void ajj_io_init_mem ( struct ajj_io* io , size_t cap ) {
-  assert(cap);
-  io->tp = AJJ_IO_MEM;
-  io->out.m.mem = malloc(cap);
-  io->out.m.len = 0;
-  io->out.m.cap = cap;
-}
-
 struct ajj_io*
 ajj_io_create_file( struct ajj* a , FILE* f ) {
   struct ajj_io* r = malloc(sizeof(*r));
@@ -407,51 +398,15 @@ struct ajj_io*
 ajj_io_create_mem( struct ajj* a , size_t cap ) {
   struct ajj_io* r = malloc(sizeof(*r));
   UNUSE_ARG(a);
-  ajj_io_init_mem(r,cap);
+  strbuf_init(&(r->out.m));
   return r;
 }
 
 void ajj_io_destroy( struct ajj_io* io ) {
   if(io->tp == AJJ_IO_MEM) {
-    free(io->out.m.mem);
+    strbuf_destroy(&(io->out.m));
   }
   free(io);
-}
-
-static
-int io_mem_vprintf( struct ajj_io* io , const char* fmt , va_list vl ) {
-  if( io->out.m.cap == io->out.m.len ) {
-    /* resize the memory */
-    io->out.m.mem = mem_grow(io->out.m.mem,
-        sizeof(char),0,&(io->out.m.len));
-  }
-  do {
-    int ret = vsnprintf(
-        io->out.m.mem+io->out.m.len,
-        io->out.m.cap-io->out.m.len,
-        fmt,
-        vl);
-    if( ret == io->out.m.cap-io->out.m.len ) {
-      /* resize the memory again */
-      io->out.m.mem = mem_grow(io->out.m.mem,
-          sizeof(char),0,&(io->out.m.len));
-    } else {
-      if(ret >=0) io->out.m.len += ret;
-      return ret;
-    }
-  } while(1);
-}
-
-static
-void io_mem_write( struct ajj_io* io ,const void* mem , size_t len ) {
-  if( io->out.m.cap < io->out.m.len + len ) {
-    io->out.m.mem = mem_grow(io->out.m.mem,
-        sizeof(char),
-        len,
-        &(io->out.m.cap));
-  }
-  memcpy(io->out.m.mem+io->out.m.len,mem,len);
-  io->out.m.len += len;
 }
 
 static
@@ -470,7 +425,7 @@ int ajj_io_printf( struct ajj_io* io , const char* fmt , ... ) {
   if(io->tp == AJJ_IO_FILE) {
     return io_file_vprintf(io,fmt,vl);
   } else {
-    return io_mem_vprintf(io,fmt,vl);
+    return strbuf_vprintf(&(io->out.m),fmt,vl);
   }
 }
 
@@ -478,7 +433,7 @@ int ajj_io_vprintf( struct ajj_io* io , const char* fmt , va_list vl ) {
   if(io->tp == AJJ_IO_FILE) {
     return io_file_vprintf(io,fmt,vl);
   } else {
-    return io_mem_vprintf(io,fmt,vl);
+    return strbuf_vprintf(&(io->out.m),fmt,vl);
   }
 }
 
@@ -486,7 +441,7 @@ int ajj_io_write( struct ajj_io* io , const void* mem , size_t len ) {
   if(io->tp == AJJ_IO_FILE) {
     io_file_write(io,mem,len);
   } else {
-    io_mem_write(io,mem,len);
+    strbuf_append(&(io->out.m),(const char*)mem,len);
   }
   return (int)len;
 }
