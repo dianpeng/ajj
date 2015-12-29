@@ -169,7 +169,7 @@ void opt_destroy( struct opt* o ) {
 }
 
 static
-void report_error( struct opt* o ,const char* fmt , ... ) {
+void opt_rpt_err( struct opt* o ,const char* fmt , ... ) {
   struct object* obj = &(o->jinja->val.obj);
   const char* src = obj->src;
   va_list vl;
@@ -294,7 +294,7 @@ void emit2( struct opt* o , int pos , int bc , int a1, int a2 ) {
  * ajj_value which is opaque to all the vm_to_XXX function
  * ==========================================================*/
 static
-int to_number( struct opt* o , struct ajj_value* v,
+int opt_to_number( struct opt* o , struct ajj_value* v,
     double* val ) {
   struct ajj_object obj;
 
@@ -306,10 +306,10 @@ int to_number( struct opt* o , struct ajj_value* v,
 
   if(vm_to_number(v,val)) {
     if(v->type == AJJ_VALUE_STRING) {
-      report_error(o,"Cannot convert string:%s to number!",
+      opt_rpt_err(o,"Cannot convert string:%s to number!",
           obj.val.str.str);
     } else {
-      report_error(o,"Cannot convert type:%s to number!",
+      opt_rpt_err(o,"Cannot convert type:%s to number!",
           ajj_value_get_type_name(v));
     }
     return -1;
@@ -318,7 +318,7 @@ int to_number( struct opt* o , struct ajj_value* v,
 }
 
 static
-int to_integer( struct opt* o , struct ajj_value* v,
+int opt_to_integer( struct opt* o , struct ajj_value* v,
     int* val ) {
   struct ajj_object obj;
   if(v->type == AJJ_VALUE_STRING) {
@@ -328,10 +328,10 @@ int to_integer( struct opt* o , struct ajj_value* v,
   }
   if(vm_to_integer(v,val)) {
     if(v->type == AJJ_VALUE_STRING) {
-      report_error(o,"Cannot convert string:%s to integer!",
+      opt_rpt_err(o,"Cannot convert string:%s to integer!",
           obj.val.str.str);
     } else {
-      report_error(o,"Cannot convert type:%s to integer!",
+      opt_rpt_err(o,"Cannot convert type:%s to integer!",
           ajj_value_get_type_name(v));
     }
     return -1;
@@ -340,7 +340,7 @@ int to_integer( struct opt* o , struct ajj_value* v,
 }
 
 static
-int to_string( struct opt* o , struct ajj_value* v,
+int opt_to_string( struct opt* o , struct ajj_value* v,
     struct str* val ) {
   struct ajj_object obj;
   int own;
@@ -352,7 +352,7 @@ int to_string( struct opt* o , struct ajj_value* v,
   }
   if(vm_to_string(v,&s,&own)) {
     assert(v->type != AJJ_VALUE_STRING);
-    report_error(o,"Cannot convert type:%s to string!",
+    opt_rpt_err(o,"Cannot convert type:%s to string!",
         ajj_value_get_type_name(v));
     return -1;
   }
@@ -654,7 +654,7 @@ int fold_bin( struct opt* o , instructions instr ) {
           r.type != AJJ_VALUE_STRING ) {
         /* convert to number and then do the processing */
         double lv, rv;
-        if( to_number(o,&l,&lv) || to_number(o,&r,&rv) )
+        if( opt_to_number(o,&l,&lv) || opt_to_number(o,&r,&rv) )
           return -1; /* failed, and also impossible to execute this
                       * code during the runtime as well */
         else {
@@ -670,7 +670,7 @@ int fold_bin( struct opt* o , instructions instr ) {
         struct string val;
         int i_val;
         int sref = old_sref(o);
-        if( to_string(o,&l,&ls) || to_string(o,&r,&rs) ) {
+        if( opt_to_string(o,&l,&ls) || opt_to_string(o,&r,&rs) ) {
           str_destroy(&ls);
           str_destroy(&rs);
           return -1;
@@ -683,7 +683,7 @@ int fold_bin( struct opt* o , instructions instr ) {
     case VM_MUL:
       if( r.type == AJJ_VALUE_STRING || l.type == AJJ_VALUE_STRING ) {
         if( r.type == AJJ_VALUE_STRING && l.type == AJJ_VALUE_STRING ) {
-          report_error(o,"Cannot multiply 2 string!");
+          opt_rpt_err(o,"Cannot multiply 2 string!");
           return -1;
         } else {
           int rv;
@@ -702,10 +702,10 @@ int fold_bin( struct opt* o , instructions instr ) {
             num_val = &r;
           }
 
-          if( to_integer(o,num_val,&rv ) )
+          if( opt_to_integer(o,num_val,&rv ) )
             return -1;
 
-          if( to_string(o,str_val,&lv) )
+          if( opt_to_string(o,str_val,&lv) )
             return -1;
 
           val = str_mul(&lv,rv);
@@ -716,7 +716,7 @@ int fold_bin( struct opt* o , instructions instr ) {
         }
       } else {
         double lv,rv;
-        if( to_number(o,&l,&lv) || to_number(o,&r,&rv) ) {
+        if( opt_to_number(o,&l,&lv) || opt_to_number(o,&r,&rv) ) {
           return -1;
         } else {
           double val = lv * rv;
@@ -730,7 +730,7 @@ int fold_bin( struct opt* o , instructions instr ) {
 #define DO(C) \
       do { \
         double lv , rv; \
-        if( to_number(o,&l,&lv) || to_number(o,&r,&rv) ) { \
+        if( opt_to_number(o,&l,&lv) || opt_to_number(o,&r,&rv) ) { \
           return -1; \
         } else { \
           double val; \
@@ -753,7 +753,7 @@ int fold_bin( struct opt* o , instructions instr ) {
     case VM_DIV:
 #define DIV(V) do { \
   if( (rv) == 0 ) { \
-    report_error(o,"Divide zero!"); \
+    opt_rpt_err(o,"Divide zero!"); \
     return -1; \
   } else { \
     (V) = (lv) / (rv); \
@@ -779,7 +779,7 @@ int fold_bin( struct opt* o , instructions instr ) {
 #define DIVTRUCT(V) \
       do { \
         if((rv) == 0 ) { \
-          report_error(o,"Divide zero!"); \
+          opt_rpt_err(o,"Divide zero!"); \
           return -1; \
         } else { \
           (V) = (int64_t)((lv) / (rv)); \
@@ -803,7 +803,7 @@ int fold_bin( struct opt* o , instructions instr ) {
             struct str rv = NULL_STR; \
             int sref = old_sref(o); \
             int res; \
-            if( to_string(o,&l,&lv) || to_string(o,&r,&rv) ) { \
+            if( opt_to_string(o,&l,&lv) || opt_to_string(o,&r,&rv) ) { \
               str_destroy(&lv); \
               str_destroy(&rv); \
               return -1; \
@@ -817,7 +817,7 @@ int fold_bin( struct opt* o , instructions instr ) {
             double lv,rv; \
             int val; \
             int sref = old_sref(o); \
-            if( to_number(o,&l,&lv) || to_number(o,&r,&rv) ) { \
+            if( opt_to_number(o,&l,&lv) || opt_to_number(o,&r,&rv) ) { \
               return -1; \
             } \
             val = lv O rv; \
@@ -844,7 +844,7 @@ int fold_bin( struct opt* o , instructions instr ) {
           struct str lv = NULL_STR; \
           struct str rv = NULL_STR; \
           int res; \
-          if( to_string(o,&l,&lv) || to_string(o,&r,&rv) ) { \
+          if( opt_to_string(o,&l,&lv) || opt_to_string(o,&r,&rv) ) { \
             str_destroy(&lv); \
             str_destroy(&rv); \
             return -1; \
@@ -858,7 +858,7 @@ int fold_bin( struct opt* o , instructions instr ) {
           double lv,rv; \
           int val; \
           int sref = old_sref(o); \
-          if( to_number(o,&l,&lv) || to_number(o,&r,&rv) ) { \
+          if( opt_to_number(o,&l,&lv) || opt_to_number(o,&r,&rv) ) { \
             return -1; \
           } \
           val = lv O rv; \
@@ -943,7 +943,7 @@ int fold_una( struct opt* o , instructions inst ) {
         double val;
         int sref = old_sref(o);
         int i_val;
-        if( to_number(o,&v,&val) )
+        if( opt_to_number(o,&v,&val) )
           return -1;
         i_val = program_const_num(o->prg,-val);
         una_emit1(o,an,sref,VM_LNUM,i_val);

@@ -67,7 +67,8 @@ int run_jinja(struct ajj*);
 static
 struct ajj_value*
 stack_value( struct ajj* a , int x ) {
-  assert( x >= cur_frame(a)->ebp && x < cur_frame(a)->esp );
+  assert( x >= cur_frame(a)->ebp );
+  assert( x < cur_frame(a)->esp );
   return x + a->rt->val_stk;
 }
 
@@ -200,7 +201,7 @@ int unwind_stack( struct ajj* a , char* buf ) {
 }
 
 static
-void report_error( struct ajj* a , const char* fmt , ... ) {
+void vm_rpt_err( struct ajj* a , const char* fmt , ... ) {
   char* b = a->err;
   va_list vl;
   char* end = a->err + ERROR_BUFFER_SIZE;
@@ -216,7 +217,7 @@ static
 void rewrite_error( struct ajj* a ) {
   char msg[ERROR_BUFFER_SIZE];
   strcpy(msg,a->err);
-  report_error(a,"%s",msg);
+  vm_rpt_err(a,"%s",msg);
 }
 
 /* stk_push/stk_pop to manipulate the value stack */
@@ -232,7 +233,7 @@ static
 int stk_push( struct ajj* a , struct ajj_value v ) {
   struct func_frame* fr = cur_frame(a);
   if( fr->esp == AJJ_MAX_VALUE_STACK_SIZE ) {
-    report_error(a,"Too much value on value stack!");
+    vm_rpt_err(a,"Too much value on value stack!");
     return -1;
   } else {
     a->rt->val_stk[fr->esp] = v;
@@ -398,7 +399,7 @@ void set_upvalue( struct ajj* a, const struct string* name,
       a,a->rt->global,name,0,force,fixed);
   if(uv == NULL) {
     *fail = 1;
-    report_error(a,"Cannot setup upvalue with name:%s,possibly "
+    vm_rpt_err(a,"Cannot setup upvalue with name:%s,possibly "
         "collide with builtin variable name!",
         name->str);
     return;
@@ -466,7 +467,7 @@ double to_number( struct ajj* a , const struct ajj_value* val , int* fail ) {
   double ret;
   assert( val->type != AJJ_VALUE_NOT_USE );
   if( vm_to_number(val,&ret) ) {
-    report_error(a,"Cannot convert to number!");
+    vm_rpt_err(a,"Cannot convert to number!");
     *fail = 1;
     return 0;
   } else {
@@ -497,6 +498,7 @@ int vm_to_string( const struct ajj_value* val,
       *str = EMPTY_STRING;
       return 0;
     default:
+      *own = 0;
       return -1;
   }
 }
@@ -508,7 +510,7 @@ to_string( struct ajj* a , const struct ajj_value* val ,
   struct string s;
   if(vm_to_string(val,&s,own)) {
     *fail = 1;
-    report_error(a,"Cannot convert to string!");
+    vm_rpt_err(a,"Cannot convert to string!");
     return EMPTY_STRING;
   } else {
     *fail = 0;
@@ -537,9 +539,9 @@ int vm_to_integer( const struct ajj_value* val , int* o ) {
 
 static
 int to_integer( struct ajj* a, const struct ajj_value* val, int* fail ) {
-  int o;
+  int o = 0;
   if(vm_to_integer(val,&o)) {
-    report_error(a,"Cannot convert value to integer!");
+    vm_rpt_err(a,"Cannot convert value to integer!");
     *fail = 1;
     return -1;
   } else {
@@ -914,7 +916,7 @@ void vm_test( struct ajj* a, int fn_idx, int an , int pos , int* fail ) {
   fn = const_str(a,fn_idx);
   f = resolve_test_function(a,fn);
   if(f == NULL) {
-    report_error(a,"Cannot resolve test function:%s!",
+    vm_rpt_err(a,"Cannot resolve test function:%s!",
         fn->str);
     *fail = 1; return;
   } else {
@@ -932,7 +934,7 @@ void vm_test( struct ajj* a, int fn_idx, int an , int pos , int* fail ) {
       /* check return value since all the test function
        * is supposed to return a boolean value */
       if( ret.type != AJJ_VALUE_BOOLEAN ) {
-        report_error(a,"Test function:%s return value is not "
+        vm_rpt_err(a,"Test function:%s return value is not "
             "boolean value, all the test function should return "
             "boolean value!",fn->str);
         *fail =1; return;
@@ -1007,14 +1009,14 @@ void vm_attrset( struct ajj* a , struct ajj_value* obj,
     int* fail ) {
   if( obj->type != AJJ_VALUE_OBJECT ) {
     *fail = 1;
-    report_error(a,"Cannot set attributes on type:%s "
+    vm_rpt_err(a,"Cannot set attributes on type:%s "
         "which is not an object!",ajj_value_get_type_name(obj));
     return;
   } else {
     struct object* o = &(obj->value.object->val.obj);
     if( o->fn_tb->slot.attr_set == NULL ) {
       *fail = 1;
-      report_error(a,"Type:%s cannot support attribute set operation!",
+      vm_rpt_err(a,"Type:%s cannot support attribute set operation!",
           o->fn_tb->name.str);
       return;
     } else {
@@ -1032,7 +1034,7 @@ vm_attrget( struct ajj* a , struct ajj_value* obj,
   if( obj->type != AJJ_VALUE_OBJECT &&
       obj->type != AJJ_VALUE_STRING ) {
     *fail = 1;
-    report_error(a,"Cannot get attributes on type:%s which is not an "
+    vm_rpt_err(a,"Cannot get attributes on type:%s which is not an "
         "object or string!",ajj_value_get_type_name(obj));
     return AJJ_NONE;
   } else {
@@ -1040,7 +1042,7 @@ vm_attrget( struct ajj* a , struct ajj_value* obj,
       struct object* o = &(obj->value.object->val.obj);
       if( o->fn_tb->slot.attr_get == NULL ) {
         *fail = 1;
-        report_error(a,"Type:%s cannot support attribute get operation!",
+        vm_rpt_err(a,"Type:%s cannot support attribute get operation!",
             o->fn_tb->name.str);
         return AJJ_NONE;
       } else {
@@ -1054,7 +1056,7 @@ vm_attrget( struct ajj* a , struct ajj_value* obj,
       } else {
         struct string* str = &(obj->value.object->val.str);
         if(str->len <= (size_t)k) {
-          report_error(a,"Cannot get character from string with index:%d,"
+          vm_rpt_err(a,"Cannot get character from string with index:%d,"
               "the string length is:%zu!",k,str->len);
           *fail = 1;
           return AJJ_NONE;
@@ -1080,13 +1082,13 @@ void vm_attrstk_push( struct ajj* a , struct ajj_value* obj,
     const struct ajj_value* val , int* fail ) {
   if( obj->type != AJJ_VALUE_OBJECT ) {
     *fail = 1;
-    report_error(a,"Cannot stk_push attributes on type:%s which is not an "
+    vm_rpt_err(a,"Cannot stk_push attributes on type:%s which is not an "
         "object!",ajj_value_get_type_name(obj));
   } else {
     struct object* o = &(obj->value.object->val.obj);
     if( o->fn_tb->slot.attr_push == NULL ) {
       *fail = 1;
-      report_error(a,"Type:%s cannot support attribute stk_push operation!",
+      vm_rpt_err(a,"Type:%s cannot support attribute stk_push operation!",
           o->fn_tb->name.str);
     } else {
       *fail = 0;
@@ -1167,7 +1169,7 @@ int setup_json_env( struct ajj* a , int cnt ,struct runtime* nrt) {
   int itr;
   
   if(fn->type != AJJ_VALUE_STRING) {
-    report_error(a,"Json file name must be a string,but got:%s!",
+    vm_rpt_err(a,"Json file name must be a string,but got:%s!",
         ajj_value_get_type_name(fn));
   }
 
@@ -1179,7 +1181,7 @@ int setup_json_env( struct ajj* a , int cnt ,struct runtime* nrt) {
 
   json_v = ajj_value_assign(json);
   if( !object_is_map(&json_v) ) {
-    report_error(a,"Json file:%s's root element must be an object!",
+    vm_rpt_err(a,"Json file:%s's root element must be an object!",
         ajj_value_to_cstr(fn));
     return -1;
   }
@@ -1212,7 +1214,7 @@ void vm_include( struct ajj* a , int type,
   struct ajj_object* jinja; /* jinja template */
   struct ajj_value* jinja_na; /* jinja template name */
   if( a->rt->inc_cnt >= AJJ_MAX_NESTED_INCLUDE_SIZE ) {
-    report_error(a,"You cannot include more file, you can at most "
+    vm_rpt_err(a,"You cannot include more file, you can at most "
         "include %d files!",AJJ_MAX_NESTED_INCLUDE_SIZE);
     *fail = 1; return;
   }
@@ -1224,7 +1226,7 @@ void vm_include( struct ajj* a , int type,
     jinja_na = stk_top(a,3*cnt+2);
   }
   if( jinja_na->type != AJJ_VALUE_STRING ) {
-    report_error(a,"The template name for include "
+    vm_rpt_err(a,"The template name for include "
         "directive is not a string type,but get type:%s!",
         ajj_value_get_type_name(jinja_na));
     *fail = 1;
@@ -1281,7 +1283,7 @@ void vm_import( struct ajj* a, int arg1 , int* fail ) {
   const struct string* symbol = const_str(a,arg1);
   struct ajj_value* fn = stk_top(a,1);
   if( fn->type != AJJ_VALUE_STRING ) {
-    report_error(a,"The filename for import must be a string,but "
+    vm_rpt_err(a,"The filename for import must be a string,but "
         "get type:%s",ajj_value_get_type_name(fn));
     *fail = 1;
     return;
@@ -1343,13 +1345,13 @@ void vm_extends( struct ajj* a , int* fail ) {
   struct runtime* ort = a->rt; /* old runtime */
 
   if(ort->inc_cnt == AJJ_MAX_NESTED_INCLUDE_SIZE) {
-    report_error(a,"Cannot extends more file, you can extends/include at "
+    vm_rpt_err(a,"Cannot extends more file, you can extends/include at "
         "most %d files!",AJJ_MAX_NESTED_INCLUDE_SIZE);
     *fail = 1; return;
   }
 
   if(temp_na->type != AJJ_VALUE_STRING) {
-    report_error(a,"The template name for import is not a string,"
+    vm_rpt_err(a,"The template name for import is not a string,"
         "but get type:%s!",ajj_value_get_type_name(temp_na));
     *fail = 1; return;
   }
@@ -1481,7 +1483,7 @@ void enter_function( struct ajj* a , const struct function* f,
   struct runtime* rt = a->rt;
   if( rt->cur_call_stk == AJJ_MAX_CALL_STACK ) {
     assert(0);
-    report_error(a,"Function recursive call too much,"
+    vm_rpt_err(a,"Function recursive call too much,"
         "frame stack overflow!");
     *fail = 1;
   } else {
@@ -1716,7 +1718,7 @@ int vm_super( struct ajj* a,
    * jinja template, we know search upwards to its parent and
    * try to resolve the function name */
   if(rt->prev == NULL) {
-    report_error(a,"Function::super cannot work since the object doesn't "
+    vm_rpt_err(a,"Function::super cannot work since the object doesn't "
         "have a parent!");
     return AJJ_EXEC_FAIL;
   } else {
@@ -1730,7 +1732,7 @@ int vm_super( struct ajj* a,
       rt = rt->prev;
     } while(rt);
   }
-  report_error(a,"Function::supper cannot locate function:%s in its "
+  vm_rpt_err(a,"Function::supper cannot locate function:%s in its "
       "inheritance chain!",caller_fr->name.str);
   return AJJ_EXEC_FAIL;
 }
@@ -1779,7 +1781,7 @@ int vm_main( struct ajj* a ) {
         l = to_number(a,stk_top(a,2),RCHECK);
         r = to_number(a,stk_top(a,1),RCHECK);
         if( r == 0 ) {
-          report_error(a,"Divid by zero!");
+          vm_rpt_err(a,"Divid by zero!");
           return -1;
         }
         o = ajj_value_number(l/r);
@@ -1806,7 +1808,7 @@ int vm_main( struct ajj* a ) {
 
       vm_beg(MOD) {
         int l , r;
-        struct ajj_value o;
+        struct ajj_value o = AJJ_NONE;
         l = to_integer(a,stk_top(a,2),RCHECK);
         r = to_integer(a,stk_top(a,1),RCHECK);
         o = ajj_value_number(l%r);
@@ -1878,7 +1880,7 @@ int vm_main( struct ajj* a ) {
         l = to_number(a,stk_top(a,2),RCHECK);
         r = to_number(a,stk_top(a,1),RCHECK);
         if(r == 0.0) {
-          report_error(a,"Divide by 0!");
+          vm_rpt_err(a,"Divide by 0!");
           goto fail;
         }
         /* should be painful, but portable */
@@ -1938,7 +1940,7 @@ int vm_main( struct ajj* a ) {
         const struct function* f =
           resolve_free_function(a,fn,&obj);
         if( f == NULL ) {
-          report_error(a,"Cannot find function:%s!",fn->str);
+          vm_rpt_err(a,"Cannot find function:%s!",fn->str);
           goto fail;
         } else {
           struct ajj_value ret;
@@ -1971,7 +1973,7 @@ int vm_main( struct ajj* a ) {
          * it could be some template that is extends */
 
         if( f == NULL ) {
-          report_error(a,"Cannot find block:%s in its inhertiance "
+          vm_rpt_err(a,"Cannot find block:%s in its inhertiance "
               "chain!",fn->str);
           goto fail;
         } else {
@@ -1992,7 +1994,7 @@ int vm_main( struct ajj* a ) {
         const struct function* f;
 
         if( obj.type != AJJ_VALUE_OBJECT ) {
-          report_error(a,"Cannot call a member function on type:%s!",
+          vm_rpt_err(a,"Cannot call a member function on type:%s!",
               ajj_value_get_type_name(&obj));
           goto fail;
         }
@@ -2005,7 +2007,7 @@ int vm_main( struct ajj* a ) {
         f = resolve_obj_function(o,fn);
 
         if( f == NULL ) {
-          report_error(a,"Cannot find object method or jinja block:%s for object:%s!",
+          vm_rpt_err(a,"Cannot find object method or jinja block:%s for object:%s!",
               fn->str,
               o->val.obj.fn_tb->name.str);
           goto fail;
@@ -2277,7 +2279,7 @@ int vm_main( struct ajj* a ) {
         int itr;
         struct ajj_value* obj = stk_top(a,1);
         if(obj->type != AJJ_VALUE_OBJECT) {
-          report_error(a,"Type:%s doesn't support iterator!",
+          vm_rpt_err(a,"Type:%s doesn't support iterator!",
               ajj_value_get_type_name(obj));
           goto fail;
         } else {
@@ -2291,7 +2293,7 @@ int vm_main( struct ajj* a ) {
             itr = o->fn_tb->slot.iter_start(
                 a,obj);
           } else {
-            report_error(a,"Type:%s doesn't support iterator!",
+            vm_rpt_err(a,"Type:%s doesn't support iterator!",
                 o->fn_tb->name.str);
             goto fail;
           }

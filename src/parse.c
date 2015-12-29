@@ -14,7 +14,7 @@
 #define EXPECT(TK) \
   do { \
     if( p->tk.tk != (TK) ) { \
-      report_error(p,"Unexpected token :%s expect :%s", \
+      parser_rpt_err(p,"Unexpected token :%s expect :%s", \
           tk_get_name(p->tk.tk), \
           tk_get_name((TK))); \
       return -1; \
@@ -25,7 +25,7 @@
 #define EXPECT_VARIABLE() \
   do { \
     if( tk_expect_id(&(p->tk)) ) { \
-      report_error(p,"Unexpected token :%s expect :%s", \
+      parser_rpt_err(p,"Unexpected token :%s expect :%s", \
           tk_get_name(p->tk.tk), \
           tk_get_name(TK_VARIABLE)); \
       return -1; \
@@ -163,7 +163,7 @@ int is_in_main( struct parser* p ) {
 }
 
 static
-void report_error( struct parser* p , const char* format, ... ) {
+void parser_rpt_err( struct parser* p , const char* format, ... ) {
   va_list vl;
   int len;
   size_t ln,pos;
@@ -177,7 +177,7 @@ void report_error( struct parser* p , const char* format, ... ) {
 
   /* output the prefix message */
   len = snprintf(p->a->err,1024,
-      "[Parser:(%s:" SIZEF "," SIZEF ")] at:... %s ...!\nMessage:",
+      "[Parser:(%s:" SIZEF "," SIZEF ")] at:(... %s ...)\nMessage:",
       p->src_key,SIZEP(pos),SIZEP(ln),cs);
 
   assert( len >0 && len < ERROR_BUFFER_SIZE );
@@ -217,7 +217,7 @@ struct lex_scope* lex_scope_jump( struct parser* p ) {
   struct lex_scope* scp;
   scp = malloc(sizeof(*scp));
   if( p->scp_tp == MAX_NESTED_FUNCTION_DEFINE ) {
-    report_error(p,"Too much nested functoin definition!");
+    parser_rpt_err(p,"Too much nested functoin definition!");
     return NULL;
   } else {
     ++p->scp_tp;
@@ -273,7 +273,7 @@ int lex_scope_set( struct parser* p , const char* name ) {
   }
 
   if( scp->len == AJJ_LOCAL_CONSTANT_SIZE ) {
-    report_error(p,"Too much local constant in a scope!More than :%d",
+    parser_rpt_err(p,"Too much local constant in a scope!More than :%d",
         AJJ_LOCAL_CONSTANT_SIZE);
     return -2; /* We cannot set any more constant */
   }
@@ -315,7 +315,7 @@ random_name( struct parser* p , char l ) {
   char name[1024];
   int result;
   if(p->unname_cnt == USHRT_MAX) {
-    report_error(p,"Too much scope/blocks,more than:%d!",USHRT_MAX);
+    parser_rpt_err(p,"Too much scope/blocks,more than:%d!",USHRT_MAX);
     return NULL_STRING;
   }
   result = sprintf(name,"@%c%d",l,p->unname_cnt);
@@ -337,7 +337,7 @@ int symbol( struct parser* p , struct string* output ) {
   struct tokenizer* tk = &(p->tk);
   assert(tk->tk == TK_VARIABLE);
   if( tk->lexeme.len >= AJJ_SYMBOL_NAME_MAX_SIZE ) {
-    report_error(p,"Local symbol is too long ,longer than:%d",
+    parser_rpt_err(p,"Local symbol is too long ,longer than:%d",
         AJJ_SYMBOL_NAME_MAX_SIZE);
     return -1;
   } else {
@@ -373,7 +373,7 @@ int parse_seq( struct parser* p , struct emitter* em , int rtk ) {
       tk_move(tk);
       break;
     } else {
-      report_error(p,"Unknown token:%s,expect \",\" or \"%s\"",
+      parser_rpt_err(p,"Unknown token:%s,expect \",\" or \"%s\"",
           tk_get_name(tk->tk),
           tk_get_name(rtk));
       return -1;
@@ -474,7 +474,7 @@ int parse_dict( struct parser* p , struct emitter* em ) {
       tk_move(tk);
       break;
     } else {
-      report_error(p,"Unknown token:%s,expect \",\" or \"}\"!",
+      parser_rpt_err(p,"Unknown token:%s,expect \",\" or \"}\"!",
           tk_get_name(tk->tk));
       return -1;
     }
@@ -552,7 +552,7 @@ int parse_invoke_par( struct parser* p , struct emitter* em ) {
     ++num;
     if( num > AJJ_FUNC_ARG_MAX_SIZE ) {
       /* do a check here ? */
-      report_error(p,"Function passing to many parameters!"
+      parser_rpt_err(p,"Function passing to many parameters!"
           "At most %d is allowed!",AJJ_FUNC_ARG_MAX_SIZE);
       return -1;
     }
@@ -563,7 +563,7 @@ int parse_invoke_par( struct parser* p , struct emitter* em ) {
         tk_move(tk);
         break;
       } else {
-        report_error(p,"Function/Method call must be closed"
+        parser_rpt_err(p,"Function/Method call must be closed"
               " by \")\"!");
         return -1;
       }
@@ -681,7 +681,7 @@ int parse_prefix( struct parser* p, struct emitter* em ,
       } else if( tk->tk != TK_DOT && tk->tk != TK_LSQR ) {
         CALLE(parse_pipecmd(p,em,prefix));
       } else {
-        report_error(p,"Cannot pipe to a method call or object call "
+        parser_rpt_err(p,"Cannot pipe to a method call or object call "
             "syntax. Pipe can only work with free function syntax!");
         return -1;
       }
@@ -730,7 +730,7 @@ int parse_is( struct parser* p , struct emitter* em ) {
         fn = string_dup(&NONE_STRING);
         break;
       default:
-        report_error(p,"Unexpected token here:%s, expect:Variable/"
+        parser_rpt_err(p,"Unexpected token here:%s, expect:Variable/"
             "False/True/None!",
             tk_get_name(tk->tk));
         return -1;
@@ -814,7 +814,7 @@ int parse_atomic( struct parser* p, struct emitter* em ) {
       CALLE(parse_dict(p,em));
       break;
     default:
-      report_error(p,"Unexpect token here:%s",
+      parser_rpt_err(p,"Unexpect token here:%s",
           tk_get_name(tk->tk));
       return -1;
   }
@@ -834,7 +834,7 @@ int parse_unary( struct parser* p, struct emitter* em ) {
 #define PUSH_OP(T) \
   do { \
     if( op_len == 1024 ) { \
-      report_error(p,"Too much unary operators, more than 1024!"); \
+      parser_rpt_err(p,"Too much unary operators, more than 1024!"); \
       return -1; \
     } \
     op[op_len++] = (T); \
@@ -947,7 +947,7 @@ int parse_logic( struct parser* p, struct emitter* em ) {
 #define PUSH_JMP(X) \
   do { \
     if( sz == 1024 ) { \
-      report_error(p,"Too much logic component,you have more than 1024!"); \
+      parser_rpt_err(p,"Too much logic component,you have more than 1024!"); \
       return -1; \
     } \
     jmp_tb[sz] = EMIT_PUT(em,1); \
@@ -1067,7 +1067,7 @@ parse_constseq( struct parser* p , int ltk , int rtk ,
       tk_move(tk);
       break;
     } else {
-      report_error(p,"constexpr: unknown token here:%s "
+      parser_rpt_err(p,"constexpr: unknown token here:%s "
           "expect \",\" or \"%s\"",
           tk_get_name(ltk),
           tk_get_name(rtk));
@@ -1109,14 +1109,14 @@ parse_constdict( struct parser* p , struct ajj_value* output ) {
 
     /* check if key is string */
     if( key.type != AJJ_VALUE_STRING ) {
-      report_error(p,"constexpr: dictionary key must be string!");
+      parser_rpt_err(p,"constexpr: dictionary key must be string!");
       return -1;
     }
 
     if( tk->tk == TK_COLON ) {
       tk_move(tk);
     } else {
-      report_error(p,
+      parser_rpt_err(p,
           "constexpr: unknown token:%s, expect \":\" or \"}\"",
           tk_get_name(tk->tk));
       return -1;
@@ -1136,7 +1136,7 @@ parse_constdict( struct parser* p , struct ajj_value* output ) {
       tk_move(tk);
       break;
     } else {
-      report_error(p,"constexpr: unknown token:%s,expect \",\" or \"}\"",
+      parser_rpt_err(p,"constexpr: unknown token:%s,expect \",\" or \"}\"",
           tk_get_name(tk->tk));
       return -1;
     }
@@ -1162,7 +1162,7 @@ parse_constexpr( struct parser* p , struct ajj_value* output ) {
       break;
     case TK_STRING:
       if( neg ) {
-        report_error(p,"constexpr: string literal cannot work with unary "
+        parser_rpt_err(p,"constexpr: string literal cannot work with unary "
             "operator \"-\"!");
         return -1;
       } else {
@@ -1173,7 +1173,7 @@ parse_constexpr( struct parser* p , struct ajj_value* output ) {
       break;
     case TK_NONE:
       if( neg ) {
-        report_error(p,"constexpr: none cannot work with unary "
+        parser_rpt_err(p,"constexpr: none cannot work with unary "
             "operator \"-\"!");
         return -1;
       } else {
@@ -1196,27 +1196,27 @@ parse_constexpr( struct parser* p , struct ajj_value* output ) {
       break;
     case TK_LSQR:
       if( neg ) {
-        report_error(p,"constexpr: list literal cannot work with unary "
+        parser_rpt_err(p,"constexpr: list literal cannot work with unary "
             "operator \"-\"!");
         return -1;
       }
       return parse_constlist(p,output);
     case TK_LPAR:
       if( neg ) {
-        report_error(p,"constexpr: tuple literal cannot work with unary "
+        parser_rpt_err(p,"constexpr: tuple literal cannot work with unary "
             "operator \"-\"!");
         return -1;
       }
       return parse_consttuple(p,output);
     case TK_LBRA:
       if( neg ) {
-        report_error(p,"constexpr: dictionary literal cannot work with unary "
+        parser_rpt_err(p,"constexpr: dictionary literal cannot work with unary "
             "operator \"-\"!");
         return -1;
       }
       return parse_constdict(p,output);
     default:
-      report_error(p,"constexpr: unknown token:%s!",
+      parser_rpt_err(p,"constexpr: unknown token:%s!",
           tk_get_name(tk->tk));
       return -1;
   }
@@ -1258,7 +1258,7 @@ int parse_branch ( struct parser* p, struct emitter* em ) {
 #define PUSH_JMP(P) \
   do { \
     if( jmp_sz == 1024 ) { \
-      report_error(p,"Too much if-elif-else branch, more than 1024!"); \
+      parser_rpt_err(p,"Too much if-elif-else branch, more than 1024!"); \
       return -1; \
     } \
     end_jmp[jmp_sz++] = (P); \
@@ -1288,7 +1288,7 @@ int parse_branch ( struct parser* p, struct emitter* em ) {
       case TK_ELIF:
         { /* elif scope */
           if( has_else ) {
-            report_error(p,"Expect endfor since else tag is seen before!");
+            parser_rpt_err(p,"Expect endfor since else tag is seen before!");
             return -1;
           }
           tk_move(tk);
@@ -1312,7 +1312,7 @@ int parse_branch ( struct parser* p, struct emitter* em ) {
           break;
         }
       default:
-        report_error(p,"Unexpected token in branch scope:%s",
+        parser_rpt_err(p,"Unexpected token in branch scope:%s",
             tk_get_name(tk->tk));
         return -1;
     }
@@ -1439,7 +1439,7 @@ parse_func_prototype( struct parser* p , struct program* prg ) {
        * default value MUST be companied with default value */
       if( see_def ) {
         if(tk->tk != TK_ASSIGN) {
-          report_error(p,"Expect a default value for this argument," \
+          parser_rpt_err(p,"Expect a default value for this argument," \
               "this argument is the argument after the first argument that "\
               "has a default value,so it must have a default value!");
           return -1;
@@ -1682,14 +1682,14 @@ static int parse_for_body( struct parser* p ,
   if( !string_null(key) && !string_null(val) ) {
     deref_tp = ITERATOR_KEYVAL;
     if( lex_scope_set(p,key->str) != -1 ) {
-      report_error(p,"Cannot set up local variable:%s for loop!",
+      parser_rpt_err(p,"Cannot set up local variable:%s for loop!",
           key->str);
       string_destroy(key);
       string_destroy(val);
       return -1;
     }
     if( lex_scope_set(p,val->str) != -1 ) {
-      report_error(p,"Cannot set up local variable:%s for loop!",
+      parser_rpt_err(p,"Cannot set up local variable:%s for loop!",
           val->str);
       string_destroy(key);
       string_destroy(val);
@@ -1698,7 +1698,7 @@ static int parse_for_body( struct parser* p ,
   } else if( !string_null(val) ) {
     deref_tp = ITERATOR_VAL;
     if( lex_scope_set(p,val->str) != -1 ) {
-      report_error(p,"Cannot set up local variable:%s for loop!",
+      parser_rpt_err(p,"Cannot set up local variable:%s for loop!",
           val->str);
       string_destroy(val);
       return -1;
@@ -1706,7 +1706,7 @@ static int parse_for_body( struct parser* p ,
   } else if( !string_null(key) ) {
     deref_tp = ITERATOR_KEY;
     if( lex_scope_set(p,key->str) != -1 ) {
-      report_error(p,"Cannot set up local variable:%s for loop!",
+      parser_rpt_err(p,"Cannot set up local variable:%s for loop!",
           val->str);
       string_destroy(key);
       return -1;
@@ -1974,7 +1974,7 @@ int parse_set( struct parser* p, struct emitter* em ) {
     CONSUME(TK_RSTMT);
     return 0;
   } else {
-    report_error(p,"Set scope either uses \"=\" to indicate "
+    parser_rpt_err(p,"Set scope either uses \"=\" to indicate "
         "a one line assignment,"
         "or uses a scope based set!");
     return -1;
@@ -2012,7 +2012,7 @@ parse_move( struct parser* p , struct emitter* em ) {
   if( (dst_idx=lex_scope_get(p,
           strbuf_tostring(&(tk->lexeme)).str,
           &dst_level))<0 ) {
-    report_error(p,"In move statement, the target variable:%s is not defined!",
+    parser_rpt_err(p,"In move statement, the target variable:%s is not defined!",
         strbuf_tostring(&(tk->lexeme)).str);
     return -1;
   }
@@ -2024,7 +2024,7 @@ parse_move( struct parser* p , struct emitter* em ) {
   if( (src_idx=lex_scope_get(p,
           strbuf_tostring(&(tk->lexeme)).str,
           &src_level))<0 ) {
-    report_error(p,"In move statement, the source variable:%s is not defined!",
+    parser_rpt_err(p,"In move statement, the source variable:%s is not defined!",
         strbuf_tostring(&(tk->lexeme)).str);
     return -1;
   }
@@ -2052,7 +2052,7 @@ parse_break( struct parser* p , struct emitter* em ) {
 
   assert( lex_scope_top()->in_loop );
   if( lex_scope_top()->lctrl->brks_len == MAX_LOOP_CTRL_SIZE ) {
-    report_error(p,"Cannot have more break statements in this loop!");
+    parser_rpt_err(p,"Cannot have more break statements in this loop!");
     return -1;
   }
   pos = lex_scope_top()->lctrl->brks_len;
@@ -2073,7 +2073,7 @@ parse_continue( struct parser* p , struct emitter* em ) {
 
   assert( lex_scope_top()->in_loop );
   if( lex_scope_top()->lctrl->conts_len == MAX_LOOP_CTRL_SIZE ) {
-    report_error(p,"Cannot have more continue statements in this loop!");
+    parser_rpt_err(p,"Cannot have more continue statements in this loop!");
     return -1;
   }
   pos = lex_scope_top()->lctrl->conts_len;
@@ -2267,7 +2267,7 @@ parse_include( struct parser* p , struct emitter* em ) {
     CONSUME(TK_RSTMT);
     opt = INCLUDE_JSON;
   } else {
-    report_error(p,"Unknown token here in include scope:%s",
+    parser_rpt_err(p,"Unknown token here in include scope:%s",
         tk_get_name(tk->tk));
     return -1;
   }
@@ -2466,7 +2466,7 @@ done:
   return 0;
 
 fail:
-  report_error(p,"Unknown token in scope:%s!",
+  parser_rpt_err(p,"Unknown token in scope:%s!",
       tk_get_name(tk->tk));
   return -1;
 }

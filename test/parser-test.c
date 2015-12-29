@@ -1,7 +1,7 @@
-#include "../src/parse.h"
-#include "../src/bc.h"
-#include "../src/object.h"
-#include "../src/ajj.h"
+#include "parse.h"
+#include "bc.h"
+#include "object.h"
+#include "ajj.h"
 
 /* ALL these tests requires human interaction to look into the code
  * generated and verify they are correct or not. We may record the
@@ -246,8 +246,7 @@ void test_branch() {
 
 static
 void test_expr() {
-#if 0
-
+ 
   { /* simple expression 1 */
     const char* src = " {% do users+3+4+foo(1,2,3)|user_end + 78-2 %} ";
     struct ajj* a = ajj_create();
@@ -271,17 +270,15 @@ void test_expr() {
 
 
   { /* simple expression 3 */
-    const char* src = "{% do users.append(some_thing+\'UUV\') >= users.name %}\n";
+    const char* src = "{% do users.append(some_thing+\'UUV\') >= -users.name %}\n";
     struct ajj* a = ajj_create();
     struct ajj_object* obj = parse(a,"Hello World",src,0);
     const struct program* prg;
     assert(obj); prg = ajj_object_jinja_main(obj);
     assert(prg);
-    printf("%s\n",src);
+     
 
   }
-
-
 
   { /* logic */
     const char* src = "{% do append >= only and user >= shoot or user == None or not True %}";
@@ -290,14 +287,14 @@ void test_expr() {
     const struct program* prg;
     assert(obj); prg = ajj_object_jinja_main(obj);
     assert(prg);
-    printf("%s\n",src);
+     
 
   }
 
 
 
   { /* logic */
-    const char* src = "{% if append >= only and user >= more or user < 100 or None != False %}\n" \
+    const char* src = "{% if append >= only and user >= more or not(user < 100) or None != False %}\n" \
                       "{% endif %}";
     struct ajj* a = ajj_create();
     struct ajj_object* obj = parse(a,"Hello World",src,0);
@@ -305,12 +302,9 @@ void test_expr() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
-    printf("%s\n",src);
+     
 
   }
-
-
-
 
   {/* logic */
     const char* src = "{% if append > a %}\n" \
@@ -327,9 +321,10 @@ void test_expr() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
-    printf("%s\n",src);
+     
 
   }
+
 
   { /* tenary */
     const char* src = "{% do 1+3*2//5 if me is you and i in some_map else 3+5 %}";
@@ -339,19 +334,74 @@ void test_expr() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
-    printf("%s\n",src);
+     
 
   }
-#endif
+
+  { /* tenary */
+    const char* src = "{% do (1+3*2//5 if me is you is he is not tom and i in some_map else 3+5) if None is True else None %}";
+    struct ajj* a = ajj_create();
+    struct ajj_object* obj = parse(a,"Hello World",src,0);
+    const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+    assert(obj);
+    prg = ajj_object_jinja_main(obj);
+    assert(prg);
+     
+  }
+
   { /* list */
-    const char* src = "{% do [1,2,'three',True,False,None,[]] %}";
+    const char* src = "{% do [1,2,'three',True,False,None,1*MyName,[]] %}";
     struct ajj* a = ajj_create();
     struct ajj_object* obj = parse(a,"Hello World",src,0);
     const struct program* prg;
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
-    dump_program(a,src,prg,stdout);
+  }
+
+  { /* dict */
+    const char* src = "{% do { 'You' : 'What' ," \
+                      "        'Me'  : []," \
+                      "        'Go'  : { 'Yet':1 , 'Another' : MyName+3333/2 }," \
+                      "        HUHU  : {} } %}";
+    struct ajj* a = ajj_create();
+    struct ajj_object* obj = parse(a,"Hello World",src,0);
+    const struct program* prg;
+    assert(obj);
+    prg = ajj_object_jinja_main(obj);
+    assert(prg);
+  }
+
+  { /* tuple */
+    const char* src = "{% do ([],{},(),(())) %}";
+    struct ajj* a = ajj_create();
+    struct ajj_object* obj = parse(a,"Hello World",src,0);
+    const struct program* prg;
+    assert(obj);
+    prg = ajj_object_jinja_main(obj);
+    assert(prg);
+  }
+
+  { /* tuple */
+    const char* src = "{% do (1+1) + (1+1,) %}";
+    struct ajj* a = ajj_create();
+    struct ajj_object* obj = parse(a,"Hello World",src,0);
+    const struct program* prg;
+    assert(obj);
+    prg = ajj_object_jinja_main(obj);
+    assert(prg);
+  }
+ 
+
+  { /* component */
+    const char* src = "{% do a.p.u[\'v\'][myname+1+'string'].push(U) %}";
+    struct ajj* a = ajj_create();
+    struct ajj_object* obj = parse(a,"Hello World",src,0);
+    const struct program* prg;
+    assert(obj);
+    prg = ajj_object_jinja_main(obj);
+    assert(prg);
   }
 }
 
@@ -372,13 +422,15 @@ void test_macro() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
-    printf("%s\n",src);
+     
     //
     prg = ajj_object_get_jinja_macro(obj,&input);
     assert(prg);
 
   }
-#if 0
+
+
+
   { /* MACRO */
     const char* src = "{% macro input() %}\n" \
                       "type={{U}} {{V}} {{W}} {{X}} {{Y}} {{Z}}\n" \
@@ -415,7 +467,6 @@ void test_macro() {
     assert(prg);
 
   }
-#endif
 }
 
 static
@@ -592,9 +643,9 @@ void test_include() {
   }
   { /* upvalue */
     const char* src = "{% include 'file.html' upvalue %}\n" \
-                      "{% key1 my_key+2 %}\n" \
-                      "{% key2 my_key+3 fix %}\n" \
-                      "{% key3 my_key+4 override %}\n" \
+                      "{% set key=my_key+2 %}\n" \
+                      "{% set key2=my_key+3 fix %}\n" \
+                      "{% set key3=my_key+4 override %}\n" \
                       "{% endinclude %}\n";
     struct ajj* a = ajj_create();
     struct ajj_object* obj = parse(a,"Hello World",src,0);
@@ -617,9 +668,9 @@ void test_include() {
   }
   { /* json */
     const char* src = "{% include 'file.html' json 'json.file'+json_path %}\n" \
-                      "{% key1 my_key2 %} \n" \
-                      "{% key2 my_key3 override %}\n" \
-                      "{% key3 my_key4 fix %}\n" \
+                      "{% set key1=my_key2 %} \n" \
+                      "{% set key2=my_key3 override %}\n" \
+                      "{% set key3=my_key4 fix %}\n" \
                       "{% endinclude %}";
     struct ajj* a = ajj_create();
     struct ajj_object* obj = parse(a,"Whoha",src,0);
@@ -669,9 +720,9 @@ void test_import() {
 
   { /* basic import */
     const char* src = "{% import 'file.name'+1 as uuvv upvalue %}\n" \
-                      "{% key1 my_key1 %}\n" \
-                      "{% key2 my_key2 fix %}\n" \
-                      "{% key3 my_key3 override %}\n" \
+                      "{% set key1=my_key1 %}\n" \
+                      "{% set key2=my_key2 fix %}\n" \
+                      "{% set key3=my_key3 override %}\n" \
                       "{% endimport %}";
     struct ajj* a = ajj_create();
     struct ajj_object* obj = parse(a,"Whoha",src,0);
@@ -710,7 +761,75 @@ void test_extends() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
+  }
+}
 
+static
+void test_move() {
+  { /* same scope move , should fail */
+    const char* src = "{% set U = 1 %}\n" \
+                      "{% set V = 2 %}\n" \
+                      "{% move U=V %}\n";
+    struct ajj* a = ajj_create();
+    struct ajj_object* obj = parse(a,"Whoha",src,0);
+    const struct program* prg;
+    struct string me = CONST_STRING("me");
+    struct string you= CONST_STRING("you");
+    assert(obj);
+    prg = ajj_object_jinja_main(obj);
+    assert(prg);
+  }
+  { /* different scope */
+    const char* src = "{% set U = 1 %}\n" \
+                      "{% with V = 2 %} \n" \
+                      "{% move U=V %}\n" \
+                      "{% endwith %}";
+    struct ajj* a = ajj_create();
+    struct ajj_object* obj = parse(a,"Whoha",src,0);
+    const struct program* prg;
+    assert(obj);
+    prg = ajj_object_jinja_main(obj);
+    assert(prg);
+  }
+  { /* different scope */
+    const char* src = "{% set U = 1 %}\n" \
+                      "{% with V = 2 %} \n" \
+                      "{% move V = U %}\n" \
+                      "{% endwith %}";
+    struct ajj* a = ajj_create();
+    struct ajj_object* obj = parse(a,"Whoha",src,0);
+    const struct program* prg;
+    assert(obj);
+    prg = ajj_object_jinja_main(obj);
+    assert(prg);
+  }
+}
+
+static
+void test_constexpr() {
+ 
+  {
+    const char* src = "{% macro input1(arg1=[],arg2={},arg3='UV',arg4=44,arg5=True,arg6=False,arg7=None) %}" \
+                      "{% endmacro %}";
+    struct ajj* a = ajj_create();
+    struct ajj_object* obj = parse(a,"Whoha",src,0);
+    struct string input1 = CONST_STRING("input1");
+    const struct program* prg;
+    assert(obj);
+    prg = ajj_object_get_jinja_macro(obj,&input1);
+    assert(prg);
+  }
+ 
+  {
+    const char* src = "{% macro input1(arg1=[1,-2,3],arg2={'U':'V','Q':123,'P':()},arg3='UV',arg4=44,arg5=True,arg6=False,arg7=None) %}" \
+                      "{% endmacro %}";
+    struct ajj* a = ajj_create();
+    struct ajj_object* obj = parse(a,"Whoha",src,0);
+    struct string input1 = CONST_STRING("input1");
+    const struct program* prg;
+    assert(obj);
+    prg = ajj_object_get_jinja_macro(obj,&input1);
+    assert(prg);
   }
 }
 
@@ -730,8 +849,19 @@ int main() {
   test_include();
   test_import();
   test_extends();
-#else
-  test_macro();
+  test_move();
+  test_constexpr();
 #endif
+  { /* tenary */
+    const char* src = "{% do (1+3*2//5 if me is you is he is not tom and i in some_map else 3+5) if None is True(1,[23,4],557) else None %}";
+    struct ajj* a = ajj_create();
+    struct ajj_object* obj = parse(a,"Hello World",src,0);
+    const struct program* prg;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+    assert(obj);
+    prg = ajj_object_jinja_main(obj);
+    assert(prg);
+    dump_program(a,src,prg,output);
+  }
   return 0;
 }

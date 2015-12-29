@@ -1,36 +1,25 @@
-GCC_PROFILE_FLAGS := -fprofile-arcs -ftest-coverage -o2 -g -Wpedantic -Wall
-LINK := -lm
+OPT := -O0
+FLAGS := $(OPT) -g -Wpedantic -Wall -I./src
+PROFILE_FLAGS := -fprofile-arcs -ftest-coverage
+LINK := -L./. -lajj -lm
+SRC := $(wildcard src/*.c)
 
-vm-test:
-	cd src; \
-	gcc $(GCC_PROFILE_FLAGS) ajj.c opt.c util.c gc.c bc.c lex.c parse.c object.c upvalue.c vm.c builtin.c vm-test.c $(LINK) -o vm-test
+all: libajj
 
-parser-test:
-	cd src; \
-	gcc $(GCC_PROFILE_FLAGS) ajj.c builtin.c util.c bc.c lex.c parse.c object.c vm.c upvalue.c gc.c parser-test.c $(LINK) -o parser-test; \
-	./parser-test; \
-	gcov ajj.c util.c bc.c lex.c parse.c object.c parser-test.c
+ajjobj: $(SRC)
+	gcc $(FLAGS) -c src/all-in-one.c $(LINK)
 
-opt-test2:
-	cd src; \
-	gcc $(GCC_PROFILE_FLAGS) ajj.c opt.c util.c bc.c lex.c parse.c object.c upvalue.c opt-test2.c $(LINK) -o opt-test2; \
-	./opt-test2; \
-	gcov ajj.c opt.c util.c bc.c lex.c parse.c object.c opt-test.c
+libajj: ajjobj
+	ar rcs libajj.a all-in-one.o
 
-opt-test:
-	cd src; \
-	gcc $(GCC_PROFILE_FLAGS) ajj.c opt.c util.c bc.c lex.c parse.c object.c  opt-test.c $(LINK) -o opt-test; \
-	./opt-test; \
-	gcov ajj.c opt.c util.c bc.c lex.c parse.c object.c opt-test.c
+test: vm-test
 
-lex-test:
-	gcc -g test/lex-test.c src/lex.c src/util.c -o test-lex
+vm-test: libajj test/vm-test.c
+	gcc $(FLAGS) test/vm-test.c $(LINK) -o vm-test
 
 clean:
-	rm src/*.gcno
-	rm src/*.gcda
-	rm src/*.gcov
-	rm src/opt-test
-	rm src/opt-test2
+	rm *.o
+	rm *.a
+	find . -maxdepth 1 -executable -type f -delete
 
-.PHONY: opt-test clean
+.PHONY: clean

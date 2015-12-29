@@ -1,10 +1,10 @@
-#include "vm.h"
-#include "parse.h"
-#include "ajj-priv.h"
-#include "object.h"
-#include "ajj-priv.h"
-#include "bc.h"
-#include "opt.h"
+#include <vm.h>
+#include <parse.h>
+#include <ajj-priv.h>
+#include <object.h>
+#include <ajj-priv.h>
+#include <bc.h>
+#include <opt.h>
 
 static void do_test( const char* src ) {
     struct ajj* a = ajj_create();
