@@ -1,7 +1,8 @@
 OPT := -O0
-FLAGS := $(OPT) -pg -Wpedantic -Wall -I./src
+PWD := $(shell pwd)
+FLAGS := $(OPT) -g -Wpedantic -Wall -I$(PWD)/src
 PROFILE_FLAGS := -fprofile-arcs -ftest-coverage
-LINK := -L./. -lajj -lm
+LINK := -L$(PWD)/. -lajj -lm
 SRC := $(wildcard src/*.c)
 
 all: libajj
@@ -15,11 +16,12 @@ libajj: ajjobj
 test: vm-test
 
 vm-test: libajj test/vm-test.c
-	gcc $(FLAGS) test/vm-test.c $(LINK) -o vm-test
+	cd test; gcc $(FLAGS) vm-test.c $(LINK) -o vm-test; cd -
 
 clean:
 	rm *.o
 	rm *.a
 	find . -maxdepth 1 -executable -type f -delete
+	find test/ -maxdepth 1 -executable -type f -delete
 
 .PHONY: clean
