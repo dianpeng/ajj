@@ -84,19 +84,6 @@ void emitter_emit2_at( struct emitter* em , int pos ,
   em->prg->len = save;
 }
 
-int bc_next( const struct program* prg , size_t* pos ) {
-  if( prg->len == *pos ) {
-    return BC_WRAP_INSTRUCTION0(VM_HALT);
-  } else {
-    return prg->codes[(*pos)++];
-  }
-}
-
-int bc_2nd_arg( const struct program* prg , size_t* pos ) {
-  assert( prg->len > *pos );
-  return prg->codes[(*pos)++];
-}
-
 const char*
 bc_get_instruction_name( int bc ) {
 #define X(A,B,C) case A: return C;

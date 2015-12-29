@@ -443,7 +443,7 @@ int pass1( struct opt* o ) {
         ++o->off_buf_len;
         break;
       case VM_NOP2:
-        bc_2nd_arg(o->prg,&(o->pc));
+        (void)bc_2nd_arg(o->prg,&(o->pc));
         o->cur_shrink+=2; /* one more shrink */
         reserve_buf(o,off_buf,0,struct offset_buffer);
         o->off_buf[o->off_buf_len].pos = o->pc-2;

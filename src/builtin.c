@@ -247,7 +247,7 @@ struct ajj_value
 list_attr_get( struct ajj* a ,
     const struct ajj_value* obj,
     const struct ajj_value* idx ) {
-  int i;
+  int i = 0;
   UNUSE_ARG(a);
   if( vm_to_integer(idx,&i) )
     return AJJ_NONE;
@@ -266,7 +266,7 @@ void list_attr_set( struct ajj* a,
     struct ajj_value* obj,
     const struct ajj_value* idx ,
     const struct ajj_value* val ) {
-  int i;
+  int i = 0;
   UNUSE_ARG(a);
   assert( IS_A(obj,LIST_TYPE) );
   if( vm_to_integer(idx,&i) )
@@ -915,7 +915,7 @@ int xrange_ctor( struct ajj* a,
     void** ret,
     int* tp ) {
   struct xrange* x;
-  int val;
+  int val = 0;
 
   if( arg_len != 1 || vm_to_integer(arg,&val) ) {
     FAIL1(a,"%s","xrange::__ctor__ can only accept 1 "
@@ -1098,7 +1098,7 @@ int loop_ctor( struct ajj* a,
     FAIL1(a,"%s","__loop__::__ctor__ can only accept 1 argument and "
         "it must be an integer!");
   else {
-    int len;
+    int len = 0;
     if( vm_to_integer(arg,&len) ) {
       FAIL1(a,"__loop__::__ctpr__ can only convert first argument:%s "
           "to integer!",ajj_value_get_type_name(arg));

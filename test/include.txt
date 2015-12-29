@@ -9,7 +9,7 @@ Hello World From Parent
 {% set sum = result + x %}
 {% move result = sum %}
 {% endfor %}
-{% return sum %}
+{% return result %}
 {% endmacro %}
 {# ------------------------------------------------------ #}
 {# odd filter function that filters out all the odd value #}
@@ -20,4 +20,3 @@ Hello World From Parent
 {% endfor %}
 {% return result %}
 {% endmacro %}
-

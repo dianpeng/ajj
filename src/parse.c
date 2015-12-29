@@ -47,8 +47,8 @@
 
 #define ENTER_SCOPE() \
   do { \
-    if( lex_scope_top()->in_loop ) { \
-      lex_scope_top()->lctrl->cur_enter++; \
+    if( lex_scope_top(p)->in_loop ) { \
+      lex_scope_top(p)->lctrl->cur_enter++; \
     } \
     EMIT0(em,VM_ENTER); \
   } while(0)
@@ -155,12 +155,8 @@ void parser_destroy( struct parser* p ) {
   tk_destroy(&(p->tk));
 }
 
-#define lex_scope_top() (p->cur_scp[p->scp_tp])
-
-static
-int is_in_main( struct parser* p ) {
-  return p->scp_tp == 1; /* The 0 index is not in used anyway */
-}
+#define lex_scope_top(P) ((P)->cur_scp[(P)->scp_tp])
+#define is_in_main(P) ((P)->scp_tp == 1)
 
 static
 void parser_rpt_err( struct parser* p , const char* format, ... ) {
@@ -193,8 +189,8 @@ static
 struct lex_scope* lex_scope_enter( struct parser* p , int is_loop ) {
   struct lex_scope* scp;
   scp = malloc(sizeof(*scp));
-  scp->parent = lex_scope_top();
-  scp->end = lex_scope_top()->end;
+  scp->parent = lex_scope_top(p);
+  scp->end = lex_scope_top(p)->end;
   scp->len = 0;
   if( is_loop ) {
     /* This scope IS a loop scope */
@@ -205,11 +201,11 @@ struct lex_scope* lex_scope_enter( struct parser* p , int is_loop ) {
     scp->lctrl->cur_enter = 0;
     scp->is_loop = 1;
   } else {
-    scp->in_loop = lex_scope_top()->in_loop;
-    scp->lctrl = lex_scope_top()->lctrl;
+    scp->in_loop = lex_scope_top(p)->in_loop;
+    scp->lctrl = lex_scope_top(p)->lctrl;
     scp->is_loop = 0;
   }
-  return (lex_scope_top() = scp);
+  return (lex_scope_top(p) = scp);
 }
 
 static
@@ -221,38 +217,38 @@ struct lex_scope* lex_scope_jump( struct parser* p ) {
     return NULL;
   } else {
     ++p->scp_tp;
-    lex_scope_top() = scp;
+    lex_scope_top(p) = scp;
     scp->parent = NULL;
     scp->len = 0;
     scp->end = 0;
     scp->in_loop = 0;
     scp->is_loop = 0;
     scp->lctrl = NULL;
-    return lex_scope_top();
+    return lex_scope_top(p);
   }
 }
 
 static
 struct lex_scope* lex_scope_exit( struct parser*  p ) {
   struct lex_scope* scp;
-  assert( lex_scope_top() != NULL );
+  assert( lex_scope_top(p) != NULL );
   /* move the current ptop to its parent */
-  scp = lex_scope_top()->parent;
-  if( lex_scope_top()->is_loop ) {
-    free(lex_scope_top()->lctrl);
-  } else if( lex_scope_top()->in_loop ) {
-    --lex_scope_top()->lctrl->cur_enter;
+  scp = lex_scope_top(p)->parent;
+  if( lex_scope_top(p)->is_loop ) {
+    free(lex_scope_top(p)->lctrl);
+  } else if( lex_scope_top(p)->in_loop ) {
+    --lex_scope_top(p)->lctrl->cur_enter;
   }
-  free( lex_scope_top() );
+  free( lex_scope_top(p) );
   if( scp == NULL ) {
-    lex_scope_top() = NULL; /* don't forget to set it to NULL */
+    lex_scope_top(p) = NULL; /* don't forget to set it to NULL */
     /* exit the function scope */
     assert( p->scp_tp != 0 );
     --p->scp_tp;
   } else {
-    lex_scope_top() = scp;
+    lex_scope_top(p) = scp;
   }
-  return lex_scope_top();
+  return lex_scope_top(p);
 }
 /* This function is not an actual set but a set if not existed.
  * Because most of the local symbol definition has such semantic.
@@ -262,7 +258,7 @@ struct lex_scope* lex_scope_exit( struct parser*  p ) {
 static
 int lex_scope_set( struct parser* p , const char* name ) {
   int i;
-  struct lex_scope* scp = lex_scope_top();
+  struct lex_scope* scp = lex_scope_top(p);
 
   /* Try to find symbol:name on local scope */
   for( i = 0 ; i < scp->len ; ++i ) {
@@ -304,10 +300,8 @@ int lex_scope_get_from_scope( struct lex_scope* cur,
   return -1;
 }
 
-static
-int lex_scope_get( struct parser* p , const char* name , int* lvl ) {
-  return lex_scope_get_from_scope(lex_scope_top(),name,lvl);
-}
+#define lex_scope_get(P,N,LVL) \
+  lex_scope_get_from_scope(lex_scope_top(P),N,LVL)
 
 static
 struct string
@@ -362,7 +356,6 @@ int parse_seq( struct parser* p , struct emitter* em , int rtk ) {
     tk_move(tk);
     return 0;
   }
-
   do {
     CALLE(parse_expr(p,em));
     EMIT0(em,VM_ATTR_PUSH);
@@ -1078,15 +1071,8 @@ parse_constseq( struct parser* p , int ltk , int rtk ,
   return 0;
 }
 
-static int
-parse_constlist( struct parser* p , struct ajj_value* output ) {
-  return parse_constseq(p,TK_LSQR,TK_RSQR,output);
-}
-
-static int
-parse_consttuple( struct parser* p , struct ajj_value* output ) {
-  return parse_constseq(p,TK_LPAR,TK_RPAR,output);
-}
+#define parse_constlist(P,OUTPUT) parse_constseq(P,TK_LSQR,TK_RSQR,OUTPUT)
+#define parse_consttuple(P,OUTPUT) parse_constseq(P,TK_LPAR,TK_RPAR,OUTPUT)
 
 static int
 parse_constdict( struct parser* p , struct ajj_value* output ) {
@@ -1390,12 +1376,12 @@ int alloc_func_builtin_var( struct parser* p ) {
 
 static int
 parse_func_body( struct parser* p , struct emitter* em ) {
-  struct lex_scope* scp = lex_scope_top();
+  struct lex_scope* scp = lex_scope_top(p);
 
   CALLE(lex_scope_jump(p) == NULL);
-  assert( lex_scope_top()->parent == NULL );
-  assert( lex_scope_top()->len == 0 );
-  assert( lex_scope_top()->end == 0 );
+  assert( lex_scope_top(p)->parent == NULL );
+  assert( lex_scope_top(p)->len == 0 );
+  assert( lex_scope_top(p)->end == 0 );
 
   CALLE(parse_func_prolog(p,em)); /* Parsing the prolog */
   CALLE(alloc_func_builtin_var(p)); /* builtin vars */
@@ -1410,7 +1396,7 @@ parse_func_body( struct parser* p , struct emitter* em ) {
   /* Notes, after calling this function, the tokenizer should still
    * have tokens related to end of the callin scope */
   lex_scope_exit(p);
-  assert( lex_scope_top() == scp ); /* Check */
+  assert( lex_scope_top(p) == scp ); /* Check */
   return 0;
 }
 
@@ -1607,10 +1593,7 @@ parse_call( struct parser* p , struct emitter* em ) {
  * have recursive loop ( I doubt since it is not intuitive ), he/she
  * can just use built-in function to FLATTEN the list/dictionary */
 
-static inline
-int parse_loop_cond( struct parser* p , struct emitter* em ) {
-  return parse_logic(p,em);
-}
+#define parse_loop_cond(P,EM) parse_logic(P,EM)
 
 /* This function compiles the for body into the closure. What is for
  * body:
@@ -1733,17 +1716,17 @@ static int parse_for_body( struct parser* p ,
 
   CALLE(parse_scope(p,em,0,0));
 
-  assert( lex_scope_top()->is_loop && lex_scope_top()->in_loop );
+  assert( lex_scope_top(p)->is_loop && lex_scope_top(p)->in_loop );
 
   /* filter jumps to here */
   if( filter_jmp >0 )
     EMIT1_AT(em,filter_jmp,VM_JF,emitter_label(em));
 
   /* patch the continue jump table here */
-  for( i = 0 ; i < lex_scope_top()->lctrl->conts_len ; ++i ) {
-    EMIT2_AT(em,lex_scope_top()->lctrl->conts[i].code_pos,
+  for( i = 0 ; i < lex_scope_top(p)->lctrl->conts_len ; ++i ) {
+    EMIT2_AT(em,lex_scope_top(p)->lctrl->conts[i].code_pos,
         VM_JMPC,
-        lex_scope_top()->lctrl->conts[i].enter_cnt,
+        lex_scope_top(p)->lctrl->conts[i].enter_cnt,
         emitter_label(em));
   }
 
@@ -1776,16 +1759,16 @@ static int parse_for_body( struct parser* p ,
   EMIT0(em,VM_ITER_EXIT);
 
   /* patch the break jump table here */
-  if( lex_scope_top()->lctrl->brks_len && poped_num > 0 ) {
+  if( lex_scope_top(p)->lctrl->brks_len && poped_num > 0 ) {
     /* generate a jump here to make sure normal execution flow
      * will skip the following ONE pop instruction */
     brk_jmp = EMIT_PUT(em,1);
   }
 
-  for( i = 0 ; i < lex_scope_top()->lctrl->brks_len ; ++i ) {
-    EMIT2_AT(em,lex_scope_top()->lctrl->brks[i].code_pos,
+  for( i = 0 ; i < lex_scope_top(p)->lctrl->brks_len ; ++i ) {
+    EMIT2_AT(em,lex_scope_top(p)->lctrl->brks[i].code_pos,
         VM_JMPC,
-        lex_scope_top()->lctrl->brks[i].enter_cnt,
+        lex_scope_top(p)->lctrl->brks[i].enter_cnt,
         emitter_label(em));
   }
 
@@ -2050,16 +2033,16 @@ parse_break( struct parser* p , struct emitter* em ) {
   assert(tk->tk == TK_BREAK);
   tk_move(tk);
 
-  assert( lex_scope_top()->in_loop );
-  if( lex_scope_top()->lctrl->brks_len == MAX_LOOP_CTRL_SIZE ) {
+  assert( lex_scope_top(p)->in_loop );
+  if( lex_scope_top(p)->lctrl->brks_len == MAX_LOOP_CTRL_SIZE ) {
     parser_rpt_err(p,"Cannot have more break statements in this loop!");
     return -1;
   }
-  pos = lex_scope_top()->lctrl->brks_len;
-  lex_scope_top()->lctrl->brks[pos].code_pos = EMIT_PUT(em,2);
-  lex_scope_top()->lctrl->brks[pos].enter_cnt=
-    lex_scope_top()->lctrl->cur_enter - 1;
-  ++lex_scope_top()->lctrl->brks_len;
+  pos = lex_scope_top(p)->lctrl->brks_len;
+  lex_scope_top(p)->lctrl->brks[pos].code_pos = EMIT_PUT(em,2);
+  lex_scope_top(p)->lctrl->brks[pos].enter_cnt=
+    lex_scope_top(p)->lctrl->cur_enter - 1;
+  ++lex_scope_top(p)->lctrl->brks_len;
   CONSUME(TK_RSTMT);
   return 0;
 }
@@ -2071,16 +2054,16 @@ parse_continue( struct parser* p , struct emitter* em ) {
   assert(tk->tk == TK_CONTINUE);
   tk_move(tk);
 
-  assert( lex_scope_top()->in_loop );
-  if( lex_scope_top()->lctrl->conts_len == MAX_LOOP_CTRL_SIZE ) {
+  assert( lex_scope_top(p)->in_loop );
+  if( lex_scope_top(p)->lctrl->conts_len == MAX_LOOP_CTRL_SIZE ) {
     parser_rpt_err(p,"Cannot have more continue statements in this loop!");
     return -1;
   }
-  pos = lex_scope_top()->lctrl->conts_len;
-  lex_scope_top()->lctrl->conts[pos].code_pos = EMIT_PUT(em,2);
-  lex_scope_top()->lctrl->conts[pos].enter_cnt=
-    lex_scope_top()->lctrl->cur_enter - 1;
-  ++lex_scope_top()->lctrl->conts_len;
+  pos = lex_scope_top(p)->lctrl->conts_len;
+  lex_scope_top(p)->lctrl->conts[pos].code_pos = EMIT_PUT(em,2);
+  lex_scope_top(p)->lctrl->conts[pos].enter_cnt=
+    lex_scope_top(p)->lctrl->cur_enter - 1;
+  ++lex_scope_top(p)->lctrl->conts_len;
   CONSUME(TK_RSTMT);
   return 0;
 }
@@ -2127,7 +2110,7 @@ static
 int parse_return( struct parser* p ,struct emitter* em ) {
   struct tokenizer* tk = &(p->tk);
   int itr_exit_cnt =0;
-  struct lex_scope* scp = lex_scope_top();
+  struct lex_scope* scp = lex_scope_top(p);
   assert(tk->tk == TK_RETURN);
   tk_move(tk);
   /* Here because our execution flow changes, the clean up instruction
@@ -2424,14 +2407,14 @@ parse_scope( struct parser* p , struct emitter* em ,
             CALLE(parse_move(p,em));
             break;
           case TK_BREAK:
-            if( lex_scope_top()->in_loop ) {
+            if( lex_scope_top(p)->in_loop ) {
               CALLE(parse_break(p,em));
             } else {
               goto fail;
             }
             break;
           case TK_CONTINUE:
-            if( lex_scope_top()->in_loop ) {
+            if( lex_scope_top(p)->in_loop ) {
               CALLE(parse_continue(p,em));
             } else {
               goto fail;

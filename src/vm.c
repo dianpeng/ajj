@@ -26,9 +26,6 @@ void set_upvalue( struct ajj* a, const struct string* name,
     int* fail );
 
 static
-void del_upvalue( struct ajj* a, const struct string* name );
-
-static
 const struct function*
 resolve_test_function( struct ajj* a, const struct string* name );
 
@@ -42,6 +39,15 @@ int exit_function( struct ajj* a , const struct ajj_value* ret );
 
 static
 int run_jinja(struct ajj*);
+
+/* ===========================================
+ * Macros
+ * =========================================*/
+#define del_upvalue(A,N) \
+  do { \
+    upvalue_table_del(A,(A)->rt->global, \
+        N,&((A)->env)); \
+  } while(0)
 
 /* This FUNC_CALL actually means we want a TAIL call of a
  * new script functions. The return from the LOWEST script function
@@ -64,7 +70,7 @@ int run_jinja(struct ajj*);
 
 /* stack manipulation routine */
 #ifndef NDEBUG
-static
+static  
 struct ajj_value*
 stack_value( struct ajj* a , int x ) {
   assert( x >= cur_frame(a)->ebp );
@@ -213,7 +219,7 @@ void vm_rpt_err( struct ajj* a , const char* fmt , ... ) {
 
 /* This function is used to rewrite user throwned error
  * into our own error stack plus stack unwind information */
-static
+static  
 void rewrite_error( struct ajj* a ) {
   char msg[ERROR_BUFFER_SIZE];
   strcpy(msg,a->err);
@@ -221,7 +227,7 @@ void rewrite_error( struct ajj* a ) {
 }
 
 /* stk_push/stk_pop to manipulate the value stack */
-static
+static  
 void stk_pop(struct ajj* a , int off ) {
   int val = off;
   struct func_frame* fr = cur_frame(a);
@@ -229,7 +235,7 @@ void stk_pop(struct ajj* a , int off ) {
   fr->esp -= val;
 }
 
-static
+static  
 int stk_push( struct ajj* a , struct ajj_value v ) {
   struct func_frame* fr = cur_frame(a);
   if( fr->esp == AJJ_MAX_VALUE_STACK_SIZE ) {
@@ -242,7 +248,7 @@ int stk_push( struct ajj* a , struct ajj_value v ) {
   return 0;
 }
 
-static
+static  
 const struct string* const_str( struct ajj* a , int idx ) {
   const struct function* c = cur_function(a);
   assert( IS_JINJA(c) );
@@ -250,7 +256,7 @@ const struct string* const_str( struct ajj* a , int idx ) {
   return &(c->f.jj_fn.str_tbl[idx]);
 }
 
-static
+static  
 double const_num( struct ajj* a, int idx ) {
   const struct function* c = cur_function(a);
   assert( IS_JINJA(c) );
@@ -323,7 +329,7 @@ void exit_loop( struct ajj* a , int times ) {
   }
 }
 
-static
+static  
 void move_loop( struct ajj* a ) {
   struct func_frame* fr = cur_frame(a);
   struct ajj_value l;
@@ -357,7 +363,7 @@ void program_destroy( struct program* prg ) {
 /* =============================
  * Decoding
  * ===========================*/
-static
+static  
 int next_instr( struct ajj* a ) {
   struct func_frame* fr;
   const struct program* prg;
@@ -369,12 +375,9 @@ int next_instr( struct ajj* a ) {
   return bc_next(prg,&(fr->pc));
 }
 
-static
-int instr_1st_arg( int c ) {
-  return bc_1st_arg(c);
-}
+#define instr_1st_arg(c) bc_1st_arg(c)
 
-static
+static  
 int instr_2nd_arg( struct ajj* a ) {
   struct func_frame* fr;
   const struct program* prg;
@@ -424,12 +427,6 @@ get_upvalue( struct ajj* a , const struct string* name ) {
     return AJJ_NONE;
   else
     return uv->gut.val;
-}
-
-static
-void del_upvalue( struct ajj* a, const struct string* name ) {
-  upvalue_table_del(a,a->rt->global,
-      name,&(a->env));
 }
 
 /* =============================
@@ -901,9 +898,8 @@ vm_call(struct ajj* a, struct ajj_object* obj ,
   }
 }
 
-static
-int
-vm_attrcall(struct ajj* a, struct ajj_object* obj ,
+static  
+int vm_attrcall(struct ajj* a, struct ajj_object* obj ,
     struct ajj_value* ret ) {
   assert(obj != NULL);
   return vm_call(a,obj,ret);
@@ -967,26 +963,13 @@ struct ajj_value vm_lstr( struct ajj* a, int idx ) {
   return ajj_value_assign(obj);
 }
 
-static
-struct ajj_value vm_lnum( struct ajj* a , int idx ) {
-  return ajj_value_number( const_num(a,idx) );
-}
+#define vm_lnum(A,IDX) ajj_value_number(const_num(A,IDX))
 
-static
-struct ajj_value vm_llist( struct ajj* a ) {
-  struct func_frame* fr = cur_frame(a);
-  assert(IS_JINJA(fr->entry));
-  return ajj_value_assign(
-      ajj_object_create_list(a,a->rt->cur_gc));
-}
+#define vm_llist(A) ajj_value_assign( \
+    ajj_object_create_list((A),(A)->rt->cur_gc))
 
-static
-struct ajj_value vm_ldict( struct ajj* a ) {
-  struct func_frame* fr = cur_frame(a);
-  assert( IS_JINJA(fr->entry) );
-  return ajj_value_assign(
-      ajj_object_create_dict(a,a->rt->cur_gc));
-}
+#define vm_ldict(A) \
+  ajj_value_assign(ajj_object_create_dict((A),(A)->rt->cur_gc))
 
 static
 void vm_lift( struct ajj* a , int pos , int level ) {
@@ -1097,15 +1080,15 @@ void vm_attrstk_push( struct ajj* a , struct ajj_value* obj,
   }
 }
 
-static
-void vm_print( struct ajj* a , const struct string* str ) {
-  ajj_io_write(a->rt->output,str->str,str->len);
-}
+#define vm_print(A,STR) \
+  do { \
+    ajj_io_write((A)->rt->output,(STR)->str,(STR)->len); \
+  } while(0)
 
-static
-void vm_enter( struct ajj* a) {
-  a->rt->cur_gc = gc_scope_create(a,a->rt->cur_gc);
-}
+#define vm_enter(A) \
+  do { \
+    (A)->rt->cur_gc = gc_scope_create((A),(A)->rt->cur_gc); \
+  } while(0)
 
 static
 void vm_exit( struct ajj* a , int loops ) {

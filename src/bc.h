@@ -182,10 +182,13 @@ void emitter_emit1_at( struct emitter* em , int pos ,
 void emitter_emit2_at( struct emitter* em , int pos ,
     int spos , int bc , int a1 , int a2 );
 #define emitter_label(E) (int)((E)->prg->len)
-int bc_next( const struct program* prg , size_t* pos );
+#define bc_next(P,POS) \
+  (((P)->len == *(POS)) ? \
+   BC_WRAP_INSTRUCTION0(VM_HALT) : \
+   ((P)->codes[(*(POS))++]))
 #define bc_instr(C) BC_INSTRUCTION(C)
 #define bc_1st_arg(C) BC_1ARG(C)
-int bc_2nd_arg( const struct program* prg , size_t* pos );
+#define bc_2nd_arg(P,POS) ((P)->codes[(*(POS))++])
 
 /* dump program into human readable format */
 void dump_program( struct ajj* a,

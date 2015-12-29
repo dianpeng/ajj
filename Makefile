@@ -1,5 +1,5 @@
 OPT := -O0
-FLAGS := $(OPT) -g -Wpedantic -Wall -I./src
+FLAGS := $(OPT) -pg -Wpedantic -Wall -I./src
 PROFILE_FLAGS := -fprofile-arcs -ftest-coverage
 LINK := -L./. -lajj -lm
 SRC := $(wildcard src/*.c)
