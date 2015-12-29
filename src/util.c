@@ -356,6 +356,30 @@ void strbuf_append( struct strbuf* buf , const char* str , size_t len ) {
   buf->str[buf->len] = 0; /* always end with a null terminator */
 }
 
+int strbuf_append_file( struct strbuf* buf , FILE* f ) {
+  /* We cannot use ftell/fseek to figure out the length of the file
+   * since it might be a pipe which doesn't have meaningful fseek */
+  do {
+    size_t sp = buf->cap - buf->len -1;
+    int ret;
+    if(sp == 0) {
+      buf->str = mem_grow(buf->str,sizeof(char),1,&(buf->cap));
+      sp = buf->cap - buf->len;
+      assert(sp>0);
+    }
+    ret = fread(buf->str+buf->len,sizeof(char),sp,f);
+    if( ret < 0 ) {
+      return -1;
+    } else if( ret < sp ) {
+      buf->len += ret;
+      buf->str[buf->len] = 0; /* null terminated */
+      return 0;
+    } else {
+      buf->len += ret;
+    }
+  } while(1);
+}
+
 void strbuf_destroy( struct strbuf* buf ) {
   free(buf->str);
   buf->cap = buf->len = 0;

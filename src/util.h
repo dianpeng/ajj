@@ -157,6 +157,8 @@ void strbuf_push( struct strbuf* buf , char c );
 
 void strbuf_append( struct strbuf* buf , const char* str , size_t len );
 
+int strbuf_append_file( struct strbuf* buf , FILE* f );
+
 void strbuf_destroy( struct strbuf* buf );
 
 char strbuf_index( const struct strbuf* buf , int idx );

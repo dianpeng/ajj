@@ -8,13 +8,13 @@
 #include <stdlib.h>
 #include <errno.h>
 
-#define FAIL1(a,f,val) \
+#define EXEC_FAIL1(a,f,val) \
   do { \
     ajj_error(a,f,val); \
     return AJJ_EXEC_FAIL; \
   } while(0)
 
-#define FAIL2(a,f,v1,v2) \
+#define EXEC_FAIL2(a,f,v1,v2) \
   do { \
     ajj_error(a,f,v1,v2); \
     return AJJ_EXEC_FAIL; \
@@ -46,7 +46,7 @@ int list_ctor( struct ajj* a, void* udata /* NULL */,
     size_t len,
     void** ret, int* type ) {
   if( len > 0 ) {
-    FAIL1(a,"%s","list::__ctor__ cannot accept arguments!");
+    EXEC_FAIL1(a,"%s","list::__ctor__ cannot accept arguments!");
   } else {
     struct list* l;
     l = malloc(sizeof(*l));
@@ -80,7 +80,7 @@ int list_append( struct ajj* a ,
   struct list* l = LIST(obj);
   size_t i;
   if( arg_len == 0 )
-    FAIL1(a,"%s","list::append must have at least 1 arguments!");
+    EXEC_FAIL1(a,"%s","list::append must have at least 1 arguments!");
   if( l->len == l->cap ) {
     /* grow the memory */
     l->entry = mem_grow(l->entry,sizeof(struct ajj_value),
@@ -108,7 +108,7 @@ int list_extend( struct ajj* a ,
     struct ajj_value* ret ) {
   struct list* l = LIST(obj);
   if( arg_len > 1 || !IS_A(arg,LIST_TYPE) )
-    FAIL1(a,"%s","list::extend can only accept 1 argument as a list!");
+    EXEC_FAIL1(a,"%s","list::extend can only accept 1 argument as a list!");
   else {
     struct list* t  = LIST(arg);
     size_t i;
@@ -136,11 +136,11 @@ int list_pop_back( struct ajj* a,
     size_t arg_len,
     struct ajj_value* ret ) {
   if( arg_len > 0 ) {
-    FAIL1(a,"%s","list::pop_back cannot accept argument!");
+    EXEC_FAIL1(a,"%s","list::pop_back cannot accept argument!");
   } else {
     struct list* l = LIST(obj);
     if( l->len == 0 ) {
-      FAIL1(a,"%s","list::pop_back cannot pop value from "
+      EXEC_FAIL1(a,"%s","list::pop_back cannot pop value from "
           "list has 0 elements!");
     } else {
       --l->len;
@@ -158,7 +158,7 @@ int list_count( struct ajj* a,
     size_t arg_len,
     struct ajj_value* ret ) {
   if( arg_len > 0 )
-    FAIL1(a,"%s","list::count cannot accept argument!");
+    EXEC_FAIL1(a,"%s","list::count cannot accept argument!");
   else {
     struct list* l = LIST(obj);
     *ret = ajj_value_number(l->len);
@@ -174,7 +174,7 @@ int list_clear( struct ajj* a,
     size_t arg_len,
     struct ajj_value* ret ) {
   if( arg_len > 0 ) {
-    FAIL1(a,"%s","list::clear cannot accept argument!");
+    EXEC_FAIL1(a,"%s","list::clear cannot accept argument!");
   } else {
     struct list* l = LIST(obj);
     l->len = 0;
@@ -451,7 +451,7 @@ int dict_ctor( struct ajj* a ,
   UNUSE_ARG(udata);
 
   if( arg_len != 0 ) {
-    FAIL1(a,"%s","dict::__ctor__ cannot accept arguments!");
+    EXEC_FAIL1(a,"%s","dict::__ctor__ cannot accept arguments!");
   } else {
     struct map* m = malloc(sizeof(*m));
     map_create(m,sizeof(struct ajj_value),DEFAULT_DICT_CAP);
@@ -480,7 +480,7 @@ int dict_get( struct ajj* a ,
   int own;
 
   if( arg_len != 1 || vm_to_string(arg,&key,&own) ) {
-    FAIL1(a,"%s","dict::get cannot convert argument to string as key!");
+    EXEC_FAIL1(a,"%s","dict::get cannot convert argument to string as key!");
   } else {
     struct map* m = DICT(obj);
     struct ajj_value* val;
@@ -506,7 +506,7 @@ int dict_set( struct ajj* a ,
   int own;
 
   if( arg_len != 2 || vm_to_string(arg,&key,&own) ) {
-    FAIL1(a,"%s","dict::set can only accept 2 arguments and the "
+    EXEC_FAIL1(a,"%s","dict::set can only accept 2 arguments and the "
         "first one must be a string!");
   } else {
     struct map* m = DICT(obj);
@@ -530,7 +530,7 @@ int dict_has_key( struct ajj* a ,
   int own;
 
   if( arg_len != 1 || vm_to_string(arg,&key,&own) ) {
-    FAIL1(a,"%s","dict::has_key can only accept 1 argument and it "
+    EXEC_FAIL1(a,"%s","dict::has_key can only accept 1 argument and it "
         "must be a string!");
   } else {
     struct map* m = DICT(obj);
@@ -556,7 +556,7 @@ int dict_update( struct ajj* a ,
   int own;
 
   if( arg_len != 2 || vm_to_string(arg,&key,&own) ) {
-    FAIL1(a,"%s","dict::updatae can only accept 2 arguments and the first "
+    EXEC_FAIL1(a,"%s","dict::updatae can only accept 2 arguments and the first "
         "one must be a string!");
   } else {
     struct map* m = DICT(obj);
@@ -580,7 +580,7 @@ int dict_clear( struct ajj* a ,
     size_t arg_len,
     struct ajj_value* ret ) {
   if( arg_len != 0 ) {
-    FAIL1(a,"%s","dict::clear cannot accept argument!");
+    EXEC_FAIL1(a,"%s","dict::clear cannot accept argument!");
   } else {
     struct map* m = DICT(obj);
     map_clear(m);
@@ -596,7 +596,7 @@ int dict_count( struct ajj* a ,
     size_t arg_len,
     struct ajj_value* ret ) {
   if( arg_len != 0 ) {
-    FAIL1(a,"%s","dict::count cannot accept argument!");
+    EXEC_FAIL1(a,"%s","dict::count cannot accept argument!");
   } else {
     struct map* m = DICT(obj);
     *ret = ajj_value_number(m->len);
@@ -918,7 +918,7 @@ int xrange_ctor( struct ajj* a,
   int val = 0;
 
   if( arg_len != 1 || vm_to_integer(arg,&val) ) {
-    FAIL1(a,"%s","xrange::__ctor__ can only accept 1 "
+    EXEC_FAIL1(a,"%s","xrange::__ctor__ can only accept 1 "
         "argument and it must be a integer!");
   } else {
     x = malloc(sizeof(*x));
@@ -1095,12 +1095,12 @@ int loop_ctor( struct ajj* a,
     int* tp ) {
   UNUSE_ARG(udata);
   if(arg_num != 1)
-    FAIL1(a,"%s","__loop__::__ctor__ can only accept 1 argument and "
+    EXEC_FAIL1(a,"%s","__loop__::__ctor__ can only accept 1 argument and "
         "it must be an integer!");
   else {
     int len = 0;
     if( vm_to_integer(arg,&len) ) {
-      FAIL1(a,"__loop__::__ctpr__ can only convert first argument:%s "
+      EXEC_FAIL1(a,"__loop__::__ctpr__ can only convert first argument:%s "
           "to integer!",ajj_value_get_type_name(arg));
     } else {
       struct loop* lp = malloc(sizeof(*lp));
@@ -1293,7 +1293,7 @@ int cycler_reset( struct ajj* a,
   UNUSE_ARG(a);
   assert(IS_A(obj,CYCLER_TYPE));
   if(arg_num != 0) {
-    FAIL1(a,"%s","cycler::reset cannot accept any arguments!");
+    EXEC_FAIL1(a,"%s","cycler::reset cannot accept any arguments!");
   }
 
   c = CYCLER(obj);
@@ -1313,7 +1313,7 @@ int cycler_next( struct ajj* a,
   assert(IS_A(obj,CYCLER_TYPE));
 
   if(arg_num != 0) {
-    FAIL1(a,"%s","cycler::next cannot accept any arguments!");
+    EXEC_FAIL1(a,"%s","cycler::next cannot accept any arguments!");
   }
 
   c = CYCLER(obj);
@@ -1429,7 +1429,7 @@ int test_true( struct ajj* a,
     struct ajj_value* ret ) {
   const char* fn = (const char*)udata;
   if(arg_num != 1) {
-    FAIL1(a,"Test function:%s cannot accept extra arguments!",fn);
+    EXEC_FAIL1(a,"Test function:%s cannot accept extra arguments!",fn);
   } else {
     if(arg->type == AJJ_VALUE_BOOLEAN &&
        arg->value.boolean ) {
@@ -1449,7 +1449,7 @@ int test_false( struct ajj* a,
     struct ajj_value* ret ) {
   const char* fn = (const char*)udata;
   if(arg_num != 1) {
-    FAIL1(a,"Test function:%s cannot accept extra arguments!",fn);
+    EXEC_FAIL1(a,"Test function:%s cannot accept extra arguments!",fn);
   } else {
     if(arg->type == AJJ_VALUE_BOOLEAN &&
        !arg->value.boolean) {
@@ -1469,7 +1469,7 @@ int test_none( struct ajj* a,
     struct ajj_value* ret ) {
   const char* fn = (const char*)udata;
   if(arg_num != 1) {
-    FAIL1(a,"Test function:%s cannot accept extra arguments!",fn);
+    EXEC_FAIL1(a,"Test function:%s cannot accept extra arguments!",fn);
   } else {
     if(arg->type == AJJ_VALUE_NONE) {
       *ret = AJJ_TRUE;
@@ -1488,11 +1488,11 @@ int test_divisableby( struct ajj* a,
     struct ajj_value* ret ) {
   UNUSE_ARG(udata);
   if(arg_num != 2) {
-    FAIL1(a,"%s","Test function:divisableby can only accept 2 argument!");
+    EXEC_FAIL1(a,"%s","Test function:divisableby can only accept 2 argument!");
   } else {
     if(arg[1].type != AJJ_VALUE_NUMBER ||
        arg[0].type != AJJ_VALUE_NUMBER) {
-      FAIL2(a,"Test function:divisableby's all arguments "
+      EXEC_FAIL2(a,"Test function:divisableby's all arguments "
           "must be a number, but only get:(%s,%s)!",
           ajj_value_get_type_name(arg),
           ajj_value_get_type_name(arg+1));
@@ -1517,10 +1517,10 @@ int test_even( struct ajj* a,
     struct ajj_value* ret ) {
   UNUSE_ARG(udata);
   if(arg_num != 1) {
-    FAIL1(a,"%s","Test function:even cannot accept extra arguments!");
+    EXEC_FAIL1(a,"%s","Test function:even cannot accept extra arguments!");
   } else {
     if(arg[0].type != AJJ_VALUE_NUMBER ) {
-      FAIL1(a,"Test function:even's argument must be number,"
+      EXEC_FAIL1(a,"Test function:even's argument must be number,"
           "but get:%s!",
           ajj_value_get_type_name(arg));
     } else {
@@ -1544,7 +1544,7 @@ int test_iterator( struct ajj* a,
     struct ajj_value* ret ) {
   UNUSE_ARG(udata);
   if(arg_num != 1) {
-    FAIL1(a,"%s","Test function:iterator cannot "
+    EXEC_FAIL1(a,"%s","Test function:iterator cannot "
         "accept extra arguments!");
   } else {
     switch(arg[0].type) {
@@ -1580,11 +1580,11 @@ int test_lower( struct ajj* a,
     struct ajj_value* ret ) {
   UNUSE_ARG(udata);
   if(arg_num != 1) {
-    FAIL1(a,"%s","Test function:lower cannot "
+    EXEC_FAIL1(a,"%s","Test function:lower cannot "
         "accept extra arguments!");
   } else {
     if(arg[0].type != AJJ_VALUE_STRING) {
-      FAIL1(a,"%s","Test function:lower can only "
+      EXEC_FAIL1(a,"%s","Test function:lower can only "
           "accept string type as its argument!");
     } else {
       const char* str = ajj_value_to_cstr(arg);
@@ -1610,7 +1610,7 @@ int test_mapping( struct ajj* a,
     struct ajj_value* ret ) {
   const char* fn = (const char*)udata;
   if(arg_num != 1) {
-    FAIL1(a,"Test function:%s cannot accept "
+    EXEC_FAIL1(a,"Test function:%s cannot accept "
         "extra arguments!",
         fn);
   } else {
@@ -1630,7 +1630,7 @@ int test_number( struct ajj* a,
     size_t arg_num,
     struct ajj_value* ret ) {
   if(arg_num != 1) {
-    FAIL1(a,"%s","Test function:number cannot accept "
+    EXEC_FAIL1(a,"%s","Test function:number cannot accept "
         "extra arguments!");
   } else {
     if( arg->type == AJJ_VALUE_NUMBER ) {
@@ -1649,11 +1649,11 @@ int test_odd( struct ajj* a,
     size_t arg_num,
     struct ajj_value* ret ) {
   if(arg_num != 1) {
-    FAIL1(a,"%s","Test function:odd cannot accept "
+    EXEC_FAIL1(a,"%s","Test function:odd cannot accept "
         "extra arguments!");
   } else {
     if(arg->type != AJJ_VALUE_NUMBER){ 
-      FAIL1(a,"Test function:odd's argument must be number,"
+      EXEC_FAIL1(a,"Test function:odd's argument must be number,"
           "but get:%s!",
           ajj_value_get_type_name(arg));
     } else {
@@ -1676,7 +1676,7 @@ int test_object( struct ajj* a,
     size_t arg_num,
     struct ajj_value* ret ) {
   if(arg_num !=1) {
-    FAIL1(a,"%s","Test function:object cannot accept "
+    EXEC_FAIL1(a,"%s","Test function:object cannot accept "
         "extra arguments!");
   } else {
     if(arg->type == AJJ_VALUE_OBJECT)
@@ -1694,7 +1694,7 @@ int test_sameas( struct ajj* a,
     size_t arg_num,
     struct ajj_value* ret ) {
   if(arg_num != 2) {
-    FAIL1(a,"%s","Test function:sameas must accept one extra "
+    EXEC_FAIL1(a,"%s","Test function:sameas must accept one extra "
         "arguments!");
   } else {
     switch(arg->type) {
@@ -1742,7 +1742,7 @@ int test_string( struct ajj* a,
     size_t arg_num,
     struct ajj_value* ret ) {
   if( arg_num != 1 )
-    FAIL1(a,"%s","Test function:string cannot accept "
+    EXEC_FAIL1(a,"%s","Test function:string cannot accept "
         "extra arguments!");
   else {
     if(arg->type == AJJ_VALUE_STRING)
@@ -1760,7 +1760,7 @@ int test_defined( struct ajj* a,
     size_t arg_num,
     struct ajj_value* ret ) {
   if(arg_num != 1) {
-    FAIL1(a,"%s","Test function:defined cannot accept "
+    EXEC_FAIL1(a,"%s","Test function:defined cannot accept "
         "extra arguments!");
   } else {
     if(arg->type != AJJ_VALUE_NONE)
@@ -1778,11 +1778,11 @@ int test_upper( struct ajj* a,
     size_t arg_num,
     struct ajj_value* ret ) {
   if(arg_num != 1) {
-    FAIL1(a,"%s","Test function:upper cannot accept "
+    EXEC_FAIL1(a,"%s","Test function:upper cannot accept "
         "extra arguments!");
   } else {
     if(arg->type != AJJ_VALUE_STRING) {
-      FAIL1(a,"Test function:upper's argument must be string,"
+      EXEC_FAIL1(a,"Test function:upper's argument must be string,"
           "but get type:%s!",ajj_value_get_type_name(arg));
     } else {
       const char* str = ajj_value_to_cstr(arg);
@@ -2226,12 +2226,12 @@ int to_json( struct ajj* a,
     struct ajj_value* ret ) {
 
   if( arg_len != 1 ) {
-    FAIL1(a,"%s","Function::to_json can only accept one argument,"
+    EXEC_FAIL1(a,"%s","Function::to_json can only accept one argument,"
         "and it must be a string!");
     return AJJ_EXEC_FAIL;
   } else {
     if(arg->type != AJJ_VALUE_STRING) {
-      FAIL1(a,"Function::to_json can only accept one string "
+      EXEC_FAIL1(a,"Function::to_json can only accept one string "
           "argument,but get type:%s!",ajj_value_get_type_name(arg));
     } else {
       struct ajj_object* r;
@@ -2254,12 +2254,12 @@ int to_jsonc( struct ajj* a,
     size_t arg_len,
     struct ajj_value* ret ) {
   if( arg_len != 1 ) {
-    FAIL1(a,"%s","Function::to_jsonc can only accept one argument,"
+    EXEC_FAIL1(a,"%s","Function::to_jsonc can only accept one argument,"
         "and it must be a string!");
     return AJJ_EXEC_FAIL;
   } else {
     if(arg->type != AJJ_VALUE_STRING) {
-      FAIL1(a,"Function::to_jsonc can only accept one string "
+      EXEC_FAIL1(a,"Function::to_jsonc can only accept one string "
           "argument,but get type:%s!",ajj_value_get_type_name(arg));
     } else {
       struct ajj_object* r;
@@ -2271,6 +2271,82 @@ int to_jsonc( struct ajj* a,
         *ret = ajj_value_assign(r);
         return AJJ_EXEC_OK;
       }
+    }
+  }
+}
+
+/* Run a shell command and capture its output */
+static
+int shell( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_len,
+    struct ajj_value* ret ) {
+  if( arg_len != 1 ) {
+    EXEC_FAIL1(a,"%s","Function::shell can only accept one argument,"
+        "and it must be a string!");
+    return AJJ_EXEC_FAIL;
+  } else {
+    if(arg->type != AJJ_VALUE_STRING) {
+      EXEC_FAIL1(a,"Function::shell can only accept one string "
+          "argument,but get type:%s!",ajj_value_get_type_name(arg));
+    } else {
+      FILE* p;
+      p = popen(ajj_value_to_cstr(arg),"r");
+      if(!p) {
+        *ret = AJJ_NONE;
+        return AJJ_EXEC_FAIL;
+      } else {
+        struct strbuf buf;
+        strbuf_init(&buf);
+        strbuf_append_file(&buf,p);
+        pclose(p);
+        *ret = ajj_value_assign(
+            ajj_object_create_string(a,
+            a->rt->cur_gc,
+            buf.str,buf.len,1));
+        return AJJ_EXEC_OK;
+      }
+    }
+  }
+}
+
+static
+int rm_trail( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_len,
+    struct ajj_value* ret ) {
+  if( arg_len != 1 ) {
+    EXEC_FAIL1(a,"%s","Function::shell can only accept one argument,"
+        "and it must be a string!");
+    return AJJ_EXEC_FAIL;
+  } else {
+    if(arg->type != AJJ_VALUE_STRING) {
+      EXEC_FAIL1(a,"Function::shell can only accept one string "
+          "argument,but get type:%s!",ajj_value_get_type_name(arg));
+    } else {
+      struct strbuf sbuf;
+      const struct string* tar = ajj_value_to_string(arg);
+      int i;
+      strbuf_init_cap(&sbuf,tar->len);
+      for ( i = (int)(tar->len-1) ; i >= 0 ; --i ) {
+        if( tar->str[i] == ' ' ||
+            tar->str[i] == '\t'||
+            tar->str[i] == '\r'||
+            tar->str[i] == '\n' )
+          continue;
+        else {
+          if(tar->str[i] == '\n') --i;
+          break;
+        }
+      }
+      strbuf_append(&sbuf,tar->str,i+1);
+      *ret = ajj_value_assign(
+          ajj_object_create_string(a,
+            a->rt->cur_gc,
+            sbuf.str,sbuf.len,1));
+      return AJJ_EXEC_OK;
     }
   }
 }
@@ -2311,6 +2387,16 @@ void ajj_builtin_load( struct ajj* a ) {
   ajj_add_function(a,&(a->builtins),
       "to_jsonc",
       to_jsonc,
+      NULL);
+
+  ajj_add_function(a,&(a->builtins),
+      "shell",
+      shell,
+      NULL);
+
+  ajj_add_function(a,&(a->builtins),
+      "rm_trail",
+      rm_trail,
       NULL);
 
   /* builtin test */
