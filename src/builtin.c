@@ -1670,6 +1670,24 @@ int test_odd( struct ajj* a,
 }
 
 static
+int test_object( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_num,
+    struct ajj_value* ret ) {
+  if(arg_num !=1) {
+    FAIL1(a,"%s","Test function:object cannot accept "
+        "extra arguments!");
+  } else {
+    if(arg->type == AJJ_VALUE_OBJECT)
+      *ret = AJJ_TRUE;
+    else
+      *ret = AJJ_FALSE;
+    return AJJ_EXEC_OK;
+  }
+}
+
+static
 int test_sameas( struct ajj* a,
     void* udata,
     struct ajj_value* arg,
@@ -2346,6 +2364,9 @@ void ajj_builtin_load( struct ajj* a ) {
 
   ajj_add_test(a,&(a->builtins),
       "string",test_string,NULL);
+
+  ajj_add_test(a,&(a->builtins),
+      "object",test_object,NULL);
 
   ajj_add_test(a,&(a->builtins),
       "upper",test_upper,NULL);

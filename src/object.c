@@ -267,7 +267,6 @@ ajj_object_create( struct ajj* a , struct gc_scope* scope ) {
   struct ajj_object* ret = slab_malloc(&(a->obj_slab));
   LINSERT(ret,&(scope->gc_tail));
   ret->scp = scope;
-  ret->parent_len = 0;
   return ret;
 }
 
@@ -443,10 +442,10 @@ ajj_value_delete_string( struct ajj* a, struct ajj_value* str ) {
 struct ajj_object*
 ajj_object_move( struct ajj* a,
     struct gc_scope* scp , struct ajj_object* obj ) {
-  assert(obj->scp);
   /* only do move when we fonud out that the target scope has smaller
    * scp_id value since this means we have less lifecycle */
-  if( obj->scp->scp_id > scp->scp_id ) {
+  if( (scp->scp_id == 0 || obj->scp->scp_id == 0 ) &&
+      (obj->scp->scp_id > scp->scp_id) ) {
     LREMOVE(obj);
     LINSERT(obj,&(scp->gc_tail));
     obj->scp = scp;

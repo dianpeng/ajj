@@ -121,8 +121,6 @@ struct object {
 struct ajj_object {
   struct ajj_object* prev;
   struct ajj_object* next;
-  struct ajj_object* parent[AJJ_EXTENDS_MAX_SIZE]; /* for extends */
-  size_t parent_len;
   int tp;
   union {
     struct string str; /* string */
@@ -184,6 +182,12 @@ ajj_object_create ( struct ajj* , struct gc_scope* scope );
 struct ajj_object*
 ajj_object_move( struct ajj* ,
     struct gc_scope* scp , struct ajj_object* obj );
+
+struct ajj_object*
+ajj_object_attach( struct gc_scope* scp , struct ajj_object* obj );
+
+struct ajj_object*
+ajj_object_detach( struct ajj_object* obj );
 
 /* Initialize an created ajj_object to a certain type */
 struct ajj_object*

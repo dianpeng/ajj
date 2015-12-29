@@ -87,6 +87,7 @@ enum {
   X(TK_AND,"and") \
   X(TK_OR,"or") \
   X(TK_NOT,"not") \
+  X(TK_RETURN,"return") \
   X(TK_TRUE,"<true>") \
   X(TK_FALSE,"<false>") \
   X(TK_NONE,"<none>") \

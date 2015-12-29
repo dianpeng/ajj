@@ -27,7 +27,8 @@ struct ajj* ajj_create() {
   slab_init(&(r->gc_slab),
       GC_SLAB_SIZE,sizeof(struct gc_scope));
   map_create(&(r->tmpl_tbl),sizeof(struct ajj_object*),32);
-  gc_root_init(&(r->gc_root));
+  gc_root_init(&(r->gc_temp),0);
+  gc_root_init(&(r->gc_root),1);
   r->rt = NULL;
   /* initiliaze the upvalue table */
   upvalue_table_init(&(r->builtins),NULL);

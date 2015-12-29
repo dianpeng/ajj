@@ -311,13 +311,15 @@ void enter_loop( struct ajj* a, size_t len ) {
 }
 
 static
-void exit_loop( struct ajj* a ) {
-  struct func_frame* fr = cur_frame(a);
-  struct ajj_object* lobj = fr->loops[fr->cur_loops-1];
-  assert(fr->cur_loops >0);
-  --fr->cur_loops;
-  if(lobj)
-    del_upvalue(a,&LOOP);
+void exit_loop( struct ajj* a , int times ) {
+  while( times-- > 0 ) {
+    struct func_frame* fr = cur_frame(a);
+    struct ajj_object* lobj = fr->loops[fr->cur_loops-1];
+    assert(fr->cur_loops >0);
+    --fr->cur_loops;
+    if(lobj)
+      del_upvalue(a,&LOOP);
+  }
 }
 
 static
@@ -1500,6 +1502,7 @@ void enter_function( struct ajj* a , const struct function* f,
     fr->method = method;
     fr->obj = obj;
     fr->cur_loops = 0;
+    fr->enter_gc = a->rt->cur_gc;
     ++rt->cur_call_stk;
     *fail = 0;
   }
@@ -1510,6 +1513,7 @@ int exit_function( struct ajj* a , const struct ajj_value* ret ) {
   struct func_frame* fr = cur_frame(a);
   struct runtime* rt = a->rt;
   int stk_sz = fr->par_cnt;
+  struct gc_scope* gc = fr->enter_gc;
   assert(rt->cur_call_stk >0);
   assert(fr->cur_loops == 0);
   /* test whether we need to update our par_cnt
@@ -1523,6 +1527,24 @@ int exit_function( struct ajj* a , const struct ajj_value* ret ) {
     assert( fr->esp >= fr->ebp );
     /* stk_push the return value onto the stack */
     stk_push(a,*ret); /* block will _never_ return anything on stack */
+    /* Before clear the GC scope, we need to move the return value
+     * from the function's inner scope to the caller's scope */
+    if(ret->type == AJJ_VALUE_STRING ||
+       ret->type == AJJ_VALUE_OBJECT ) {
+      ajj_object_move(a,&(a->gc_temp),ret->value.object);
+    }
+    /* clear gc scope in case the function is returned by a return
+     * instruction */
+    while( gc != a->rt->cur_gc ) {
+      struct gc_scope* p = a->rt->cur_gc->parent;
+      gc_scope_destroy(a,a->rt->cur_gc);
+      a->rt->cur_gc = p;
+    }
+
+    if(ret->type == AJJ_VALUE_STRING ||
+       ret->type == AJJ_VALUE_OBJECT ) {
+      ajj_object_move(a,a->rt->cur_gc,ret->value.object);
+    }
   }
   return 0;
 }
@@ -2007,8 +2029,12 @@ int vm_main( struct ajj* a ) {
       vm_beg(RET) {
         /* check if we have return value here or not !
          * if not, put a dummy NONE on stk_top of the caller stack */
+        int itr_cnt = instr_1st_arg(c);
         struct func_frame* fr = cur_frame(a);
-        struct ajj_value ret = AJJ_NONE; /* always NONE */
+        struct ajj_value ret = *stk_top(a,1); /* TOP of the stack contains our
+                                               * return value */
+        /* exit loop iterator */
+        exit_loop(a,itr_cnt);
         /* do clean up things */
         exit_function(a,&ret);
         /* check the current function frame to see whether we previously
@@ -2354,7 +2380,7 @@ int vm_main( struct ajj* a ) {
       } vm_end(ITER_MOVE)
 
       vm_beg(ITER_EXIT) {
-        exit_loop(a); /* tear down loop object */
+        exit_loop(a,1); /* tear down loop object */
       } vm_end(ITER_EXIT)
 
       /* MISC -------------------------------------- */
@@ -2424,6 +2450,9 @@ int run_jinja( struct ajj* a ) {
       NULL,
       NULL);
   fail = vm_main(a);
+  /* check temporary gc scope is empty since all the temporary
+   * objects should be already cleared */
+  assert( a->gc_temp.gc_tail.next = &(a->gc_temp.gc_tail) );
   return fail;
 }
 

@@ -1,4 +1,23 @@
-{% for i in xrange(100) if i is odd %}
-I={{i}}
+{% for i in xrange(6) if i is odd %}
+Hello World From Parent
 {% endfor %}
-Hello World From Include Text
+{# ----------------------------------------------------- #}
+{# sum function, it is used to calculate sum of an array #}
+{% macro array_sum(arr) %}
+{% set result = 0 %}
+{% for x in arr %}
+{% set sum = result + x %}
+{% move result = sum %}
+{% endfor %}
+{% return sum %}
+{% endmacro %}
+{# ------------------------------------------------------ #}
+{# odd filter function that filters out all the odd value #}
+{% macro odd_filter(arr) %}
+{% set result = [] %}
+{% for x in arr if x is odd %}
+{% do result.append(x) %}
+{% endfor %}
+{% return result %}
+{% endmacro %}
+

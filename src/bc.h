@@ -96,7 +96,7 @@ extern struct string LOOP;
   X(VM_NEG,0,"neg") \
   X(VM_DIVTRUCT,0,"divtruct") \
   X(VM_CALL,2,"call") \
-  X(VM_RET,0,"ret") \
+  X(VM_RET,1,"ret") \
   X(VM_BCALL,2,"bcall") \
   X(VM_PRINT,0,"print") \
   X(VM_POP,1,"pop") \

@@ -215,7 +215,7 @@ struct string str_mul( const struct str* l , int times ) {
   struct strbuf sbuf;
   size_t len = strlen(l->s);
   strbuf_init_cap(&sbuf,len);
-  while( times-- ) {
+  while( times-- > 0 ) {
     strbuf_append(&sbuf,l->s,len);
   }
   return strbuf_tostring(&sbuf);

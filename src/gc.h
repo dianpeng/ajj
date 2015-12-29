@@ -61,11 +61,11 @@ struct gc_scope {
   unsigned int scp_id;       /* scope id */
 };
 
-#define gc_root_init(S) \
+#define gc_root_init(S,I) \
   do { \
     LINIT(&((S)->gc_tail)); \
     (S)->parent = NULL; \
-    (S)->scp_id = 0; \
+    (S)->scp_id = (I); \
   } while(0)
 
 struct gc_scope*

@@ -25,6 +25,8 @@ struct ajj {
                             * value will not be deleted automatically
                             * by the program. Like template's static
                             * memory */
+  struct gc_scope gc_temp; /* temporary gc scope used to transfer return
+                            * value internally */
   char err[ERROR_BUFFER_SIZE]; /* error buffer */
 
   struct map tmpl_tbl; /* template table. Provide key value map to

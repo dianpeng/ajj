@@ -16,6 +16,7 @@ token_id tk_init( struct tokenizer* tk , const char* src ) {
   tk->src = src;
   tk->pos = 0;
   tk->mode = TOKENIZE_JINJA;
+  tk->tk = TK_UNKNOWN;
   strbuf_init(&(tk->lexeme));
   return tk_lex(tk);
 }
@@ -103,6 +104,65 @@ token_id tk_lex_num( struct tokenizer* tk ) {
     RETURN(TK_UNKNOWN_NUMBER,0);
   } else {
     RETURN(TK_NUMBER,pend-(tk->pos+tk->src));
+  }
+}
+
+enum {
+  TRAILING,
+  BOTH
+};
+
+static
+int tk_lex_text( struct tokenizer* tk , int opt , size_t len ) {
+  if(opt == BOTH) {
+    size_t i;
+    for( i = 0 ; i < tk->lexeme.len ; ++i ) {
+      if( tk->lexeme.str[i] == ' ' ||
+          tk->lexeme.str[i] == '\t'||
+          tk->lexeme.str[i] == '\b'||
+          tk->lexeme.str[i] == '\r' ) {
+        continue;
+      } else {
+        if(tk->lexeme.str[i] == '\n')
+          ++i;
+        break;
+      }
+    }
+    if( i == tk->lexeme.len ) {
+      strbuf_reset(&(tk->lexeme));
+      tk->pos += len; /* skip this text */
+      return -1;
+    } else {
+      struct strbuf sbuf;
+      strbuf_init(&sbuf);
+      strbuf_append(&sbuf,(tk->lexeme.str+i),
+          tk->lexeme.len-i);
+      strbuf_destroy(&(tk->lexeme));
+      tk->lexeme = sbuf;
+    }
+  } 
+  { /* trailing */
+    int i;
+    for( i = (tk->lexeme.len-1) ; i >= 0 ; --i ) {
+      if( tk->lexeme.str[i] == ' ' ||
+          tk->lexeme.str[i] == '\t'||
+          tk->lexeme.str[i] == '\b'||
+          tk->lexeme.str[i] == '\r' ) {
+        continue;
+      } else {
+        if( tk->lexeme.str[i] == '\n' )
+          ++i;
+        break;
+      }
+    }
+    if( i < 0 ) {
+      strbuf_reset(&(tk->lexeme));
+      tk->pos += len; /* skip this text */
+      return -1;
+    } else {
+      tk->lexeme.len = i;
+      return 0;
+    }
   }
 }
 
@@ -197,7 +257,7 @@ size_t skip_whitespace( const char* src, size_t pos ) {
  * O: or,override, optional
  * P: -
  * Q: -
- * R: -
+ * R: return
  * S: set
  * T: -
  * U: upvalue
@@ -375,7 +435,7 @@ token_id tk_lex_keyword_or_id( struct tokenizer* tk ) {
           tk_not_id_rchar(tk->src[i+4]))
         RETURN(TK_NONE,4);
       else
-        tk_lex_keyword(tk,len+1);
+        return tk_lex_keyword(tk,len+1);
     case 'o':
       if( (len = tk_keyword_check(tk,"r",i+1)) == 1 &&
           tk_not_id_rchar(tk->src[i+2]))
@@ -386,6 +446,12 @@ token_id tk_lex_keyword_or_id( struct tokenizer* tk ) {
       else if( (len = tk_keyword_check(tk,"ptional",i+1)) == 7 &&
           tk_not_id_rchar(tk->src[i+8]))
         RETURN(TK_OPTIONAL,8);
+      else
+        return tk_lex_keyword(tk,len+1);
+    case 'r':
+      if( (len = tk_keyword_check(tk,"eturn",i+1)) == 5 &&
+          tk_not_id_rchar(tk->src[i+6]))
+        RETURN(TK_RETURN,6);
       else
         return tk_lex_keyword(tk,len+1);
     case 's':
@@ -583,7 +649,6 @@ done:
   return -1;
 }
 
-
 static
 int tk_check_raw( struct tokenizer* tk , size_t pos ) {
   return tk_check_single_keyword(tk,pos,"raw",3);
@@ -630,11 +695,22 @@ token_id tk_lex_raw( struct tokenizer* tk ) {
 static
 token_id tk_lex_jinja( struct tokenizer* tk ) {
   int i = tk->pos;
+  int opt;
 
   assert( tk->mode == TOKENIZE_JINJA );
 
   /* reset lexeme buffer */
   strbuf_reset( &(tk->lexeme) );
+
+#define CHECK_TEXT() \
+  if(tk->tk == TK_UNKNOWN_NUMBER || tk->tk == TK_REXP) { \
+    opt = TRAILING; \
+  } else { \
+    opt = BOTH; \
+  } \
+  if( !tk_lex_text(tk,opt,i-tk->pos) ) { \
+    RETURN(TK_TEXT,i-tk->pos); \
+  }
 
   do {
     char c = tk->src[i];
@@ -642,14 +718,17 @@ token_id tk_lex_jinja( struct tokenizer* tk ) {
       case '{':
         switch(tk->src[i+1]) {
           case '#':
-            tk->pos += 2;
-            if(tk_next_skip_cmt(tk))
-              return tk->tk;
-            continue;
+            CHECK_TEXT() 
+            else {
+              tk->pos += 2;
+              if(tk_next_skip_cmt(tk))
+                return tk->tk;
+              i = tk->pos;
+              continue;
+            }
           case '%':
-            if( tk->lexeme.len > 0 ) {
-              RETURN(TK_TEXT,(i-tk->pos));
-            } else {
+            CHECK_TEXT()
+            else {
               int offset;
               if( (offset = tk_check_raw(tk,i+2)) == 0 ) {
                 RETURN(TK_LSTMT,2);
@@ -687,9 +766,8 @@ token_id tk_lex_jinja( struct tokenizer* tk ) {
   } while(1);
 
 done:
-  if( tk->lexeme.len > 0 ) {
-    RETURN(TK_TEXT,(i-tk->pos));
-  } else {
+  CHECK_TEXT()
+  else {
     RETURN(TK_EOF,0);
   }
 }
@@ -731,6 +809,7 @@ token_id tk_move( struct tokenizer* tk ) {
 
 int tk_expect_id( struct tokenizer* tk ) {
   token_id t = tk->tk; /* we don't do tk_move */
+  assert( tk->mode = TOKENIZE_SCRIPT );
   switch(t) {
     case TK_VARIABLE:
       return 0;

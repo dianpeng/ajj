@@ -470,7 +470,7 @@ struct string
 string_multiply( const struct string*  l , int times ) {
   struct strbuf sbuf;
   strbuf_init_cap(&sbuf,l->len*times + 1);
-  while(times--) {
+  while(times-- >0) {
     strbuf_append(&sbuf,l->str,l->len);
   }
   return strbuf_tostring(&sbuf);

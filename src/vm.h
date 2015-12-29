@@ -71,6 +71,10 @@ struct func_frame {
   /* Optimization for LOOP object */
   struct ajj_object* loops[ MAX_LOOP_CTRL_SIZE ];
   size_t cur_loops;
+
+  /* Entry GC pointer, used to clean the gc scope when an early return is
+   * executed */
+  struct gc_scope* enter_gc;
 };
 
 /* Runtime object is the internal VM data structure which contains all the VM
