@@ -152,7 +152,7 @@ int tk_lex_rmtrail( struct tokenizer* tk , size_t len ) {
    * drop */
 
   size_t i = 0;
-  int last = -1;
+  int last = -2;
   assert( tk->lexeme.len );
 
   while(i<tk->lexeme.len) {
@@ -161,10 +161,15 @@ int tk_lex_rmtrail( struct tokenizer* tk , size_t len ) {
     assert( o != Runeerror );
     assert( o );
     if(!tk_is_ispace(c)) {
-      /* if not whitespace, just reset the seen pointer */
-      last = -1;
+      if(c == '\n')
+        last = -1;
     } else {
-      if(last<0) last = i;
+      /* only when last is negative one we set to
+       * the correct index. But initially this value
+       * is -2, which can only be set to -1 when a
+       * new line is met. So we will start to remove
+       * whitespace when we at least see one line break */
+      if(last==-1) last = i;
     }
     i += o;
   }
