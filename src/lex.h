@@ -1,6 +1,7 @@
 #ifndef _LEX_H_
 #define _LEX_H_
 #include "util.h"
+#include "utf8.h"
 #include <ctype.h>
 
 #define CODE_SNIPPET_SIZE 256
@@ -97,7 +98,8 @@ enum {
   TOKEN_KEYWORD_LIST(X) \
   X(TK_EOF,"<eof>") \
   X(TK_UNKNOWN_NUMBER,"<unknown-number:overflow>") \
-  X(TK_UNKNOWN,"<unknown>")
+  X(TK_UNKNOWN,"<unknown>") \
+  X(TK_UNKNOWN_UTF8,"<unknonw:utf8 rune error!>")
 
 #define X(A,B) A,
 typedef enum {
@@ -150,7 +152,11 @@ int tk_expect( struct tokenizer* tk , token_id t );
 #define tk_not_id_rchar(C) (!tk_id_rchar(C))
 #define tk_body_escape(C) ((C) =='{')
 
-int tk_string_escape_char( char c );
-int tk_string_reescape_char( char c );
+int tk_string_escape_char( Rune c );
+int tk_string_reescape_char( Rune c );
+
+#define tk_is_ispace(X) \
+  ((X) == ' ' || (X) == '\t' || \
+   (X) == '\r'|| (X) == '\b')
 
 #endif /* _LEX_H_ */

@@ -72,11 +72,11 @@ struct offset_buffer {
 /* A internal string wrapper which contains information
  * whether this string is OWNED by this object or not. */
 struct str {
-  const char* s;
+  struct string s;
   int own;
 };
 
-#define NULL_STR { NULL , 0 }
+#define NULL_STR { { NULL, 0 } , 0 }
 
 #define INIT_BUF_SIZE 128
 
@@ -195,30 +195,18 @@ void opt_rpt_err( struct opt* o ,const char* fmt , ... ) {
 
 static
 void str_destroy( struct str* l ) {
-  if(l->own && l->s) free((void*)l->s);
+  if(l->own ) string_destroy(&(l->s));
 }
 
 static
 struct string str_concate( const struct str* l ,
     const struct str* r ) {
-  struct strbuf sbuf;
-  const size_t llen = strlen(l->s);
-  const size_t rlen = strlen(r->s);
-  strbuf_init_cap(&sbuf,llen+rlen+1);
-  strbuf_append(&sbuf,l->s,llen);
-  strbuf_append(&sbuf,r->s,rlen);
-  return strbuf_tostring(&sbuf);
+  return string_concate(&(l->s),&(r->s));
 }
 
 static
 struct string str_mul( const struct str* l , int times ) {
-  struct strbuf sbuf;
-  size_t len = strlen(l->s);
-  strbuf_init_cap(&sbuf,len);
-  while( times-- > 0 ) {
-    strbuf_append(&sbuf,l->s,len);
-  }
-  return strbuf_tostring(&sbuf);
+  return string_multiply( &(l->s) , times );
 }
 
 /* The following function reemit the instructions accordingly
@@ -357,7 +345,7 @@ int opt_to_string( struct opt* o , struct ajj_value* v,
     return -1;
   }
   val->own = own;
-  val->s = s.str;
+  val->s = s;
   return 0;
 }
 
@@ -808,7 +796,7 @@ int fold_bin( struct opt* o , instructions instr ) {
               str_destroy(&rv); \
               return -1; \
             } \
-            res = strcmp(lv.s,rv.s) O 0; \
+            res = string_cmp(&(lv.s),&(rv.s)) O 0; \
             if(res) bin_emit0(o,sref,VM_LTRUE);\
             else bin_emit0(o,sref,VM_LFALSE);\
             str_destroy(&lv); \
@@ -849,7 +837,7 @@ int fold_bin( struct opt* o , instructions instr ) {
             str_destroy(&rv); \
             return -1; \
           } \
-          res = strcmp(lv.s,rv.s) O 0; \
+          res = string_cmp(&(lv.s),&(rv.s)) O 0; \
           if(res) bin_emit0(o,sref,VM_LTRUE); \
           else bin_emit0(o,sref,VM_LFALSE); \
           str_destroy(&lv); \

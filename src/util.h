@@ -9,6 +9,9 @@
 #include <math.h>
 #include <limits.h>
 #include <stdarg.h>
+#include <stdio.h>
+
+#include "utf8.h"
 
 #ifndef UNREACHABLE
 #define UNREACHABLE() assert(!"UNREACHABLE!")
@@ -85,7 +88,6 @@
  * After calling this function, the input mem will be freeed */
 
 void* mem_grow( void* , size_t obj_sz , size_t append, size_t* old_cap );
-
 /* =======================================================
  * String
  * It is a one time composes object,
@@ -98,7 +100,7 @@ void* mem_grow( void* , size_t obj_sz , size_t append, size_t* old_cap );
 
 struct string {
   const char* str;
-  size_t len;
+  size_t len;      /* length of the code units in this utf8 string */
 };
 
 extern struct string NULL_STRING;
@@ -109,19 +111,30 @@ extern struct string NONE_STRING;
 
 #define CONST_STRING(X) { X , ARRAY_SIZE(X)-1 }
 
-struct string string_dup( const struct string* str );
-struct string string_dupc( const char* str );
-
 /* Do not call string_destroy on constant string */
 struct string string_const( const char* str , size_t len );
 
-int string_eq( const struct string* l , const struct string* r );
+/* Please use the corresponding function to manipulate string which is
+ * treated to be the safe way to do string manipulation since we have
+ * utf8 encoded string sometimes. This API is used to replace the C string
+ * API in our code base */
 
-int string_eqc( const struct string* l , const char* str );
 
+/* The cmp of each string is *NOT* a dictionary order comparison but some
+ * certain type of order. It just uses as a way to give us a partial order */
 int string_cmp( const struct string* l , const struct string* r );
+int string_cmpcl(const struct string* l , const char* str , size_t len );
+#define string_cmpc(L,STR) string_cmpcl(L,STR,strlen(STR))
+#define string_eq( L , R ) (string_cmp( L , R ) == 0)
+#define string_eqc( L , R )(string_cmpc(L , R ) == 0)
+struct string string_dup( const struct string* str );
+struct string string_dupc( const char* str ); /* only work for C string */
+struct string string_dupu( const char* str , size_t l );
+#define string_len(L) ((L)->len)
+int string_runelen( const struct string* );
 
-void string_destroy( struct string* str );
+/* use this function to do copy, use strcpy is not *safe* */
+#define string_cpy( CBUF , L ) memcpy( CBUF, (L)->str , (L)->len )
 
 /* string null means the pointer to the str is NULL */
 #define string_null(S) ((S)->str == NULL)
@@ -130,12 +143,18 @@ void string_destroy( struct string* str );
  * contain any content */
 #define string_empty(S)(!string_null(S) && string_eq(S,&EMPTY_STRING))
 
+/* string version's strstr */
+const char*
+string_str( const struct string* l , const struct string* r );
+
 struct string
 string_concate( const struct string* l , const struct string* r );
 
 struct string
 string_multiply( const struct string* l , int times );
 
+/* destroy a string, do not call it on constant string */
+void string_destroy( struct string* str );
 
 /* ====================================================
  * String buffer
@@ -152,6 +171,8 @@ void strbuf_reserve( struct strbuf* buf , size_t cap );
 void strbuf_init( struct strbuf* buf );
 
 void strbuf_init_cap( struct strbuf* buf , size_t cap );
+
+void strbuf_push_rune( struct strbuf* buf , Rune );
 
 void strbuf_push( struct strbuf* buf , char c );
 

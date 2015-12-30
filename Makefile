@@ -13,7 +13,10 @@ ajjobj: $(SRC)
 libajj: ajjobj
 	ar rcs libajj.a all-in-one.o
 
-test: vm-test
+test: lex-test
+
+lex-test: libajj test/lex-test.c
+	cd test; gcc $(FLAGS) lex-test.c $(LINK) -o lex-test; cd -
 
 vm-test: libajj test/vm-test.c
 	cd test; gcc $(FLAGS) vm-test.c $(LINK) -o vm-test; cd -

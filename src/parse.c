@@ -83,7 +83,10 @@ struct loop_ctrl {
 struct lex_scope {
   struct lex_scope* parent; /* parent scope */
   struct {
-    char name[ AJJ_SYMBOL_NAME_MAX_SIZE ];
+    struct {
+      char str[ AJJ_SYMBOL_NAME_MAX_SIZE ];
+      size_t len;
+    } name;
     int idx;
   } lsys[ AJJ_LOCAL_CONSTANT_SIZE ];
   size_t len;
@@ -256,13 +259,14 @@ struct lex_scope* lex_scope_exit( struct parser*  p ) {
  * returns -1 represent a new symbol is set up
  * and non-negative number represents the name is found */
 static
-int lex_scope_set( struct parser* p , const char* name ) {
-  int i;
+int lex_scope_set( struct parser* p , const struct string* name ) {
+  size_t i;
   struct lex_scope* scp = lex_scope_top(p);
 
   /* Try to find symbol:name on local scope */
   for( i = 0 ; i < scp->len ; ++i ) {
-    if( strcmp(scp->lsys[i].name,name) == 0 ) {
+    if( string_cmpcl(name,scp->lsys[i].name.str,
+          scp->lsys[i].name.len ) == 0 ) {
       /* Find one, why we need to define it */
       return scp->lsys[i].idx;
     }
@@ -273,8 +277,9 @@ int lex_scope_set( struct parser* p , const char* name ) {
         AJJ_LOCAL_CONSTANT_SIZE);
     return -2; /* We cannot set any more constant */
   }
-  assert( strlen(name) < AJJ_SYMBOL_NAME_MAX_SIZE );
-  strcpy(scp->lsys[scp->len].name,name);
+  assert( name->len < AJJ_SYMBOL_NAME_MAX_SIZE );
+  string_cpy(scp->lsys[scp->len].name.str,name);
+  scp->lsys[scp->len].name.len = name->len;
   scp->lsys[scp->len].idx = scp->end++;
   ++scp->len;
   return -1; /* Indicate we have a new one */
@@ -282,14 +287,15 @@ int lex_scope_set( struct parser* p , const char* name ) {
 
 static
 int lex_scope_get_from_scope( struct lex_scope* cur,
-    const char* name , int* lvl ) {
+    const struct string* name , int* lvl ) {
   int l = 0;
   assert( cur ) ;
-  assert( strlen(name) < AJJ_LOCAL_CONSTANT_SIZE );
+  assert( name->len < AJJ_LOCAL_CONSTANT_SIZE );
   do {
     size_t i;
     for( i = 0 ; i < cur->len ; ++i ) {
-      if( strcmp(name,cur->lsys[i].name) == 0 ) {
+      if( string_cmpcl(name,cur->lsys[i].name.str,
+            cur->lsys[i].name.len) == 0 ) {
         if( lvl ) *lvl = l;
         return cur->lsys[i].idx;
       }
@@ -481,7 +487,7 @@ int parse_var_prefix( struct parser* p , struct emitter* em ,
   int idx;
   /* Check whether the variable is a local variable or
    * at least could be */
-  if((idx=lex_scope_get(p,var->str,NULL))<0) {
+  if((idx=lex_scope_get(p,var,NULL))<0) {
     /* Not a local variable, must be an upvalue */
     int const_idx;
     const_idx=program_const_str(em->prg,var,1);
@@ -1349,7 +1355,7 @@ int parse_func_prolog( struct parser* p , struct emitter* em ) {
   size_t i;
   for( i = 0 ; i < em->prg->par_size ; ++i ) {
     /* Generate rest of named parameters */
-    CALLE(lex_scope_set(p,em->prg->par_list[i].name.str)==-2);
+    CALLE(lex_scope_set(p,&(em->prg->par_list[i].name))==-2);
   }
   return 0;
 }
@@ -1366,11 +1372,11 @@ int parse_func_prolog( struct parser* p , struct emitter* em ) {
 
 static
 int alloc_func_builtin_var( struct parser* p ) {
-  CALLE(lex_scope_set(p,ARGNUM.str)==-2);
-  CALLE(lex_scope_set(p,FUNC.str)==-2);
-  CALLE(lex_scope_set(p,VARGS.str)==-2);
-  CALLE(lex_scope_set(p,CALLER.str)==-2);
-  CALLE(lex_scope_set(p,SELF.str)==-2);
+  CALLE(lex_scope_set(p,&ARGNUM)==-2);
+  CALLE(lex_scope_set(p,&FUNC)==-2);
+  CALLE(lex_scope_set(p,&VARGS)==-2);
+  CALLE(lex_scope_set(p,&CALLER)==-2);
+  CALLE(lex_scope_set(p,&SELF)==-2);
   return 0;
 }
 
@@ -1631,10 +1637,10 @@ static int parse_for_body( struct parser* p ,
 
   CALLE((scp=lex_scope_enter(p,1))==NULL);
 
-  CALLE((obj_idx=lex_scope_set(p,obj_name.str))==-2);
+  CALLE((obj_idx=lex_scope_set(p,&obj_name))==-2);
   assert(obj_idx == -1);
 
-  CALLE((itr_idx=lex_scope_set(p,itr_name.str))==-2);
+  CALLE((itr_idx=lex_scope_set(p,&itr_name))==-2);
   assert(itr_idx == -1);
 
   string_destroy(&obj_name); /* object name */
@@ -1664,14 +1670,14 @@ static int parse_for_body( struct parser* p ,
   deref_tp = -1;
   if( !string_null(key) && !string_null(val) ) {
     deref_tp = ITERATOR_KEYVAL;
-    if( lex_scope_set(p,key->str) != -1 ) {
+    if( lex_scope_set(p,key) != -1 ) {
       parser_rpt_err(p,"Cannot set up local variable:%s for loop!",
           key->str);
       string_destroy(key);
       string_destroy(val);
       return -1;
     }
-    if( lex_scope_set(p,val->str) != -1 ) {
+    if( lex_scope_set(p,val) != -1 ) {
       parser_rpt_err(p,"Cannot set up local variable:%s for loop!",
           val->str);
       string_destroy(key);
@@ -1680,7 +1686,7 @@ static int parse_for_body( struct parser* p ,
     }
   } else if( !string_null(val) ) {
     deref_tp = ITERATOR_VAL;
-    if( lex_scope_set(p,val->str) != -1 ) {
+    if( lex_scope_set(p,val) != -1 ) {
       parser_rpt_err(p,"Cannot set up local variable:%s for loop!",
           val->str);
       string_destroy(val);
@@ -1688,7 +1694,7 @@ static int parse_for_body( struct parser* p ,
     }
   } else if( !string_null(key) ) {
     deref_tp = ITERATOR_KEY;
-    if( lex_scope_set(p,key->str) != -1 ) {
+    if( lex_scope_set(p,key) != -1 ) {
       parser_rpt_err(p,"Cannot set up local variable:%s for loop!",
           val->str);
       string_destroy(key);
@@ -1862,11 +1868,11 @@ int parse_for( struct parser* p , struct emitter* em ) {
   }
   CONSUME(TK_IN);
   /* Ignore underscore since they serves as placeholder */
-  if( !string_null(&key) && strcmp(key.str,"_") == 0 ) {
+  if( !string_null(&key) && string_cmpcl(&key,"_",1) == 0 ) {
     string_destroy(&key);
     key = NULL_STRING;
   }
-  if( !string_null(&val) && strcmp(val.str,"_") == 0 ) {
+  if( !string_null(&val) && string_cmpcl(&val,"_",1) == 0 ) {
     string_destroy(&val);
     val = NULL_STRING;
   }
@@ -1920,13 +1926,15 @@ static
 int parse_set( struct parser* p, struct emitter* em ) {
   int var_idx;
   struct tokenizer* tk = &(p->tk);
+  struct string sym;
 
   assert( tk->tk == TK_SET );
   tk_move(tk);
 
   EXPECT_VARIABLE();
-  CALLE((var_idx=lex_scope_set(p,
-          strbuf_tostring(&(tk->lexeme)).str))==-2);
+  sym = strbuf_tostring(&(tk->lexeme));
+  CALLE((var_idx=lex_scope_set(p,&sym))==-2);
+
   tk_move(tk); /* Move forward */
 
   /* check if we have an pending expression or just end of the SET scope*/
@@ -1984,6 +1992,7 @@ parse_move( struct parser* p , struct emitter* em ) {
   int src_idx;
   int dst_level;
   int src_level;
+  struct string sym;
 
   struct tokenizer* tk = &(p->tk);
 
@@ -1992,8 +2001,9 @@ parse_move( struct parser* p , struct emitter* em ) {
 
   EXPECT_VARIABLE(); /* dest variable */
 
+  sym = strbuf_tostring(&(tk->lexeme));
   if( (dst_idx=lex_scope_get(p,
-          strbuf_tostring(&(tk->lexeme)).str,
+          &sym,
           &dst_level))<0 ) {
     parser_rpt_err(p,"In move statement, the target variable:%s is not defined!",
         strbuf_tostring(&(tk->lexeme)).str);
@@ -2004,8 +2014,9 @@ parse_move( struct parser* p , struct emitter* em ) {
   CONSUME(TK_ASSIGN); /* consume the assign */
   EXPECT_VARIABLE(); /* target variable */
 
+  sym = strbuf_tostring(&(tk->lexeme));
   if( (src_idx=lex_scope_get(p,
-          strbuf_tostring(&(tk->lexeme)).str,
+          &sym,
           &src_level))<0 ) {
     parser_rpt_err(p,"In move statement, the source variable:%s is not defined!",
         strbuf_tostring(&(tk->lexeme)).str);
@@ -2078,10 +2089,12 @@ parse_with( struct parser* p , struct emitter* em ) {
 
   if( tk->tk == TK_VARIABLE ) {
     int idx;
+    struct string sym;
     /* We have shortcut writing, so we need to generate a new lexical
      * scope */
+    sym = strbuf_tostring(&(tk->lexeme));
     CALLE(lex_scope_enter(p,0) == NULL);
-    CALLE((idx=lex_scope_set(p,strbuf_tostring(&(tk->lexeme)).str))==-2);
+    CALLE((idx=lex_scope_set(p,&sym)==-2));
     tk_move(tk);
     ENTER_SCOPE(); /* enter the scope */
     CALLE(parse_assign(p,em,idx));
@@ -2343,6 +2356,12 @@ parse_scope( struct parser* p , struct emitter* em ,
     case TK_END##T: \
       goto done;
 
+#define FAIL_HERE(X) \
+  do { \
+    printf("FAIL:%s\n",X); \
+    goto fail; \
+  } while(0)
+
   do {
     if( tk->tk == TK_TEXT ) {
       if( only_extends ) {
@@ -2367,8 +2386,8 @@ parse_scope( struct parser* p , struct emitter* em ,
           CALLE(parse_block(p,em));
         else if( tk->tk == TK_ENDBLOCK )
           goto done;
-        else
-          goto fail;
+        else 
+          FAIL_HERE("1");
       } else {
         switch(tk->tk) {
           HANDLE_CASE(IF,branch)
@@ -2383,19 +2402,19 @@ parse_scope( struct parser* p , struct emitter* em ,
             if( is_in_main(p) )
               CALLE(parse_include(p,em));
             else
-              goto fail;
+              FAIL_HERE("2");
             break;
           case TK_IMPORT:
             if( is_in_main(p) )
               CALLE(parse_import(p,em));
             else
-              goto fail;
+              FAIL_HERE("3");
             break;
           case TK_EXTENDS:
             if( is_in_main(p) )
               CALLE(parse_extends(p,em));
             else
-              goto fail;
+              FAIL_HERE("4");
             break;
           case TK_ELIF:
           case TK_ELSE:
@@ -2410,28 +2429,28 @@ parse_scope( struct parser* p , struct emitter* em ,
             if( lex_scope_top(p)->in_loop ) {
               CALLE(parse_break(p,em));
             } else {
-              goto fail;
+              FAIL_HERE("5");
             }
             break;
           case TK_CONTINUE:
             if( lex_scope_top(p)->in_loop ) {
               CALLE(parse_continue(p,em));
             } else {
-              goto fail;
+              FAIL_HERE("6");
             }
             break;
           case TK_RETURN:
             CALLE(parse_return(p,em));
             break;
           default:
-              goto fail;
+            FAIL_HERE("7");
         }
       }
     } else if( tk->tk == TK_LEXP ) {
       CALLE(parse_print(p,em));
     } else {
       if( tk->tk != TK_EOF )
-        goto fail;
+          FAIL_HERE("8");
       else
         break;
     }

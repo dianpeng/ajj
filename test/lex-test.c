@@ -1,5 +1,6 @@
 #include <stdio.h>
-#include "../src/lex.h"
+#include <lex.h>
+#include <ajj-priv.h>
 
 
 static
@@ -12,7 +13,7 @@ void test_basic() {
       "{% for endfor variable else elif endif macro endmacro macroX %}" \
       "{% call endcall filter endfilter do set endset with endwith "\
       "move block endblock extends import endimport include endinclude in as " \
-      "continue break upvalue endupvalue json override fix %}";
+      "continue break upvalue endupvalue json override optional %}";
 
     int i;
     token_id token[] = {
@@ -60,7 +61,7 @@ void test_basic() {
       TK_ENDUPVALUE,
       TK_JSON,
       TK_OVERRIDE,
-      TK_FIX,
+      TK_OPTIONAL,
       TK_RSTMT
     };
 
@@ -75,6 +76,7 @@ void test_basic() {
   }
   {
     struct tokenizer tk;
+    struct string lexeme;
     const char* source = \
       "TextAHahaha{{ a.b }}YouAreCorrect!";
     token_id token[] = {
@@ -88,21 +90,25 @@ void test_basic() {
     };
     tk_init(&tk,source);
     assert(tk.tk == TK_TEXT);
-    assert(strcmp(tk.lexeme.str,"TextAHahaha")==0);
+    lexeme = strbuf_tostring(&(tk.lexeme));
+    assert(string_cmpc(&lexeme,"TextAHahaha")==0);
     tk_move(&tk);
     assert(tk.tk == TK_LEXP);
     tk_move(&tk);
     assert(tk.tk == TK_VARIABLE);
-    assert(strcmp(tk.lexeme.str,"a")==0);
+    lexeme = strbuf_tostring(&(tk.lexeme));
+    assert(string_cmpc(&lexeme,"a")==0);
     tk_move(&tk);
     assert(tk.tk == TK_DOT);
     tk_move(&tk);
     assert(tk.tk == TK_VARIABLE);
-    assert(strcmp(tk.lexeme.str,"b")==0);
+    lexeme = strbuf_tostring(&(tk.lexeme));
+    assert(string_cmpc(&lexeme,"b")==0);
     tk_move(&tk);
     assert(tk.tk == TK_REXP);
     tk_move(&tk);
-    assert(strcmp(tk.lexeme.str,"YouAreCorrect!")==0);
+    lexeme = strbuf_tostring(&(tk.lexeme));
+    assert(string_cmpc(&lexeme,"YouAreCorrect!")==0);
     tk_move(&tk);
     assert(tk.tk == TK_EOF);
     tk_destroy(&tk);
@@ -190,6 +196,7 @@ void test_basic() {
   }
   {
     struct tokenizer tk;
+    struct string lexeme;
     const char* source = \
       "{% 1.2345 123 'Hello\\\'World' True true false False None none %}";
 
@@ -206,7 +213,8 @@ void test_basic() {
     tk_move(&tk);
 
     assert(tk.tk == TK_STRING);
-    assert(strcmp(tk.lexeme.str,"Hello'World")==0);
+    lexeme = strbuf_tostring(&(tk.lexeme));
+    assert(string_cmpc(&lexeme,"Hello'World")==0);
     tk_move(&tk);
 
     assert(tk.tk == TK_TRUE);
@@ -245,16 +253,18 @@ void test_basic() {
   }
   {
     struct tokenizer tk;
+    struct string lexeme;
     const char* source = \
       "{% raw %} {% Hello World %} {% for } foreachshit {%} %} }%{% {% endraw %}";
     tk_init(&tk,source);
     assert(tk.tk == TK_TEXT);
-    assert(strcmp(tk.lexeme.str,
+    lexeme = strbuf_tostring(&(tk.lexeme));
+    assert(string_cmpc(&lexeme,
           " {% Hello World %} {% for } foreachshit {%} %} }%{% ")==0);
     tk_destroy(&tk);
   }
 }
 
 int main() {
-  test_basic();
+    test_basic();
 }

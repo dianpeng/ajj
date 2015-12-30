@@ -193,11 +193,11 @@ void ajj_add_vvalue( struct ajj* a , struct upvalue_table* ut,
       {
         struct upvalue* uv;
         const char* str = va_arg(vl,const char*);
+        size_t str_l= va_arg(vl,size_t);
         n = string_dupc(name);
         uv = upvalue_table_overwrite(a,ut,&n,1,1);
         uv->gut.val = ajj_value_assign(
-            ajj_object_create_string(a,
-              scp,str,strlen(str),0));
+            ajj_object_create_string(a,scp,str,str_l,0));
         break;
       }
     case AJJ_VALUE_OBJECT:
@@ -327,11 +327,11 @@ void ajj_upvalue_add_value( struct ajj* a,
       {
         struct upvalue* uv;
         const char* str = va_arg(vl,const char*);
+        size_t str_l = va_arg(vl,size_t);
         n = string_dupc(name);
         uv = upvalue_table_add(a,a->rt->global,&n,1,0,0);
         uv->gut.val = ajj_value_assign(
-            ajj_object_create_string(a,
-              a->rt->cur_gc,str,strlen(str),0));
+            ajj_object_create_string(a,a->rt->cur_gc,str,str_l,0));
         break;
       }
     case AJJ_VALUE_OBJECT:
@@ -635,8 +635,8 @@ int ajj_value_in( struct ajj* a,
         ajj_error(a,"String can only test in operator with string!");
         return -1;
       } else {
-        *result = strstr(ajj_value_to_cstr(l),
-              ajj_value_to_cstr(r)) != NULL;
+        *result = string_str(ajj_value_to_string(l),
+              ajj_value_to_string(r)) != NULL;
         return 0;
       }
     case AJJ_VALUE_OBJECT:
