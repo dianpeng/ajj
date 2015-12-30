@@ -423,8 +423,19 @@ void strbuf_destroy( struct strbuf* buf ) {
 }
 
 char strbuf_index( const struct strbuf* buf , int idx ){
-  assert( idx < buf->len );
+  assert( idx < (int)(buf->len) );
   return buf->str[idx];
+}
+
+void strbuf_resize(struct strbuf* buf , size_t size) {
+  if( size + 1 >= buf->cap ) {
+    strbuf_reserve(buf,size+1);
+    buf->len = size;
+    buf->str[size] = 0;
+  } else {
+    buf->len = size;
+    buf->str[buf->len] = 0;
+  }
 }
 
 void strbuf_reset( struct strbuf* buf ) {

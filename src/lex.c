@@ -14,11 +14,13 @@
     return (TK); \
   } while(0)
 
+static
+int tk_lex_rmlead( struct tokenizer* tk , int pos );
+
 token_id tk_init( struct tokenizer* tk , const char* src ) {
   tk->src = src;
   tk->pos = 0;
   tk->mode = TOKENIZE_JINJA;
-  tk->tk = TK_UNKNOWN;
   strbuf_init(&(tk->lexeme));
   return tk_lex(tk);
 }
@@ -85,7 +87,9 @@ int tk_next_skip_cmt( struct tokenizer* tk , size_t pos ) {
     if( c1 == '#' ) {
       GET_C2(c2,i,o1,o2);
       if( c2 == '}' ) {
-        tk->pos = i + o1+o2;
+        tk->pos = i + o1+o2 +
+          tk_lex_rmlead(tk,i+o1+o2); /* remove leading 
+                                      * space or new line */
         return 0;
       }
     }
@@ -139,81 +143,61 @@ token_id tk_lex_num( struct tokenizer* tk ) {
   }
 }
 
-enum {
-  TRAILING,
-  BOTH
-};
-
 static
-int tk_lex_text( struct tokenizer* tk , int opt , size_t len ) {
-  if(opt == BOTH) {
-    size_t i = 0;
-    while(i < tk->lexeme.len) {
-      Rune c;
-      int o = chartorune(&c,tk->lexeme.str+i);
-      assert( c != Runeerror );
-      if( tk_is_ispace(c) ) { 
-        i += o;
-        continue;
-      } else {
-        if(c == '\n')
-          i += o;
-        break;
-      }
+int tk_lex_rmtrail( struct tokenizer* tk , size_t len ) {
+  /* Trailing algorithm is a bit of complicated because
+   * UTF8 cannot decode in backward direction. So we cannot
+   * just traverl backwards. We just record the last seen
+   * line break then we know which characters we can safely
+   * drop */
+
+  size_t i = 0;
+  int last = -1;
+  assert( tk->lexeme.len );
+
+  while(i<tk->lexeme.len) {
+    Rune c;
+    int o = chartorune(&c,tk->lexeme.str+i);
+    assert( o != Runeerror );
+    assert( o );
+    if(!tk_is_ispace(c)) {
+      /* if not whitespace, just reset the seen pointer */
+      last = -1;
+    } else {
+      if(last<0) last = i;
     }
-    if( i == tk->lexeme.len ) {
+    i += o;
+  }
+  if(last<0) {
+    /* we cannot remove anything */
+    return 0;
+  } else {
+    if(last == 0) {
       strbuf_reset(&(tk->lexeme));
-      tk->pos += len; /* skip this text */
+      tk->pos += len;
       return -1;
     } else {
-      struct strbuf sbuf;
-      strbuf_init(&sbuf);
-      strbuf_append(&sbuf,(tk->lexeme.str+i),
-          tk->lexeme.len-i);
-      strbuf_destroy(&(tk->lexeme));
-      tk->lexeme = sbuf;
-    }
-  } 
-  { 
-    /* Trailing algorithm is a bit of complicated because
-     * UTF8 cannot decode in backward direction. So we cannot
-     * just traverl backwards. We just record the last seen
-     * line break then we know which characters we can safely
-     * drop */
-
-    size_t i = 0;
-    int last = -1;
-
-    while(i<tk->lexeme.len) {
-      Rune c;
-      int o = chartorune(&c,tk->lexeme.str+i);
-      assert( o != Runeerror );
-      assert( o );
-      if( c == '\n' ) {
-        last = i;
-      } else {
-        if(!tk_is_ispace(c)) {
-          /* if not whitespace, just reset the seen pointer */
-          last = -1;
-        }
-      }
-      i += o;
-    }
-    if(last<0) {
-      /* we cannot remove anything */
+      strbuf_resize(&(tk->lexeme),last);
       return 0;
-    } else {
-      if(last == 0) {
-        /* all string can be removed */
-        strbuf_reset(&(tk->lexeme));
-        tk->pos += len;
-        return -1;
-      } else {
-        tk->pos = last;
-        return 0;
-      }
     }
   }
+}
+
+static
+int tk_lex_rmlead( struct tokenizer* tk , int pos ) {
+  size_t i = pos;
+  while(1) {
+    Rune c;
+    int o = chartorune(&c,tk->src+i);
+    if( !tk_is_ispace(c) ) {
+      if(c == '\n') {
+        i += o;
+      }
+      break;
+    }
+    i += o;
+  }
+  return i - pos;
 }
 
 /* keyword: for endfor if elif endif in and or not
@@ -583,12 +567,12 @@ int tk_lex_script( struct tokenizer* tk ) {
       case '%':
         GET_C2(c2,i,o1,o2);
         if( c2 == '}' ) {
-          RETURN(TK_RSTMT,o1+o2);
+          RETURN(TK_RSTMT,2+tk_lex_rmlead(tk,i+2));
         } else {
-          RETURN(TK_MOD,o1);
+          RETURN(TK_MOD,1);
         }
         break;
-      case '+': RETURN(TK_ADD,o1);
+      case '+': RETURN(TK_ADD,1);
       case '-': /* -%} will be treated same as %} */
         GET_C2(c2,i,o1,o2);
         if( c2 == '%' ) {
@@ -596,7 +580,7 @@ int tk_lex_script( struct tokenizer* tk ) {
           if( c3 == '}' )
             /* for compatibility, we accept -%} as end of tag,
              * but we it doesn't support any semantic */
-            RETURN(TK_RSTMT,3);
+            RETURN(TK_RSTMT,3+tk_lex_rmlead(tk,i+3));
         }
         RETURN(TK_SUB,1);
       case '*':
@@ -787,7 +771,6 @@ utf8_fail:
 static
 token_id tk_lex_jinja( struct tokenizer* tk ) {
   int i = tk->pos;
-  int opt;
   Rune c1,c2; /* c1 is the current character,
                * c2 is the look ahead one */
   size_t o1,o2; /* offset1 is the current character's offset
@@ -799,12 +782,8 @@ token_id tk_lex_jinja( struct tokenizer* tk ) {
   strbuf_reset( &(tk->lexeme) );
 
 #define CHECK_TEXT() \
-  if(tk->tk == TK_UNKNOWN_NUMBER || tk->tk == TK_REXP) { \
-    opt = TRAILING; \
-  } else { \
-    opt = BOTH; \
-  } \
-  if( !tk_lex_text(tk,opt,i-tk->pos) ) { \
+  if( tk->lexeme.len > 0 && \
+      !tk_lex_rmtrail(tk,i-tk->pos) ) { \
     RETURN(TK_TEXT,i-tk->pos); \
   }
 

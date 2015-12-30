@@ -184,6 +184,8 @@ void strbuf_destroy( struct strbuf* buf );
 
 char strbuf_index( const struct strbuf* buf , int idx );
 
+void strbuf_resize( struct strbuf* buf , size_t sz );
+
 void strbuf_reset( struct strbuf* buf );
 
 #define strbuf_clear strbuf_reset
