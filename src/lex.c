@@ -976,3 +976,8 @@ void tk_get_coordinate( const char* src , size_t until,
   *ln = l;
   *pos = p;
 }
+
+#undef GET_C1
+#undef GET_C2
+#undef GET_C3
+#undef RETURN
