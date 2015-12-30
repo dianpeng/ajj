@@ -444,8 +444,7 @@ ajj_object_move( struct ajj* a,
     struct gc_scope* scp , struct ajj_object* obj ) {
   /* only do move when we fonud out that the target scope has smaller
    * scp_id value since this means we have less lifecycle */
-  if( (scp->scp_id == 0 || obj->scp->scp_id == 0 ) &&
-      (obj->scp->scp_id > scp->scp_id) ) {
+  if( (obj->scp->scp_id > scp->scp_id) ) {
     LREMOVE(obj);
     LINSERT(obj,&(scp->gc_tail));
     obj->scp = scp;
@@ -463,8 +462,9 @@ ajj_object_move( struct ajj* a,
 }
 
 struct ajj_value
-ajj_value_move( struct ajj* a,
-    struct gc_scope* scp, const struct ajj_value* val ) {
+ajj_value_move_scope( struct ajj* a,
+    struct gc_scope* scp,
+    const struct ajj_value* val ) {
   if(AJJ_IS_PRIMITIVE(val)) {
     return *val;
   } else {

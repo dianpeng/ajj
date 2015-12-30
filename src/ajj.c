@@ -27,7 +27,6 @@ struct ajj* ajj_create() {
   slab_init(&(r->gc_slab),
       GC_SLAB_SIZE,sizeof(struct gc_scope));
   map_create(&(r->tmpl_tbl),sizeof(struct ajj_object*),32);
-  gc_root_init(&(r->gc_temp),0);
   gc_root_init(&(r->gc_root),1);
   r->rt = NULL;
   /* initiliaze the upvalue table */
@@ -206,7 +205,7 @@ void ajj_add_vvalue( struct ajj* a , struct upvalue_table* ut,
         struct ajj_value* val = va_arg(vl,struct ajj_value*);
         n = string_dupc(name);
         uv = upvalue_table_overwrite(a,ut,&n,1,1);
-        uv->gut.val = ajj_value_move(a,scp,val);
+        uv->gut.val = ajj_value_move_scope(a,scp,val);
         break;
       }
     default:
@@ -340,7 +339,7 @@ void ajj_upvalue_add_value( struct ajj* a,
         struct ajj_value* val = va_arg(vl,struct ajj_value*);
         n = string_dupc(name);
         uv = upvalue_table_add(a,a->rt->global,&n,1,0,0);
-        uv->gut.val = ajj_value_move(a,a->rt->cur_gc,val);
+        uv->gut.val = ajj_value_move_scope(a,a->rt->cur_gc,val);
         break;
       }
     default:

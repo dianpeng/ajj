@@ -1511,12 +1511,13 @@ int exit_function( struct ajj* a , const struct ajj_value* ret ) {
     fr->esp -= stk_sz;
     assert( fr->esp >= fr->ebp );
     /* stk_push the return value onto the stack */
-    stk_push(a,*ret); /* block will _never_ return anything on stack */
+    stk_push(a,*ret);
+
     /* Before clear the GC scope, we need to move the return value
      * from the function's inner scope to the caller's scope */
     if(ret->type == AJJ_VALUE_STRING ||
        ret->type == AJJ_VALUE_OBJECT ) {
-      ajj_object_move(a,&(a->gc_temp),ret->value.object);
+      ajj_object_move(a,gc,ret->value.object);
     }
     /* clear gc scope in case the function is returned by a return
      * instruction */
@@ -1524,11 +1525,6 @@ int exit_function( struct ajj* a , const struct ajj_value* ret ) {
       struct gc_scope* p = a->rt->cur_gc->parent;
       gc_scope_destroy(a,a->rt->cur_gc);
       a->rt->cur_gc = p;
-    }
-
-    if(ret->type == AJJ_VALUE_STRING ||
-       ret->type == AJJ_VALUE_OBJECT ) {
-      ajj_object_move(a,a->rt->cur_gc,ret->value.object);
     }
   }
   return 0;
@@ -2435,9 +2431,6 @@ int run_jinja( struct ajj* a ) {
       NULL,
       NULL);
   fail = vm_main(a);
-  /* check temporary gc scope is empty since all the temporary
-   * objects should be already cleared */
-  assert( a->gc_temp.gc_tail.next = &(a->gc_temp.gc_tail) );
   return fail;
 }
 

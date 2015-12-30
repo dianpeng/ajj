@@ -154,16 +154,75 @@ struct ajj_value ajj_value_new_string( struct ajj* a,
 struct ajj_value ajj_value_new_const_string( struct ajj* a,
     const char* str ,size_t len );
 
-struct ajj_value ajj_value_new_object( struct ajj* a,
-    const char* name ,
-    size_t arg_num ,
-    struct ajj_value* args );
-
 #define ajj_value_to_boolean(V) ((V)->value.boolean)
 #define ajj_value_to_number(V) ((V)->value.number)
 const char* ajj_value_to_str( const struct ajj_value* val );
 
-/* AJJ value operators */
+/* General object manipulation method */
+struct ajj_value
+ajj_value_new_object( struct ajj* a,
+    const char* name,
+    struct ajj_value* arg,
+    size_t arg_len );
+
+void ajj_value_destroy_object( struct ajj* a,
+    struct ajj_value* obj );
+
+int ajj_value_call_object_method( struct ajj* a,
+    const char* name,
+    struct ajj_value* arg,
+    size_t arg_len,
+    struct ajj_value* ret );
+
+/* Slot method */
+int ajj_value_attr_get( struct ajj* a,
+    const struct ajj_value* obj,
+    const struct ajj_value* key,
+    struct ajj_value* ret );
+
+int ajj_value_attr_set( struct ajj* a,
+    const struct ajj_value* obj,
+    const struct ajj_value* key,
+    const struct ajj_value* val,
+    struct ajj_value* ret );
+
+int ajj_value_attr_push( struct ajj* a,
+    const struct ajj_value* obj,
+    const struct ajj_value* val,
+    struct ajj_value* ret );
+
+const char* ajj_display( struct ajj* a,
+    const struct ajj_value* v ,
+    size_t* length ,
+    int* own );
+
+struct ajj_value ajj_value_move( struct ajj* a,
+    const struct ajj_value* self,
+    struct ajj_value* tar );
+
+int ajj_value_iter_start( struct ajj* a,
+    const struct ajj_value* obj,
+    int* itr );
+
+int ajj_value_iter_move( struct ajj* a,
+    const struct ajj_value* obj,
+    int itr, int* itr_ret );
+
+int ajj_value_iter_has ( struct ajj* a,
+    const struct ajj_value* obj,
+    int itr, int* result );
+
+int ajj_value_iter_get_key( struct ajj* a,
+    const struct ajj_value* obj,
+    int itr,
+    const char** str,
+    size_t* str_len );
+
+int ajj_value_iter_get_val( struct ajj* a,
+    const struct ajj_value* obj,
+    int itr,
+    struct ajj_value* ret );
+
 int ajj_value_in ( struct ajj* a,
     const struct ajj_value* obj,
     const struct ajj_value* target,
@@ -265,10 +324,6 @@ int ajj_io_write( struct ajj_io* , const void* mem , size_t len );
 void ajj_io_flush( struct ajj_io* );
 
 /* MISC ============================= */
-const char* ajj_display( struct ajj* a,
-    const struct ajj_value* v ,
-    size_t* length ,
-    int* own );
 
 void* ajj_load_file( struct ajj* , const char* , size_t* );
 

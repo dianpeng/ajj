@@ -293,14 +293,10 @@ ajj_object_get_c_method( const struct ajj_object* obj ,
 struct ajj_value ajj_value_iter( int itr );
 struct ajj_value ajj_value_assign( struct ajj_object* obj );
 
-/* This is the only safe way to copy an ajj_value to another value
- * holder. Internally it will copy the primitive type or MOVE the
- * none-primitive type to the target gc_scope. If gc_scope is NULL,
- * then this value is escaped and it means no gc_scope will hold it
- * The typical usage is for assigning to upvalue */
 struct ajj_value
-ajj_value_move( struct ajj* , 
-    struct gc_scope* , const struct ajj_value* );
+ajj_value_move_scope( struct ajj* a ,
+    struct gc_scope* scp,
+    const struct ajj_value* );
 
 /* This allow user to delete a string promptly without waiting for the
  * corresponding gc scope exit */

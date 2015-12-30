@@ -91,7 +91,7 @@ int list_append( struct ajj* a ,
 
   /* move the target value to THIS gc scope */
   for( i = 0 ; i < arg_len ; ++i ) {
-    l->entry[l->len++] = ajj_value_move(a,
+    l->entry[l->len++] = ajj_value_move_scope(a,
         obj->value.object->scp,arg+i);
   }
 
@@ -120,7 +120,7 @@ int list_extend( struct ajj* a ,
      * value to the new scope */
     for( i = 0 ; i < t->len ; ++i ) {
       l->entry[l->len++] =
-        ajj_value_move(a,obj->value.object->scp,t->entry+i);
+        ajj_value_move_scope(a,obj->value.object->scp,t->entry+i);
     }
 
     *ret = *obj;
@@ -274,7 +274,7 @@ void list_attr_set( struct ajj* a,
   else {
     struct list* l = LIST(obj);
     if( (size_t)i < l->len ) {
-      l->entry[i] = ajj_value_move(a,
+      l->entry[i] = ajj_value_move_scope(a,
           obj->value.object->scp,
           val);
     }
@@ -299,7 +299,7 @@ void list_move( struct ajj* a, struct ajj_value* obj ) {
   assert( IS_A(obj,LIST_TYPE) );
   l = LIST(obj);
   for( i = 0 ; i < l->len ; ++i ) {
-    ajj_value_move(a,obj->value.object->scp,
+    ajj_value_move_scope(a,obj->value.object->scp,
         l->entry + i );
   }
 }
@@ -562,7 +562,7 @@ int dict_update( struct ajj* a ,
     struct map* m = DICT(obj);
     struct ajj_value* val;
     if( (val = map_find(m,&key)) ) {
-      *val = ajj_value_move(a,obj->value.object->scp,arg+1);
+      *val = ajj_value_move_scope(a,obj->value.object->scp,arg+1);
       *ret = AJJ_TRUE;
     } else {
       *ret = AJJ_FALSE;
@@ -716,7 +716,7 @@ void dict_move( struct ajj* a, struct ajj_value* obj ) {
   while( map_iter_has(d,itr) ) {
     struct map_pair p =
       map_iter_deref(d,itr);
-    ajj_value_move(a,obj->value.object->scp,
+    ajj_value_move_scope(a,obj->value.object->scp,
         (struct ajj_value*)p.val);
     itr = map_iter_move(d,itr);
   }
@@ -1358,7 +1358,7 @@ void cycler_move( struct ajj* a, struct ajj_value* obj ) {
   assert( IS_A(obj,CYCLER_TYPE) );
   c = CYCLER(obj);
   for( i = 0 ; i < c->len ; ++i ) {
-    ajj_value_move(a,obj->value.object->scp,
+    ajj_value_move_scope(a,obj->value.object->scp,
         c->data+i);
   }
 }
