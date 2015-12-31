@@ -24,7 +24,10 @@
   (*ret) = AJJ_NONE; \
   return AJJ_EXEC_OK
 
-#define IS_A(val,T) (((val)->type == AJJ_VALUE_OBJECT) && ((val)->value.object->tp = T))
+#define IS_A(val,T)  \
+  (((val)->type == AJJ_VALUE_OBJECT) && \
+   ((val)->value.object->tp = T))
+
 #define OBJECT(V) ((V)->value.object->val.obj.data)
 
 /* LIST */
@@ -107,8 +110,9 @@ int list_extend( struct ajj* a ,
     size_t arg_len,
     struct ajj_value* ret ) {
   struct list* l = LIST(obj);
-  if( arg_len > 1 || !IS_A(arg,LIST_TYPE) )
-    EXEC_FAIL1(a,"%s","list::extend can only accept 1 argument as a list!");
+  if( arg_len != 1 || !IS_A(arg,LIST_TYPE) )
+    EXEC_FAIL1(a,"%s","list::extend can only accept 1 argument "
+        "which must be a list!");
   else {
     struct list* t  = LIST(arg);
     size_t i;

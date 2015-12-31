@@ -337,7 +337,7 @@ int symbol( struct parser* p , struct string* output ) {
   struct tokenizer* tk = &(p->tk);
   assert(tk->tk == TK_VARIABLE);
   if( tk->lexeme.len >= AJJ_SYMBOL_NAME_MAX_SIZE ) {
-    parser_rpt_err(p,"Local symbol is too long ,longer than:%d",
+    parser_rpt_err(p,"Local symbol is too long ,longer than:%d!",
         AJJ_SYMBOL_NAME_MAX_SIZE);
     return -1;
   } else {
@@ -372,7 +372,7 @@ int parse_seq( struct parser* p , struct emitter* em , int rtk ) {
       tk_move(tk);
       break;
     } else {
-      parser_rpt_err(p,"Unknown token:%s,expect \",\" or \"%s\"",
+      parser_rpt_err(p,"Unknown token:%s,expect \",\" or \"%s\"!",
           tk_get_name(tk->tk),
           tk_get_name(rtk));
       return -1;
@@ -1066,7 +1066,7 @@ parse_constseq( struct parser* p , int ltk , int rtk ,
       tk_move(tk);
       break;
     } else {
-      parser_rpt_err(p,"constexpr: unknown token here:%s "
+      parser_rpt_err(p,"constexpr: unexpected token here:%s "
           "expect \",\" or \"%s\"",
           tk_get_name(ltk),
           tk_get_name(rtk));
@@ -1109,7 +1109,7 @@ parse_constdict( struct parser* p , struct ajj_value* output ) {
       tk_move(tk);
     } else {
       parser_rpt_err(p,
-          "constexpr: unknown token:%s, expect \":\" or \"}\"",
+          "constexpr: unexpected token:%s, expect \":\" or \"}\"",
           tk_get_name(tk->tk));
       return -1;
     }
@@ -1128,7 +1128,7 @@ parse_constdict( struct parser* p , struct ajj_value* output ) {
       tk_move(tk);
       break;
     } else {
-      parser_rpt_err(p,"constexpr: unknown token:%s,expect \",\" or \"}\"",
+      parser_rpt_err(p,"constexpr: unexpected token:%s,expect \",\" or \"}\"",
           tk_get_name(tk->tk));
       return -1;
     }
@@ -2263,7 +2263,7 @@ parse_include( struct parser* p , struct emitter* em ) {
     CONSUME(TK_RSTMT);
     opt = INCLUDE_JSON;
   } else {
-    parser_rpt_err(p,"Unknown token here in include scope:%s",
+    parser_rpt_err(p,"Unexpected token here in include scope:%s!",
         tk_get_name(tk->tk));
     return -1;
   }
@@ -2462,7 +2462,7 @@ done:
   return 0;
 
 fail:
-  parser_rpt_err(p,"Unknown token in scope:%s!",
+  parser_rpt_err(p,"Unexpected token in scope:%s!",
       tk_get_name(tk->tk));
   return -1;
 }
