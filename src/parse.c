@@ -2356,12 +2356,6 @@ parse_scope( struct parser* p , struct emitter* em ,
     case TK_END##T: \
       goto done;
 
-#define FAIL_HERE(X) \
-  do { \
-    printf("FAIL:%s\n",X); \
-    goto fail; \
-  } while(0)
-
   do {
     if( tk->tk == TK_TEXT ) {
       if( only_extends ) {
@@ -2387,7 +2381,7 @@ parse_scope( struct parser* p , struct emitter* em ,
         else if( tk->tk == TK_ENDBLOCK )
           goto done;
         else 
-          FAIL_HERE("1");
+          goto fail;
       } else {
         switch(tk->tk) {
           HANDLE_CASE(IF,branch)
@@ -2402,19 +2396,19 @@ parse_scope( struct parser* p , struct emitter* em ,
             if( is_in_main(p) )
               CALLE(parse_include(p,em));
             else
-              FAIL_HERE("2");
+              goto fail;
             break;
           case TK_IMPORT:
             if( is_in_main(p) )
               CALLE(parse_import(p,em));
             else
-              FAIL_HERE("3");
+              goto fail;
             break;
           case TK_EXTENDS:
             if( is_in_main(p) )
               CALLE(parse_extends(p,em));
             else
-              FAIL_HERE("4");
+              goto fail;
             break;
           case TK_ELIF:
           case TK_ELSE:
@@ -2429,28 +2423,28 @@ parse_scope( struct parser* p , struct emitter* em ,
             if( lex_scope_top(p)->in_loop ) {
               CALLE(parse_break(p,em));
             } else {
-              FAIL_HERE("5");
+              goto fail;
             }
             break;
           case TK_CONTINUE:
             if( lex_scope_top(p)->in_loop ) {
               CALLE(parse_continue(p,em));
             } else {
-              FAIL_HERE("6");
+              goto fail;
             }
             break;
           case TK_RETURN:
             CALLE(parse_return(p,em));
             break;
           default:
-            FAIL_HERE("7");
+            goto fail;
         }
       }
     } else if( tk->tk == TK_LEXP ) {
       CALLE(parse_print(p,em));
     } else {
       if( tk->tk != TK_EOF )
-          FAIL_HERE("8");
+        goto fail;
       else
         break;
     }

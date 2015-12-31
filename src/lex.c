@@ -880,7 +880,6 @@ token_id tk_move( struct tokenizer* tk ) {
   }
   tk->pos += tk->tk_len;
   ret = tk_lex(tk);
-  assert(tk->tk_len != 56 && tk->pos != 2);
   return ret;
 }
 
