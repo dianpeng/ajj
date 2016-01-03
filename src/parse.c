@@ -861,6 +861,11 @@ done:
 }
 #undef PUSH_OP
 
+/* The binary operation parsing is not traditional table lookup
+ * way with its precendence but handle unrolled function. The
+ * reason is because we don't have AST so I assume it would be hard
+ * to make all the semantic action has similar syntax. So I unroll
+ * the loop in each sub function and call it manually .. :) */
 static
 int parse_factor( struct parser* p, struct emitter* em ) {
   struct tokenizer* tk = &(p->tk);

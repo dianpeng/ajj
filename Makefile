@@ -1,6 +1,6 @@
-OPT := -O0
+OPT := -g -Os
 PWD := $(shell pwd)
-FLAGS := $(OPT) -g -Wpedantic -Wall -I$(PWD)/src
+FLAGS := $(OPT) -Wpedantic -Wall -I$(PWD)/src
 PROFILE_FLAGS := -fprofile-arcs -ftest-coverage
 LINK := -L$(PWD)/. -lajj -lm
 SRC := $(wildcard src/*.c)
