@@ -292,7 +292,7 @@ void list_attr_push( struct ajj* a,
   struct ajj_value arg = *val;
   struct ajj_value ret;
   assert( IS_A(obj,LIST_TYPE) );
-  CHECK(!list_append(a,obj,&arg,1,&ret) == AJJ_EXEC_OK);
+  CHECK(list_append(a,obj,&arg,1,&ret) == AJJ_EXEC_OK);
 }
 
 static
@@ -405,7 +405,7 @@ void builtin_list_push( struct ajj* a, struct ajj_object* obj,
     struct ajj_value* val ) {
   struct ajj_value ret;
   struct ajj_value list = ajj_value_assign(obj);
-  CHECK(!list_append(a, &list, val, 1, &ret));
+  CHECK(list_append(a, &list, val, 1, &ret) == AJJ_EXEC_OK);
   (void)ret;
 }
 
@@ -424,7 +424,7 @@ builtin_list_index( struct ajj* a, struct ajj_object* obj,
 void builtin_list_clear( struct ajj* a, struct ajj_object* obj ) {
   struct ajj_value ret;
   struct ajj_value list = ajj_value_assign(obj);
-  CHECK(!list_clear(a,&list,NULL,0,&ret));
+  CHECK(list_clear(a,&list,NULL,0,&ret) == AJJ_EXEC_OK);
 }
 
 /* list class */
@@ -739,7 +739,7 @@ dict_attr_get( struct ajj* a ,
     const struct ajj_value* key ) {
   struct ajj_value ret;
   struct ajj_value arg = *key;
-  CHECK(!dict_get(a,(struct ajj_value*)obj,
+  CHECK(dict_get(a,(struct ajj_value*)obj,
         &arg,1,&ret)==AJJ_EXEC_OK);
   return ret;
 }
@@ -754,7 +754,7 @@ void dict_attr_set( struct ajj* a,
   arg[0] = *key;
   arg[1] = *val;
 
-  CHECK(!dict_set(a,obj,arg,2,&ret)==AJJ_EXEC_OK);
+  CHECK(dict_set(a,obj,arg,2,&ret)==AJJ_EXEC_OK);
 }
 
 static
@@ -917,7 +917,7 @@ void builtin_dict_insert( struct ajj* a,
   struct ajj_value dict = ajj_value_assign(obj);
   struct ajj_value arg[2];
   arg[0] = *key ; arg[1] = *val;
-  CHECK(!dict_set(a,&dict,arg,2,&ret));
+  CHECK(dict_set(a,&dict,arg,2,&ret) == AJJ_EXEC_OK);
 }
 
 struct ajj_value builtin_dict_find( struct ajj* a,
@@ -925,7 +925,7 @@ struct ajj_value builtin_dict_find( struct ajj* a,
     struct ajj_value* key ) {
   struct ajj_value ret;
   struct ajj_value dict = ajj_value_assign(obj);
-  CHECK(!dict_get(a,&dict,key,1,&ret));
+  CHECK(dict_get(a,&dict,key,1,&ret) == AJJ_EXEC_OK);
   return ret;
 }
 
@@ -934,7 +934,7 @@ int builtin_dict_remove( struct ajj* a,
     struct ajj_value* key ) {
   struct ajj_value ret;
   struct ajj_value dict = ajj_value_assign(obj);
-  CHECK(!dict_pop(a,&dict,key,0,&ret));
+  CHECK(dict_pop(a,&dict,key,0,&ret) == AJJ_EXEC_OK);
   return ajj_value_to_boolean(&ret) ? 0 : -1;
 }
 
@@ -942,7 +942,7 @@ void builtin_dict_clear( struct ajj* a,
     struct ajj_object* obj ) {
   struct ajj_value ret;
   struct ajj_value dict = ajj_value_assign(obj);
-  CHECK(!dict_clear(a,&dict,NULL,0,&ret));
+  CHECK(dict_clear(a,&dict,NULL,0,&ret) == AJJ_EXEC_OK);
 }
 
 static struct ajj_class_method DICT_METHOD[] = {
@@ -1255,7 +1255,7 @@ loop_display( struct ajj* a, const struct ajj_value* obj,
   assert(IS_A(obj,LOOP_TYPE));
   l = LOOP(obj);
   *len = (size_t)sprintf(buf,"loop(index:"
-      SIZEF 
+      SIZEF
       ";index0:"
       SIZEF
       ";revindex:"
@@ -1427,7 +1427,7 @@ cycler_attr_get( struct ajj* a,
 
   UNUSE_ARG(a);
   assert( IS_A(obj,CYCLER_TYPE) );
-  
+
   if(vm_to_string(key,&str,&own))
     return AJJ_NONE;
   else {
@@ -1463,7 +1463,7 @@ const char* cycler_display( struct ajj* a,
   UNUSE_ARG(a);
   assert( IS_A(obj,CYCLER_TYPE) );
   c = CYCLER(obj);
-  
+
   *len = (size_t)sprintf(buf,
       "cycler(current:%d"
       ";length:" SIZEF
@@ -1472,7 +1472,7 @@ const char* cycler_display( struct ajj* a,
   return strdup(buf);
 }
 
-static 
+static
 struct ajj_class_method AJJ_METHOD[] = {
   { cycler_reset , "reset" },
   { cycler_next , "next" }
@@ -1508,7 +1508,7 @@ struct ajj_class CYCLER_CLASS = {
   },
   NULL
 };
-  
+
 
 /* Builtin Test -------------------------------- */
 static
@@ -1742,7 +1742,7 @@ int test_odd( struct ajj* a,
     EXEC_FAIL1(a,"%s","Test function:odd cannot accept "
         "extra arguments!");
   } else {
-    if(arg->type != AJJ_VALUE_NUMBER){ 
+    if(arg->type != AJJ_VALUE_NUMBER){
       EXEC_FAIL1(a,"Test function:odd's argument must be number,"
           "but get:%s!",
           ajj_value_get_type_name(arg));
@@ -1880,9 +1880,9 @@ int test_upper( struct ajj* a,
         if(islower(*str))
           break;
       }
-      if(*str) 
+      if(*str)
         *ret = AJJ_FALSE;
-      else 
+      else
         *ret = AJJ_TRUE;
       return AJJ_EXEC_OK;
     }
@@ -1947,7 +1947,7 @@ void json_report_error(struct ajj* a, const char* beg,
       "Json parsing error:(... %s ...):",
       cbuf);
 
-  vsnprintf(buf, bend-buf, fmt,vl); 
+  vsnprintf(buf, bend-buf, fmt,vl);
 }
 
 #define JSON_MAX_NESTED_SIZE 128
