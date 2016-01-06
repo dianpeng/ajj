@@ -1,6 +1,6 @@
 #include <stdarg.h>
 #include <string.h>
-#include "utf8.h"
+#include "utf.h"
 
 /*
  * The authors of this software are Rob Pike and Ken Thompson.

@@ -1,5 +1,6 @@
 #ifndef _OBJECT_H_
 #define _OBJECT_H_
+#include "conf.h"
 #include "ajj.h"
 #include "util.h"
 #include "vm.h"
@@ -90,7 +91,7 @@ struct function {
 #define IS_JINJA(f) ((f)->tp == JJ_BLOCK || (f)->tp == JJ_MACRO || (f)->tp == JJ_MAIN)
 #define IS_C(f) (IS_CFUNCTION(f) || IS_CMETHOD(f) || IS_TEST(f))
 #define GET_CCLOSURE(F) (&((F)->f.c_fn))
-#define GET_CMETHOD(F) (&((F)->f.c_mt))
+#define GET_CMETHOD(F) (((F)->f.c_mt))
 #define GET_JINJAFUNC(F) (&((F)->f.jj_fn))
 #define GET_OBJECTCTOR(F) ((F)->f.obj_ctor)
 
@@ -220,23 +221,10 @@ ajj_object_obj( struct ajj_object* obj ,
 struct ajj_object*
 ajj_object_create_list( struct ajj* a , struct gc_scope* scp );
 
-void list_push( struct ajj* a , struct ajj_object* obj ,
-    const struct ajj_value* val );
-
-struct ajj_value
-list_index( struct ajj* a , struct ajj_object* obj, int index );
-
 /* Dict operations. The following functions are just wrapper around the
  * internal mechanism to handle object */
 struct ajj_object*
 ajj_object_create_dict( struct ajj* a , struct gc_scope* scp );
-
-void dict_insert( struct ajj* a , struct ajj_object* obj,
-    const struct ajj_value* key , const struct ajj_value* val );
-
-struct ajj_value
-dict_find( struct ajj* a , struct ajj_object* obj,
-    const struct ajj_value* key );
 
 /* Loop operations */
 struct ajj_object*

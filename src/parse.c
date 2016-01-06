@@ -1,4 +1,5 @@
 #include "ajj-priv.h"
+#include "builtin.h"
 #include "util.h"
 #include "parse.h"
 #include "lex.h"
@@ -1063,7 +1064,7 @@ parse_constseq( struct parser* p , int ltk , int rtk ,
   do {
     struct ajj_value val;
     CALLE(parse_constexpr(p,&val));
-    list_push(p->a,l,&val);
+    builtin_list_push(p->a,l,&val);
     if( tk->tk == TK_COMMA ) {
       tk_move(tk);
       continue;
@@ -1121,7 +1122,7 @@ parse_constdict( struct parser* p , struct ajj_value* output ) {
     CALLE(parse_constexpr(p,&val));
 
     /* insert the key into the list */
-    dict_insert(p->a,d,&key,&val);
+    builtin_dict_insert(p->a,d,&key,&val);
 
     /* delete a string promptly */
     ajj_value_delete_string(p->a,&key);

@@ -7,6 +7,6 @@
 #include "upvalue.c"
 #include "opt.c"
 #include "bc.c"
-#include "utf8.c"
+#include "utf.c"
 #include "util.c"
 #include "builtin.c"

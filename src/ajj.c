@@ -102,6 +102,26 @@ int ajj_delete_template( struct ajj* a, const char* name ) {
  * VALUE
  * ===========================*/
 
+const char*
+ajj_value_get_type_name( const struct ajj_value* val ) {
+  switch(val->type) {
+    case AJJ_VALUE_NONE:
+      return "<None>";
+    case AJJ_VALUE_BOOLEAN:
+      return "<Boolean>";
+    case AJJ_VALUE_NUMBER:
+      return "<Number>";
+    case AJJ_VALUE_STRING:
+      return "<String>";
+    case AJJ_VALUE_OBJECT:
+      return GET_OBJECT_TYPE_NAME(
+          val->value.object)->str;
+    default:
+      UNREACHABLE();
+      return NULL;
+  }
+}
+
 struct ajj_value ajj_value_number( double val ) {
   struct ajj_value value;
   value.type = AJJ_VALUE_NUMBER;
@@ -116,6 +136,124 @@ ajj_value_boolean( int boolean ) {
   ret.type = AJJ_VALUE_BOOLEAN;
   ret.value.boolean = boolean;
   return ret;
+}
+
+struct ajj_value
+ajj_value_new_string( struct ajj* a,
+    const char* str, size_t len ) {
+  return ajj_value_assign(
+      ajj_object_create_string(a,
+        ajj_cur_gc_scope(a),
+        str,len,0));
+}
+
+struct ajj_value
+ajj_value_new_const_string( struct ajj* a,
+    const char* str, size_t len ) {
+  struct string s;
+  s.str = str;
+  s.len = len;
+  return ajj_value_assign(
+    ajj_object_create_const_string(a,
+        ajj_cur_gc_scope(a),&s));
+}
+
+const char*
+ajj_value_to_str( const struct ajj_value* val ,
+    size_t* len ) {
+  assert(val->type == AJJ_VALUE_STRING);
+  *len = val->value.object->val.str.len;
+  return val->value.object->val.str.str;
+}
+
+int ajj_value_call_object_method( struct ajj* a,
+    struct ajj_value* obj,
+    const char* name,
+    struct ajj_value* arg,
+    size_t arg_len,
+    struct ajj_value* ret ) {
+  struct function* f; /* function */
+  struct string n;
+  ajj_method m;
+  n.str = name; n.len = strlen(name);
+  f = func_table_find_func(
+      obj->value.object->val.obj.fn_tb,
+      &n);
+  if(f == NULL) {
+    /* We don't have such function gets called */
+    ajj_error(a,"Cannot find function:%s in object:%s",
+        name,
+        GET_OBJECT_TYPE_NAME(obj->value.object)->str);
+    return AJJ_EXEC_FAIL;
+  }
+  assert( IS_CMETHOD(f) );
+  m = GET_CMETHOD(f);
+  return m(a,obj,arg,arg_len,ret);
+}
+
+struct ajj_value
+ajj_value_new_list( struct ajj* a ) {
+  return ajj_value_assign(
+      ajj_object_create_list(a,
+        ajj_cur_gc_scope(a)));
+}
+
+void ajj_value_list_push( struct ajj* a, struct ajj_value* obj,
+    struct ajj_value* val ) {
+  assert(obj->type == AJJ_VALUE_OBJECT);
+  builtin_list_push(a,obj->value.object,val);
+}
+
+size_t ajj_value_list_size( struct ajj* a, struct ajj_value* obj ) {
+  assert(obj->type == AJJ_VALUE_OBJECT);
+  return a->list->slot.len(a,obj);
+}
+
+struct ajj_value
+ajj_value_list_index( struct ajj* a, struct ajj_value* obj ,
+    int index ) {
+  assert(obj->type == AJJ_VALUE_OBJECT);
+  return builtin_list_index(a,obj->value.object,index);
+}
+
+void ajj_value_list_clear( struct ajj* a, struct ajj_value* obj ) {
+  assert(obj->type == AJJ_VALUE_OBJECT);
+  builtin_list_clear(a,obj->value.object);
+}
+
+struct ajj_value
+ajj_value_new_dict( struct ajj* a ) {
+  return ajj_value_assign(
+      ajj_object_create_dict(a,
+        ajj_cur_gc_scope(a)));
+}
+
+void ajj_value_dict_insert( struct ajj* a,
+    struct ajj_value* obj,
+    struct ajj_value* key,
+    struct ajj_value* val ) {
+  assert(obj->type == AJJ_VALUE_OBJECT);
+  builtin_dict_insert(a,obj->value.object,key,val);
+}
+
+struct ajj_value
+ajj_value_dict_find( struct ajj* a,
+    struct ajj_value* obj,
+    struct ajj_value* key ) {
+  assert(obj->type == AJJ_VALUE_OBJECT);
+  return builtin_dict_find(a,obj->value.object,key);
+}
+
+int ajj_value_dict_remove( struct ajj* a,
+    struct ajj_value* obj,
+    struct ajj_value* key ) {
+  return builtin_dict_remove(a,obj->value.object,key);
+}
+
+void ajj_value_dict_clear( struct ajj* a,
+    struct ajj_value* obj ) {
+  assert(obj->type == AJJ_VALUE_OBJECT);
+  builtin_dict_clear(a,obj->value.object);
 }
 
 struct func_table*
@@ -451,26 +589,234 @@ void ajj_io_flush( struct ajj_io* io ) {
     fflush(io->out.f);
 }
 
+void* ajj_io_get_content( struct ajj_io* io , size_t* size ) {
+  if( io->tp == AJJ_IO_FILE ) {
+    *size = 0;
+    return NULL;
+  } else {
+    *size = io->out.m.len;
+    return io->out.m.str;
+  }
+}
+
+void* ajj_io_detach( struct ajj_io* io , size_t* size ) {
+  if( io->tp == AJJ_IO_FILE ) {
+    *size = 0;
+    return NULL;
+  } else {
+    return strbuf_detach(&(io->out.m),size,NULL);
+  }
+}
+
 /* =======================================
- * MISC
+ * Slot
  * =====================================*/
-const char*
-ajj_value_get_type_name( const struct ajj_value* val ) {
-  switch(val->type) {
-    case AJJ_VALUE_NONE:
-      return "<None>";
-    case AJJ_VALUE_BOOLEAN:
-      return "<Boolean>";
-    case AJJ_VALUE_NUMBER:
-      return "<Number>";
-    case AJJ_VALUE_STRING:
-      return "<String>";
-    case AJJ_VALUE_OBJECT:
-      return GET_OBJECT_TYPE_NAME(
-          val->value.object)->str;
-    default:
-      UNREACHABLE();
-      return NULL;
+int ajj_value_attr_get( struct ajj* a,
+    const struct ajj_value* obj,
+    const struct ajj_value* key,
+    struct ajj_value* ret ) {
+  if( obj->type != AJJ_VALUE_OBJECT &&
+      obj->type != AJJ_VALUE_STRING ) {
+    ajj_error(a,"Cannot get attributes on type:%s which is not an "
+        "object or string!",ajj_value_get_type_name(obj));
+    return -1;
+  } else {
+    if( obj->type == AJJ_VALUE_OBJECT ) {
+      struct object* o = &(obj->value.object->val.obj);
+      if( o->fn_tb->slot.attr_get == NULL ) {
+        ajj_error(a,"Type:%s cannot support attribute get operation!",
+            o->fn_tb->name.str);
+        return -1;
+      } else {
+        *ret = o->fn_tb->slot.attr_get(a,obj,key);
+        return 0;
+      }
+    } else {
+      int k;
+      if( vm_to_integer(key,&k) ) {
+        *ret = AJJ_NONE; return 0;
+      } else {
+        struct string* str = &(obj->value.object->val.str);
+        if(str->len <= (size_t)k) {
+          *ret = AJJ_NONE;
+          return 0;
+        } else {
+          struct string buf;
+          buf.str = const_cstr( str->str[k] );
+          buf.len = 1;
+          *ret = ajj_value_assign(
+              ajj_object_create_const_string(
+                a,
+                ajj_cur_gc_scope(a),
+                &buf)
+              );
+          return 0;
+        }
+      }
+    }
+  }
+}
+
+int ajj_value_attr_set( struct ajj* a,
+    struct ajj_value* obj,
+    const struct ajj_value* key,
+    const struct ajj_value* val ) {
+  if( obj->type != AJJ_VALUE_OBJECT ) {
+    ajj_error(a,"Cannot set attributes on type:%s "
+        "which is not an object!",ajj_value_get_type_name(obj));
+    return -1;
+  } else {
+    struct object* o = &(obj->value.object->val.obj);
+    if( o->fn_tb->slot.attr_set == NULL ) {
+      ajj_error(a,"Type:%s cannot support attribute set operation!",
+          o->fn_tb->name.str);
+      return -1;
+    } else {
+      /* invoke the attributes set operation */
+      o->fn_tb->slot.attr_set(a,obj,key,val);
+      return 0;
+    }
+  }
+}
+
+int ajj_value_attr_push( struct ajj* a,
+    struct ajj_value* obj,
+    const struct ajj_value* val ) {
+  if( obj->type != AJJ_VALUE_OBJECT ) {
+    ajj_error(a,"Cannot stk_push attributes on type:%s which is not an "
+        "object!",ajj_value_get_type_name(obj));
+    return -1;
+  } else {
+    struct object* o = &(obj->value.object->val.obj);
+    if( o->fn_tb->slot.attr_push == NULL ) {
+      ajj_error(a,"Type:%s cannot support attribute stk_push operation!",
+          o->fn_tb->name.str);
+      return -1;
+    } else {
+      o->fn_tb->slot.attr_push(a,obj,val);
+      return 0;
+    }
+  }
+}
+
+struct ajj_value ajj_value_move( struct ajj* a,
+    const struct ajj_value* self,
+    struct ajj_value* tar ) {
+  if( self->type == AJJ_VALUE_OBJECT ) {
+    ajj_value_move_scope(a,
+        self->value.object->scp,
+        tar);
+  }
+  return *tar;
+}
+
+int ajj_value_iter_start( struct ajj* a,
+    const struct ajj_value* obj,
+    int* itr ) {
+  /* Here we will implicitly support iterator on top of the
+   * string. Because string is not an object, we could not
+   * use the default method to handle iterator for string */
+  if( obj->type == AJJ_VALUE_STRING ) {
+    *itr = 0; return 0;
+  } else if( obj->type == AJJ_VALUE_OBJECT ) {
+    struct object* o = &(obj->value.object->val.obj);
+    if( o->fn_tb->slot.iter_start ) {
+      *itr = o->fn_tb->slot.iter_start(a,obj);
+      return 0;
+    } else {
+      ajj_error(a,"Object:%s doesn't support iterator!",
+          o->fn_tb->name.str);
+      return -1;
+    }
+  } else {
+    ajj_error(a,"Type:%s doesn't support iterator!",
+        ajj_value_get_type_name(obj));
+    return -1;
+  }
+}
+
+int ajj_value_iter_has( struct ajj* a,
+    const struct ajj_value* obj,
+    int itr , int* result ) {
+  if( obj->type == AJJ_VALUE_STRING ) {
+    *result = itr < (int)(obj->value.object->val.str.len);
+    return 0;
+  } else if( obj->type == AJJ_VALUE_OBJECT ) {
+    struct object* o = &(obj->value.object->val.obj);
+    assert( o->fn_tb->slot.iter_has );
+    *result = o->fn_tb->slot.iter_has(a,obj,itr);
+    return 0;
+  } else {
+    ajj_error(a,"Type:%s doesn't support iterator!",
+        ajj_value_get_type_name(obj));
+    return -1;
+  }
+}
+
+int ajj_value_iter_move( struct ajj* a,
+    const struct ajj_value* obj,
+    int itr , int* result ) {
+  if( obj->type == AJJ_VALUE_STRING ) {
+    *result = itr+1;
+    return -1;
+  } else if( obj->type == AJJ_VALUE_OBJECT ) {
+    struct object* o = &(obj->value.object->val.obj);
+    assert( o->fn_tb->slot.iter_move );
+    *result = o->fn_tb->slot.iter_move(a,obj,itr);
+    return 0;
+  } else {
+    ajj_error(a,"Type:%s doesn't support iterator!",
+        ajj_value_get_type_name(obj));
+    return -1;
+  }
+}
+
+int ajj_value_iter_get_key( struct ajj* a,
+    const struct ajj_value* obj,
+    int itr,
+    struct ajj_value* key ) {
+  if( obj->type == AJJ_VALUE_STRING ) {
+    *key = ajj_value_number(itr);
+    return 0;
+  } else if( obj->type == AJJ_VALUE_OBJECT ) {
+    struct object* o = &(obj->value.object->val.obj);
+    assert( o->fn_tb->slot.iter_get_key );
+    *key = o->fn_tb->slot.iter_get_key(a,obj,itr);
+    return 0;
+  } else {
+    ajj_error(a,"Type:%s doesn't support iterator!",
+        ajj_value_get_type_name(obj));
+    return -1;
+  }
+}
+
+int ajj_value_iter_get_val( struct ajj* a,
+    const struct ajj_value* obj,
+    int itr,
+    struct ajj_value* val ) {
+  if( obj->type == AJJ_VALUE_STRING ) {
+    struct string buf;
+    struct string* str = ajj_value_to_string(obj);
+    assert( (size_t)itr < str->len );
+    buf.str = const_cstr( str->str[itr] );
+    buf.len = 1;
+    *val = ajj_value_assign(
+        ajj_object_create_const_string(
+          a,
+          ajj_cur_gc_scope(a),
+          &buf)
+        );
+    return 0;
+  } else if( obj->type == AJJ_VALUE_OBJECT ) {
+    struct object* o = &(obj->value.object->val.obj);
+    assert( o->fn_tb->slot.iter_get_val );
+    *val = o->fn_tb->slot.iter_get_val(a,
+        obj,itr);
+    return 0;
+  } else {
+    ajj_error(a,"Type:%s doesn't support iterator!",
+        ajj_value_get_type_name(obj));
+    return -1;
   }
 }
 
@@ -656,7 +1002,9 @@ int ajj_value_in( struct ajj* a,
 }
 
 int ajj_value_len( struct ajj* a,
-    const struct ajj_value* val ,int* result ) {
+    const struct ajj_value* val ,
+    size_t* result ) {
+
   switch(val->type) {
     case AJJ_VALUE_NONE:
       *result = 0;

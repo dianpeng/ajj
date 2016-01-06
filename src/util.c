@@ -443,6 +443,15 @@ void strbuf_reset( struct strbuf* buf ) {
   if(buf->str) buf->str[0] = 0;
 }
 
+void* strbuf_detach( struct strbuf* buf, size_t* len , size_t* cap ) {
+  void* m = buf->str;
+  if(len) *len = buf->len;
+  if(cap) *cap = buf->cap;
+  buf->str = NULL;
+  buf->cap = buf->len = 0;
+  return m;
+}
+
 void strbuf_move( struct strbuf* buf , struct string* output ) {
   /* If the occupied the buffer is larger than 1/2 of string buffer
    * and its length is smaller than 1KB( small text ). We just return

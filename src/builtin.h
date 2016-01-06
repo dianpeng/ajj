@@ -27,5 +27,30 @@ json_parse( struct ajj* a , struct gc_scope* scp,
 int object_is_map( struct ajj_value* );
 struct map* object_cast_to_map( struct ajj_value* );
 
+/* Builtin List/Dict API */
+void builtin_list_push( struct ajj* a, struct ajj_object* obj,
+    struct ajj_value* val );
+
+struct ajj_value
+builtin_list_index( struct ajj* a, struct ajj_object* obj,
+    int index );
+
+void builtin_list_clear( struct ajj* a, struct ajj_object* obj);
+
+void builtin_dict_insert( struct ajj* a,
+    struct ajj_object* obj,
+    struct ajj_value* key,
+    struct ajj_value* val );
+
+struct ajj_value builtin_dict_find( struct ajj* a,
+    struct ajj_object* obj,
+    struct ajj_value* key );
+
+int builtin_dict_remove( struct ajj* a,
+    struct ajj_object* obj,
+    struct ajj_value* key );
+
+void builtin_dict_clear( struct ajj* a,
+    struct ajj_object* obj );
 
 #endif /* _BUILTIN_H_ */

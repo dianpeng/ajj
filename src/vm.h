@@ -1,5 +1,6 @@
 #ifndef _VM_H_
 #define _VM_H_
+#include "conf.h"
 #include "ajj.h"
 #include "util.h"
 #include "parse.h" /* for MAX_LOOP_CTRL_SIZE */

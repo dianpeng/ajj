@@ -690,7 +690,7 @@ struct ajj_value vm_not(struct ajj* a , const struct ajj_value* val ,
 static
 struct ajj_value vm_len(struct ajj* a,
     const struct ajj_value* val , int* fail ) {
-  int res;
+  size_t res;
   if(ajj_value_len(a,val,&res)) {
     *fail = 1;
     rewrite_error(a);
@@ -822,7 +822,7 @@ void prepare_script_call( struct ajj* a ) {
     vargs = ajj_object_create_list(a,a->rt->cur_gc);
 
     for( i = fr->par_cnt ; i > prg->par_size ; --i ) {
-      list_push(a,vargs,stk_top(a,1));
+      builtin_list_push(a,vargs,stk_top(a,1));
       stk_pop(a,1);
     }
   }
@@ -990,23 +990,11 @@ static
 void vm_attrset( struct ajj* a , struct ajj_value* obj,
     const struct ajj_value* key , const struct ajj_value* val ,
     int* fail ) {
-  if( obj->type != AJJ_VALUE_OBJECT ) {
+  if( ajj_value_attr_set(a,obj,key,val) ) {
+    rewrite_error(a);
     *fail = 1;
-    vm_rpt_err(a,"Cannot set attributes on type:%s "
-        "which is not an object!",ajj_value_get_type_name(obj));
-    return;
   } else {
-    struct object* o = &(obj->value.object->val.obj);
-    if( o->fn_tb->slot.attr_set == NULL ) {
-      *fail = 1;
-      vm_rpt_err(a,"Type:%s cannot support attribute set operation!",
-          o->fn_tb->name.str);
-      return;
-    } else {
-      /* invoke the attributes set operation */
-      o->fn_tb->slot.attr_set(a,obj,key,val);
-      *fail = 0;
-    }
+    *fail = 0;
   }
 }
 
@@ -1014,69 +1002,25 @@ static
 struct ajj_value
 vm_attrget( struct ajj* a , struct ajj_value* obj,
     const struct ajj_value* key , int* fail ) {
-  if( obj->type != AJJ_VALUE_OBJECT &&
-      obj->type != AJJ_VALUE_STRING ) {
+  struct ajj_value ret;
+  if( ajj_value_attr_get(a,obj,key,&ret) ) {
+    rewrite_error(a);
     *fail = 1;
-    vm_rpt_err(a,"Cannot get attributes on type:%s which is not an "
-        "object or string!",ajj_value_get_type_name(obj));
     return AJJ_NONE;
   } else {
-    if( obj->type == AJJ_VALUE_OBJECT ) {
-      struct object* o = &(obj->value.object->val.obj);
-      if( o->fn_tb->slot.attr_get == NULL ) {
-        *fail = 1;
-        vm_rpt_err(a,"Type:%s cannot support attribute get operation!",
-            o->fn_tb->name.str);
-        return AJJ_NONE;
-      } else {
-        *fail = 0;
-        return o->fn_tb->slot.attr_get(a,obj,key);
-      }
-    } else {
-      int k = to_integer(a,key,fail);
-      if( *fail ) {
-        return AJJ_NONE;
-      } else {
-        struct string* str = &(obj->value.object->val.str);
-        if(str->len <= (size_t)k) {
-          vm_rpt_err(a,"Cannot get character from string with index:%d,"
-              "the string length is:%zu!",k,str->len);
-          *fail = 1;
-          return AJJ_NONE;
-        } else {
-          struct string buf;
-          *fail = 0;
-          buf.str = const_cstr( str->str[k] );
-          buf.len = 1;
-          return ajj_value_assign(
-              ajj_object_create_const_string(
-                a,
-                a->rt->cur_gc,
-                &buf)
-              );
-        }
-      }
-    }
+    *fail = 0;
+    return ret;
   }
 }
 
 static
 void vm_attrstk_push( struct ajj* a , struct ajj_value* obj,
     const struct ajj_value* val , int* fail ) {
-  if( obj->type != AJJ_VALUE_OBJECT ) {
+  if( ajj_value_attr_push(a,obj,val) ) {
+    rewrite_error(a);
     *fail = 1;
-    vm_rpt_err(a,"Cannot stk_push attributes on type:%s which is not an "
-        "object!",ajj_value_get_type_name(obj));
   } else {
-    struct object* o = &(obj->value.object->val.obj);
-    if( o->fn_tb->slot.attr_push == NULL ) {
-      *fail = 1;
-      vm_rpt_err(a,"Type:%s cannot support attribute stk_push operation!",
-          o->fn_tb->name.str);
-    } else {
-      *fail = 0;
-      o->fn_tb->slot.attr_push(a,obj,val);
-    }
+    *fail = 0;
   }
 }
 
@@ -1364,14 +1308,8 @@ static
 const struct function*
 resolve_obj_function(struct ajj_object* val,
     const struct string* name ) {
-  size_t i;
   struct func_table* ft = val->val.obj.fn_tb;
-  for( i = 0 ; i < ft->func_len ; ++i ) {
-    if( string_eq(&(ft->func_tb[i].name),name) ) {
-      return ft->func_tb + i;
-    }
-  }
-  return NULL;
+  return func_table_find_func(ft,name);
 }
 
 static
@@ -2256,27 +2194,17 @@ int vm_main( struct ajj* a ) {
       /* ITERATORS ------------------ */
       vm_beg(ITER_START) {
         int itr;
+        size_t len;
         struct ajj_value* obj = stk_top(a,1);
-        if(obj->type != AJJ_VALUE_OBJECT) {
-          vm_rpt_err(a,"Type:%s doesn't support iterator!",
-              ajj_value_get_type_name(obj));
+        if(ajj_value_iter_start(a,obj,&itr)) {
+          rewrite_error(a);
           goto fail;
-        } else {
-          struct object* o = &(obj->value.object->val.obj);
-          size_t l = 0;
-          if(o->fn_tb->slot.len)
-            l = o->fn_tb->slot.len(a,obj);
-          enter_loop(a,l); /* setup loop object */
-
-          if( o->fn_tb->slot.iter_start ) {
-            itr = o->fn_tb->slot.iter_start(
-                a,obj);
-          } else {
-            vm_rpt_err(a,"Type:%s doesn't support iterator!",
-                o->fn_tb->name.str);
-            goto fail;
-          }
         }
+        if(ajj_value_len(a,obj,&len)) {
+          rewrite_error(a);
+          goto fail;
+        }
+        enter_loop(a,len);
         /* do not stk_pop the object out */
         stk_push(a,ajj_value_iter(itr));
       } vm_end(ITER_START)
@@ -2284,15 +2212,12 @@ int vm_main( struct ajj* a ) {
       vm_beg(ITER_HAS) {
         struct ajj_value* itr = stk_top(a,1);
         struct ajj_value* obj = stk_top(a,2);
-        struct object* o;
         int has;
-
         assert( itr->type == AJJ_VALUE_ITERATOR );
-        assert( obj->type == AJJ_VALUE_OBJECT );
-        o = &(obj->value.object->val.obj);
-        assert( o->fn_tb->slot.iter_has );
-        has = o->fn_tb->slot.iter_has(
-            a,obj,ajj_value_to_iter(itr));
+        if(ajj_value_iter_has(a,obj,ajj_value_to_iter(itr),&has)) {
+          rewrite_error(a);
+          goto fail;
+        }
         /* re-stk_push the iterator onto the stack */
         stk_push(a,ajj_value_boolean(has));
       } vm_end(ITER_HAS)
@@ -2301,30 +2226,33 @@ int vm_main( struct ajj* a ) {
         int arg = instr_1st_arg(c);
         struct ajj_value* obj = stk_top(a,2);
         struct ajj_value* itr = stk_top(a,1);
-        struct object* o;
         assert( itr->type == AJJ_VALUE_ITERATOR );
-        assert( obj->type == AJJ_VALUE_OBJECT );
-        o = &(obj->value.object->val.obj);
         switch(arg) {
           case ITERATOR_VAL:
             {
               struct ajj_value v;
-              /* just stk_push the value on to the stack */
-              assert( o->fn_tb->slot.iter_get_val );
-              v = o->fn_tb->slot.iter_get_val(a,
-                  obj, ajj_value_to_iter(itr));
+              if(ajj_value_iter_get_val(a,
+                    obj,
+                    ajj_value_to_iter(itr),
+                    &v)) {
+                rewrite_error(a);
+                goto fail;
+              }
               stk_push(a,v);
             }
             break;
           case ITERATOR_KEYVAL:
             {
               struct ajj_value k , v;
-              assert( o->fn_tb->slot.iter_get_val );
-              assert( o->fn_tb->slot.iter_get_key );
-              k = o->fn_tb->slot.iter_get_key(a,obj,
-                  ajj_value_to_iter(itr));
-              v = o->fn_tb->slot.iter_get_val(a,obj,
-                  ajj_value_to_iter(itr));
+              if(ajj_value_iter_get_val(a,
+                    obj,ajj_value_to_iter(itr),
+                    &v) ||
+                  ajj_value_iter_get_key(a,
+                    obj,ajj_value_to_iter(itr),
+                    &k)) {
+                rewrite_error(a);
+                goto fail;
+              }
               stk_push(a,k);
               stk_push(a,v);
             }
@@ -2332,10 +2260,13 @@ int vm_main( struct ajj* a ) {
           case ITERATOR_KEY:
             {
               struct ajj_value k;
-              /* just stk_push the value on to the stack */
-              assert( o->fn_tb->slot.iter_get_key );
-              k = o->fn_tb->slot.iter_get_key(a,
-                  obj, ajj_value_to_iter(itr));
+              if(ajj_value_iter_get_key(a,
+                    obj,
+                    ajj_value_to_iter(itr),
+                    &k)) {
+                rewrite_error(a);
+                goto fail;
+              }
               stk_push(a,k);
             }
             break;
@@ -2348,15 +2279,17 @@ int vm_main( struct ajj* a ) {
       vm_beg(ITER_MOVE){
         struct ajj_value* obj = stk_top(a,2);
         struct ajj_value* itr = stk_top(a,1);
-        struct object* o ;
+        int i_itr;
         assert( itr->type == AJJ_VALUE_ITERATOR );
-        assert( obj->type == AJJ_VALUE_OBJECT );
-        o = &(obj->value.object->val.obj);
-        assert( o->fn_tb->slot.iter_move );
+        if(ajj_value_iter_move(a,
+              obj,
+              ajj_value_to_iter(itr),
+              &i_itr)) {
+          rewrite_error(a);
+          goto fail;
+        }
         stk_pop(a,1); /* stk_pop the stk_top iterator */
-        stk_push( a , ajj_value_iter(
-            o->fn_tb->slot.iter_move(
-              a,obj,ajj_value_to_iter(itr))));
+        stk_push( a , ajj_value_iter(i_itr) );
         move_loop(a); /* step the loop object */
       } vm_end(ITER_MOVE)
 

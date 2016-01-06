@@ -1,5 +1,6 @@
 #ifndef _PARSE_H_
 #define _PARSE_H_
+#include "conf.h"
 #include "ajj.h"
 #include "util.h"
 

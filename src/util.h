@@ -10,8 +10,8 @@
 #include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
-
-#include "utf8.h"
+#include "conf.h"
+#include "utf.h"
 
 #ifndef UNREACHABLE
 #define UNREACHABLE() assert(!"UNREACHABLE!")
@@ -187,6 +187,8 @@ char strbuf_index( const struct strbuf* buf , int idx );
 void strbuf_resize( struct strbuf* buf , size_t sz );
 
 void strbuf_reset( struct strbuf* buf );
+
+void* strbuf_detach( struct strbuf* buf , size_t* len , size_t* cap );
 
 #define strbuf_clear strbuf_reset
 

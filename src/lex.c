@@ -1,5 +1,5 @@
 #include "lex.h"
-#include "utf8.h"
+#include "utf.h"
 
 #include <assert.h>
 #include <string.h>
@@ -61,19 +61,19 @@ int tk_string_reescape_char( Rune c ) {
 #define GET_C1(C1,I,O) \
   do { \
     O = chartorune(&(C1),tk->src+(I)); \
-    if(C1== Runeerror) goto utf8_fail; \
+    if(C1== Runeerror) goto utf_fail; \
   } while(0)
 
 #define GET_C2(C2,I,O1,O2) \
   do { \
     O2 = chartorune(&(C2),tk->src+(I)+(O1)); \
-    if(C2 == Runeerror) goto utf8_fail; \
+    if(C2 == Runeerror) goto utf_fail; \
   } while(0)
 
 #define GET_C3(C3,I,O1,O2) \
   do { \
     chartorune(&(C3),tk->src+(I)+(O1)+(O2)); \
-    if(C3 == Runeerror) goto utf8_fail; \
+    if(C3 == Runeerror) goto utf_fail; \
   } while(0)
 
 static
@@ -96,7 +96,7 @@ int tk_next_skip_cmt( struct tokenizer* tk , size_t pos ) {
     i += o1;
   }
 
-utf8_fail:
+utf_fail:
   tk->pos = i;
   tk->tk = TK_UNKNOWN;
   return -1;
@@ -127,8 +127,8 @@ token_id tk_lex_str( struct tokenizer* tk ) {
   /* include the quotes length for this token length */
   RETURN(TK_STRING,i+1-tk->pos);
 
-utf8_fail:
-  RETURN(TK_UNKNOWN_UTF8,i-tk->pos);
+utf_fail:
+  RETURN(TK_UNKNOWN_UTF,i-tk->pos);
 }
 
 static
@@ -668,8 +668,8 @@ int tk_lex_script( struct tokenizer* tk ) {
     i+=o1;
   } while(1);
 
-utf8_fail:
-  RETURN(TK_UNKNOWN_UTF8,0);
+utf_fail:
+  RETURN(TK_UNKNOWN_UTF,0);
 }
 
 /* For the raw/endraw block , we handle it entirely in lexing phase.
@@ -718,7 +718,7 @@ done:
     }
     assert(o1 == 1); ++i;
   }
-utf8_fail:
+utf_fail:
   return -1;
 }
 
@@ -769,8 +769,8 @@ token_id tk_lex_raw( struct tokenizer* tk ) {
   /* EOF meet, which is unexpected */
   RETURN(TK_UNKNOWN,tk->lexeme.len);
 
-utf8_fail:
-  RETURN(TK_UNKNOWN_UTF8,0);
+utf_fail:
+  RETURN(TK_UNKNOWN_UTF,0);
 }
 
 static
@@ -850,9 +850,9 @@ done:
     RETURN(TK_EOF,0);
   }
 
-utf8_fail:
-  /* handle utf8 failaure */
-  RETURN(TK_UNKNOWN_UTF8,0);
+utf_fail:
+  /* handle utf failaure */
+  RETURN(TK_UNKNOWN_UTF,0);
 }
 
 /* public interfaces */

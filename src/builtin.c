@@ -292,7 +292,7 @@ void list_attr_push( struct ajj* a,
   struct ajj_value arg = *val;
   struct ajj_value ret;
   assert( IS_A(obj,LIST_TYPE) );
-  CHECK(list_append(a,obj,&arg,1,&ret) == AJJ_EXEC_OK);
+  CHECK(!list_append(a,obj,&arg,1,&ret) == AJJ_EXEC_OK);
 }
 
 static
@@ -399,6 +399,32 @@ int list_ne( struct ajj* a, const struct ajj_value* l,
     *result = !*result;
     return AJJ_EXEC_OK;
   }
+}
+
+void builtin_list_push( struct ajj* a, struct ajj_object* obj,
+    struct ajj_value* val ) {
+  struct ajj_value ret;
+  struct ajj_value list = ajj_value_assign(obj);
+  CHECK(!list_append(a, &list, val, 1, &ret));
+  (void)ret;
+}
+
+struct ajj_value
+builtin_list_index( struct ajj* a, struct ajj_object* obj,
+    int index ) {
+  struct list* l;
+  assert( obj->tp == LIST_TYPE );
+  l = (struct list*)(obj->val.obj.data);
+  if( index <0 || index >= l->len )
+    return AJJ_NONE;
+  else
+    return l->entry[index];
+}
+
+void builtin_list_clear( struct ajj* a, struct ajj_object* obj ) {
+  struct ajj_value ret;
+  struct ajj_value list = ajj_value_assign(obj);
+  CHECK(!list_clear(a,&list,NULL,0,&ret));
 }
 
 /* list class */
@@ -576,6 +602,27 @@ int dict_update( struct ajj* a ,
   }
 }
 
+/* pop */
+static
+int dict_pop( struct ajj* a ,
+    struct ajj_value* obj,
+    struct ajj_value* arg,
+    size_t arg_len,
+    struct ajj_value* ret ) {
+  struct string key;
+  int own;
+
+  if( arg_len != 1 || vm_to_string(arg,&key,&own) ) {
+    EXEC_FAIL1(a,"%s","dict::pop can only accept 1 argument and it "
+        "must be a string!");
+  } else {
+    struct map* m = DICT(obj);
+    int r = map_remove(m,&key,NULL);
+    *ret = ajj_value_boolean( !r );
+    return AJJ_EXEC_OK;
+  }
+}
+
 /* clear */
 static
 int dict_clear( struct ajj* a ,
@@ -692,7 +739,7 @@ dict_attr_get( struct ajj* a ,
     const struct ajj_value* key ) {
   struct ajj_value ret;
   struct ajj_value arg = *key;
-  CHECK(dict_get(a,(struct ajj_value*)obj,
+  CHECK(!dict_get(a,(struct ajj_value*)obj,
         &arg,1,&ret)==AJJ_EXEC_OK);
   return ret;
 }
@@ -707,7 +754,7 @@ void dict_attr_set( struct ajj* a,
   arg[0] = *key;
   arg[1] = *val;
 
-  CHECK(dict_set(a,obj,arg,2,&ret)==AJJ_EXEC_OK);
+  CHECK(!dict_set(a,obj,arg,2,&ret)==AJJ_EXEC_OK);
 }
 
 static
@@ -856,14 +903,53 @@ int dict_ne( struct ajj* a,
 int object_is_map( struct ajj_value* v ) {
   return IS_A(v,DICT_TYPE);
 }
+
 struct map* object_cast_to_map( struct ajj_value* v ) {
   assert(IS_A(v,DICT_TYPE));
   return DICT(v);
 }
+
+void builtin_dict_insert( struct ajj* a,
+    struct ajj_object* obj,
+    struct ajj_value* key,
+    struct ajj_value* val ) {
+  struct ajj_value ret;
+  struct ajj_value dict = ajj_value_assign(obj);
+  struct ajj_value arg[2];
+  arg[0] = *key ; arg[1] = *val;
+  CHECK(!dict_set(a,&dict,arg,2,&ret));
+}
+
+struct ajj_value builtin_dict_find( struct ajj* a,
+    struct ajj_object* obj,
+    struct ajj_value* key ) {
+  struct ajj_value ret;
+  struct ajj_value dict = ajj_value_assign(obj);
+  CHECK(!dict_get(a,&dict,key,1,&ret));
+  return ret;
+}
+
+int builtin_dict_remove( struct ajj* a,
+    struct ajj_object* obj,
+    struct ajj_value* key ) {
+  struct ajj_value ret;
+  struct ajj_value dict = ajj_value_assign(obj);
+  CHECK(!dict_pop(a,&dict,key,0,&ret));
+  return ajj_value_to_boolean(&ret) ? 0 : -1;
+}
+
+void builtin_dict_clear( struct ajj* a,
+    struct ajj_object* obj ) {
+  struct ajj_value ret;
+  struct ajj_value dict = ajj_value_assign(obj);
+  CHECK(!dict_clear(a,&dict,NULL,0,&ret));
+}
+
 static struct ajj_class_method DICT_METHOD[] = {
   { dict_set , "set" },
   { dict_get , "get" },
   { dict_update, "update" },
+  { dict_pop , "pop" },
   { dict_has_key, "has_key" },
   { dict_count , "count" },
   { dict_clear, "clear" }

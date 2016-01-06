@@ -1,7 +1,8 @@
 #ifndef _LEX_H_
 #define _LEX_H_
+#include "conf.h"
 #include "util.h"
-#include "utf8.h"
+#include "utf.h"
 #include <ctype.h>
 
 #define CODE_SNIPPET_SIZE 256
@@ -99,7 +100,7 @@ enum {
   X(TK_EOF,"<eof>") \
   X(TK_UNKNOWN_NUMBER,"<unknown-number:overflow>") \
   X(TK_UNKNOWN,"<unknown>") \
-  X(TK_UNKNOWN_UTF8,"<unknonw:utf8 rune error!>")
+  X(TK_UNKNOWN_UTF,"<unknonw:utf rune error!>")
 
 #define X(A,B) A,
 typedef enum {

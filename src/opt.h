@@ -1,5 +1,6 @@
 #ifndef _OPT_H_
 #define _OPT_H_
+#include "conf.h"
 
 struct ajj_object;
 struct ajj;

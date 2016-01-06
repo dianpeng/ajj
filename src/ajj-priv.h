@@ -103,8 +103,11 @@ ajj_add_test( struct ajj* a, struct upvalue_table* ut,
     ajj_function entry,
     void* );
 
-/* HIGH level API to help to manage the template */
+void* ajj_load_file( struct ajj* a,
+    const char* fname,
+    size_t* size );
 
+/* HIGH level API to help to manage the template */
 struct ajj_object*
 ajj_parse_template( struct ajj* a, const char* filename );
 

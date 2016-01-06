@@ -1,5 +1,6 @@
 #ifndef _UPVALUE_H_
 #define _UPVALUE_H_
+#include "conf.h"
 #include "util.h"
 #include "object.h"
 
