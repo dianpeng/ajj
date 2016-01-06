@@ -1,5 +1,4 @@
 OPT := -O0 -g
-PWD := $(shell pwd)
 FLAGS := $(OPT) -Wpedantic -Wall -I$(PWD)/src
 PROFILE_FLAGS := -fprofile-arcs -ftest-coverage
 LINK := -L$(PWD)/. -lajj -lm

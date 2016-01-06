@@ -1959,9 +1959,6 @@ int parse_set( struct parser* p, struct emitter* em ) {
      * variable there */
     if( var_idx >= 0 ) {
       EMIT1(em,VM_STORE,var_idx);
-    } else {
-      /* This is a no-op since the current top of the stack has been
-       * assigend to that local symbol */
     }
     /* set up the var based on the stack */
     CALLE(finish_scope_tag(p,TK_ENDSET));
@@ -2100,7 +2097,7 @@ parse_with( struct parser* p , struct emitter* em ) {
      * scope */
     sym = strbuf_tostring(&(tk->lexeme));
     CALLE(lex_scope_enter(p,0) == NULL);
-    CALLE((idx=lex_scope_set(p,&sym)==-2));
+    CALLE((idx=lex_scope_set(p,&sym))==-2);
     tk_move(tk);
     ENTER_SCOPE(); /* enter the scope */
     CALLE(parse_assign(p,em,idx));
