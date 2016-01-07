@@ -22,7 +22,7 @@ An Almost Complete Jinja2 Port to C
 is esentially same as
 ```
 {% set MyTuple = [1,2,3] %}
-```.
+```
 
 3. One argument test invoke without parenthesis is not supported.So you cannot write
 ```
@@ -31,7 +31,7 @@ is esentially same as
 but need to write as
 ```
 {% if 2 is dividable(3) %}
-```.
+```
 4. Whitespace control is not optional. The default whitespace control is applied. But the syntax is supported but takes no effect.
 ```
  {% do SomeThinig %}
@@ -39,7 +39,7 @@ but need to write as
 is same as
 ```
  {% do SomeThing -%}
-```.
+```
 
 5. Inlude option is not support, but we allow extension for context definition when doing inclusion.
 
@@ -56,7 +56,7 @@ is same as
   {% block MyBlock(outer_var) %}
     {{ outer_var }}
   {% endblock %}
-```.
+```
 
 # Extension to Jinja2
 1. Context definition through json file or template variable. When you want to include another template, you could customize the rendering behavior by setting upvalue for this template. Upvalue is the context variable that cannot be resolved inside of the
