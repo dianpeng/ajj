@@ -16,32 +16,68 @@ An Almost Complete Jinja2 Port to C
 # Not Supported Jinja2 Features
 1. Recurisve loop is not supported, related field in Loop object is not supported as well.
 2. Tuple is not supported, tuple syntax is supported but it is automatically convert to list.
-``` {% set MyTuple = (1,2,3) %} ``` is esentially same as ```{% set MyTuple = [1,2,3] %} ```.
-3. One argument test invoke without parenthesis is not supported.So you cannot write ``` {% if 2 is dividable 3 %} ``` but need to write as ``` {% if 2 is dividable(3) %} ```.
-4. Whitespace control is not optional. The default whitespace control is applied. But the syntax is supported but takes no effect.  ``` {% do SomeThinig %} ``` is same as ``` {% do SomeThing -%} ```.
+```
+{% set MyTuple = (1,2,3) %}
+```
+is esentially same as
+```
+{% set MyTuple = [1,2,3] %}
+```.
+
+3. One argument test invoke without parenthesis is not supported.So you cannot write
+```
+{% if 2 is dividable 3 %}
+```
+but need to write as
+```
+{% if 2 is dividable(3) %}
+```.
+4. Whitespace control is not optional. The default whitespace control is applied. But the syntax is supported but takes no effect.
+```
+ {% do SomeThinig %}
+```
+is same as
+```
+ {% do SomeThing -%}
+```.
+
 5. Inlude option is not support, but we allow extension for context definition when doing inclusion.
+
 6. Line comments is not supported.
+
 7. Convert string is not achieved by ~ , but using + sign. So we don't have a ~ sign.
+
 8. Macro object is not supported inside of macro block. But we have list of builtins allow you get related information. Not support macor is basically because it is a redundancy .
+
 9. Scopped block is supported through different syntax but not by tag a "scoped" keyword. To use variable in outer scope in nested block scope, the syntax is as follow ,
-``` {% set outer_var = [] %} {% block MyBlock(outer_var) %} {{ outer_var }} {% endblock %} ```.
+
+```
+{% set outer_var = [] %}
+  {% block MyBlock(outer_var) %}
+    {{ outer_var }}
+  {% endblock %}
+```.
 
 # Extension to Jinja2
 1. Context definition through json file or template variable. When you want to include another template, you could customize the rendering behavior by setting upvalue for this template. Upvalue is the context variable that cannot be resolved inside of the
 template but need to provided externally.
 
-``` {% include 'MyFile.html' %}
+```
+    {% include 'MyFile.html' %}
       {% GlobalVariable1 = "SomeValue" %}
       {% GlobalVariable2 = "SomeValue2" %}
-    {% endinclude %} ```
+    {% endinclude %}
+```
 
 The code above shows customize the MyFile.html rendering by setting different global variables. Also, you could provide a json
 file to define those variables externally. Then using syntax
 
-``` {% include 'MyFile.html' json 'MyJsonFile.json' %}
-      {% GlobalVariable1 = "SomeValue" optional %}
-      {% GlobalVariable2 = "SomeValue2" overwrite %}
-    {% endinclude %} ```
+```
+{% include 'MyFile.html' json 'MyJsonFile.json' %}
+  {% GlobalVariable1 = "SomeValue" optional %}
+  {% GlobalVariable2 = "SomeValue2" overwrite %}
+{% endinclude %}
+```
 
 The above code allow us to import a json file to define global variable. Also you are allowed to define global variable inside of
 the template. User may notice that optional modifier may tag to those entry ,which allow them to overwrite the value inside of json file or provides as a optional one if corresponding entry is not shown up in json file.
@@ -49,8 +85,9 @@ the template. User may notice that optional modifier may tag to those entry ,whi
 
 2.We support multi-inheritance.
 
-``` {% extends 'Template1' %}
-    {% extends 'Template2' %}
+```
+  {% extends 'Template1' %}
+  {% extends 'Template2' %}
 ```
 Each extended template will be evaluated separatly and accordingly.
 
@@ -58,24 +95,26 @@ Each extended template will be evaluated separatly and accordingly.
 
 4. Move Value to outer scope. In jinja2, we have no way to let the variable in outer scope to access value in inner scope because the scope rules. User may need to bypass it using array + do scope. Now in AJJ, a special block is provided to do so.
 
-``` {% set OuterVar = None %}
-    {% with InnerVar = [] %}
-    {% move OuterVar = InnerVar %}
-    {% endwith %}
+```
+  {% set OuterVar = None %}
+  {% with InnerVar = [] %}
+  {% move OuterVar = InnerVar %}
+  {% endwith %}
 ```
 The above code will move the value of InnerVar to OuterVar.
 
 5. Return statements
 Although questionable, but having a return statements may be useful for some tasks. Using return statements your macro could be a real function that perform certain tasks.
 
-``` {% macro SumOfArray( arr ) %}
-    {% set result = 0 %}
-    {% for x in arr %}
+```
+{% macro SumOfArray( arr ) %}
+  {% set result = 0 %}
+  {% for x in arr %}
     {% set cur = result + x %}
     {% move result = cur %}
-    {% endfor %}
-    {% return result %}
-    {% endmacro %}
+  {% endfor %}
+  {% return result %}
+{% endmacro %}
 
 {{ SumOfArray([1,2,3,4,5]) }}
 ```
