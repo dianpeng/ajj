@@ -130,7 +130,8 @@ struct parser {
 
 static
 void parser_init( struct parser* p , const char* src_key,
-    const char* src, struct ajj* a, struct ajj_object* tp ) {
+    const char* src, struct ajj* a,
+    struct ajj_object* tp , struct gc_scope* scp ) {
   tk_init(&(p->tk),src);
   p->a = a;
   p->src_key = src_key;
@@ -139,9 +140,8 @@ void parser_init( struct parser* p , const char* src_key,
   memset(p->cur_scp,0,sizeof(p->cur_scp));
   p->scp_tp = 0;
   p->extends= 0;
-  p->root_gc = &(a->gc_root); /* this level of indirection is useful
-                               * if we want to move template into different
-                               * other scope */
+  p->root_gc = scp;
+  assert(tp->scp);
 }
 
 static
@@ -664,7 +664,7 @@ int parse_prefix( struct parser* p, struct emitter* em ,
       CALLE(parse_attr_or_methodcall(p,em,prefix));
     } else {
       /* Just a variable name */
-      if( !string_null(prefix) ) 
+      if( !string_null(prefix) )
         CALLE(parse_var_prefix(p,em,prefix));
     }
   }
@@ -2383,7 +2383,7 @@ parse_scope( struct parser* p , struct emitter* em ,
           CALLE(parse_block(p,em));
         else if( tk->tk == TK_ENDBLOCK )
           goto done;
-        else 
+        else
           goto fail;
       } else {
         switch(tk->tk) {
@@ -2480,30 +2480,49 @@ parse( struct ajj* a, const char* key,
   struct parser p;
   struct emitter em;
   struct program* prg;
+  struct gc_scope temp_scp; /* temporary gc scope , which enable us
+                             * to delete all the garbage if we parse
+                             * failed */
 
   if((tmpl = ajj_new_template(a,key,src,own)) == NULL) {
       tmpl = ajj_find_template(a,key);
       assert(tmpl != NULL);
+      if(own) free((void*)src);
       return tmpl;
   }
 
-  parser_init(&p,key,src,a,tmpl);
+  /* init the temporary gc scope */
+  gc_init_temp(&temp_scp,tmpl->scp);
+  /* start parsing */
+  parser_init(&p,key,src,a,tmpl,&temp_scp);
+  /* enter the lexical scope for function */
   CHECK(lex_scope_jump(&p)!=NULL);
   /* STARTS for parsing main */
   CHECK((prg = func_table_add_jj_main(
           tmpl->val.obj.fn_tb,&MAIN,0)));
+  /* initialize code emitter */
   emitter_init(&em,prg);
   /* reserve space for builtin values */
   alloc_func_builtin_var(&p);
   if(parse_scope(&p,&em,1,1)) {
-    lex_scope_exit(&p);
+    /* delete all the data in temporary gc scope */
+    gc_scope_exit(a,&temp_scp);
+    /* destroy the parser, it will delete all the stacked
+     * lexical scope  as well */
     parser_destroy(&p);
+    /* we can only delete *this* template */
     ajj_delete_template(a,key);
     return NULL;
   }
   /* EMIT a return instruction */
   emitter_emit0(&em,p.tk.pos,VM_RET);
-  lex_scope_exit(&p);
+
+  /* merge memory in temporary gc to its corresponding
+   * gc scope */
+  gc_temp_merge(&temp_scp,tmpl->scp);
+
+  /* destroy the parser which will destroy all the lexical
+   * scope it creates internally */
   parser_destroy(&p);
   return tmpl;
 }

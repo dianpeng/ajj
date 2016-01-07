@@ -64,6 +64,8 @@
     (X)->next->prev = (X)->prev; \
   } while(0)
 
+#define LEMPTY(X) ((X)->prev == (X))
+
 /* To make print size_t portable, the most conservative way is to
  * cast it into long long int and use llu. Modifier z is not a part
  * of C90 standard */

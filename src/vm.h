@@ -87,7 +87,7 @@ struct runtime {
   /* Runtime inheritance chain when extends happened */
   struct runtime* prev;
   struct runtime* next;
-  
+
   size_t inc_cnt; /* nested inclusion count, if too much include is
                    * met, we just return falure. This avoid crash on
                    * stack overflow */

@@ -69,12 +69,31 @@ struct gc_scope {
     (S)->scp_id = (I); \
   } while(0)
 
+#define gc_init_temp(S,T) \
+  do { \
+    LINIT(&((S)->gc_tail)); \
+    (S)->parent = (T)->parent; \
+    (S)->scp_id = (T)->scp_id; \
+  } while(0)
+
+#define gc_temp_merge(X,T) \
+  do{ \
+    if( !LEMPTY(&((X)->gc_tail)) ) { \
+      (X)->gc_tail.prev->next = (T)->gc_tail.next; \
+      (T)->gc_tail.next->prev = (X)->gc_tail.prev; \
+      (T)->gc_tail.next = (X)->gc_tail.next; \
+      (X)->gc_tail.next->prev = &((T)->gc_tail); \
+    } \
+  } while(0)
+
 struct gc_scope*
 gc_scope_create( struct ajj* a, struct gc_scope* scp );
 
+
+void gc_scope_exit( struct ajj* , struct gc_scope* );
+
 /* This function will destroy all the gc scope allocated memory and also
  * the gc_scope object itself */
-void gc_scope_exit( struct ajj* , struct gc_scope* );
 void gc_scope_destroy( struct ajj* , struct gc_scope* );
 
 #endif /* _GC_H_ */

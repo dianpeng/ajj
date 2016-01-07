@@ -542,7 +542,7 @@ int ajj_render_file( struct ajj* ,
  * encoded */
 int ajj_render_data( struct ajj* ,
     struct ajj_io*,
-    const void* data,
-    size_t data_len );
+    const char* src,
+    const char* key);
 
 #endif /* _AJJ_H_ */

@@ -70,7 +70,7 @@ int run_jinja(struct ajj*);
 
 /* stack manipulation routine */
 #ifndef NDEBUG
-static  
+static
 struct ajj_value*
 stack_value( struct ajj* a , int x ) {
   assert( x >= cur_frame(a)->ebp );
@@ -219,7 +219,7 @@ void vm_rpt_err( struct ajj* a , const char* fmt , ... ) {
 
 /* This function is used to rewrite user throwned error
  * into our own error stack plus stack unwind information */
-static  
+static
 void rewrite_error( struct ajj* a ) {
   char msg[ERROR_BUFFER_SIZE];
   strcpy(msg,a->err);
@@ -227,7 +227,7 @@ void rewrite_error( struct ajj* a ) {
 }
 
 /* stk_push/stk_pop to manipulate the value stack */
-static  
+static
 void stk_pop(struct ajj* a , int off ) {
   int val = off;
   struct func_frame* fr = cur_frame(a);
@@ -235,7 +235,7 @@ void stk_pop(struct ajj* a , int off ) {
   fr->esp -= val;
 }
 
-static  
+static
 int stk_push( struct ajj* a , struct ajj_value v ) {
   struct func_frame* fr = cur_frame(a);
   if( fr->esp == AJJ_MAX_VALUE_STACK_SIZE ) {
@@ -248,7 +248,7 @@ int stk_push( struct ajj* a , struct ajj_value v ) {
   return 0;
 }
 
-static  
+static
 const struct string* const_str( struct ajj* a , int idx ) {
   const struct function* c = cur_function(a);
   assert( IS_JINJA(c) );
@@ -256,7 +256,7 @@ const struct string* const_str( struct ajj* a , int idx ) {
   return &(c->f.jj_fn.str_tbl[idx]);
 }
 
-static  
+static
 double const_num( struct ajj* a, int idx ) {
   const struct function* c = cur_function(a);
   assert( IS_JINJA(c) );
@@ -275,7 +275,7 @@ void runtime_init( struct ajj* a , struct runtime* rt,
   rt->prev = NULL;
   rt->jinja = jinja;
   rt->cur_call_stk = 0;
-  rt->cur_gc = rt->root_gc = 
+  rt->cur_gc = rt->root_gc =
     gc_scope_create(a,&(a->gc_root));
   rt->output = output;
   rt->global = upvalue_table_create(&(a->env));
@@ -329,7 +329,7 @@ void exit_loop( struct ajj* a , int times ) {
   }
 }
 
-static  
+static
 void move_loop( struct ajj* a ) {
   struct func_frame* fr = cur_frame(a);
   struct ajj_value l;
@@ -363,7 +363,7 @@ void program_destroy( struct program* prg ) {
 /* =============================
  * Decoding
  * ===========================*/
-static  
+static
 int next_instr( struct ajj* a ) {
   struct func_frame* fr;
   const struct program* prg;
@@ -377,7 +377,7 @@ int next_instr( struct ajj* a ) {
 
 #define instr_1st_arg(c) bc_1st_arg(c)
 
-static  
+static
 int instr_2nd_arg( struct ajj* a ) {
   struct func_frame* fr;
   const struct program* prg;
@@ -898,7 +898,7 @@ vm_call(struct ajj* a, struct ajj_object* obj ,
   }
 }
 
-static  
+static
 int vm_attrcall(struct ajj* a, struct ajj_object* obj ,
     struct ajj_value* ret ) {
   assert(obj != NULL);
@@ -1047,7 +1047,7 @@ void vm_exit( struct ajj* a , int loops ) {
 
 /* Include template.
  * The include of a separate template is done as followed,
- * we will setup a new runtime and then re-enter the VM_MAIN. 
+ * we will setup a new runtime and then re-enter the VM_MAIN.
  * That new runtime includes all the independent information
  * about the new template. */
 static
@@ -1094,7 +1094,7 @@ int setup_json_env( struct ajj* a , int cnt ,struct runtime* nrt) {
   struct map* d;
   struct ajj_value json_v;
   int itr;
-  
+
   if(fn->type != AJJ_VALUE_STRING) {
     vm_rpt_err(a,"Json file name must be a string,but got:%s!",
         ajj_value_get_type_name(fn));
@@ -1488,7 +1488,7 @@ const struct ajj_value* vm_get_vargs( struct ajj* a ) {
 
     vargs = a->rt->val_stk + fr->ebp + prg->par_size
       + VARGS_INDEX;
-    
+
     /* check the stack */
     if( vargs->type == AJJ_VALUE_NONE )
       return NULL;

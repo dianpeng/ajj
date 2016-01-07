@@ -1122,7 +1122,10 @@ void* ajj_load_file( struct ajj* a , const char* fname ,
   size_t rsz;
   char* r;
 
-  if(!f) return NULL;
+  if(!f) {
+    ajj_error(a,"Cannot load file:%s!",fname);
+    return NULL;
+  }
   start = ftell(f);
   fseek(f,0,SEEK_END); /* not portable for SEEK_END can be
                         * meaningless */
@@ -1149,9 +1152,34 @@ ajj_parse_template( struct ajj* a , const char* filename ) {
   size_t len;
   const char* src = ajj_load_file(a,filename,&len);
   if(!src) {
-    ajj_error(a,"Cannot load file:%s!",filename);
     return NULL;
   } else {
     return parse(a,filename,src,1);
   }
+}
+
+/* Currently this function is not *safe* in terms of memory since
+ * we put all jinja template related memory inside of our global
+ * gc scope. If a template fails for rendering , it will be delayed
+ * until user try to destroy ajj engine pointer. Suppose we have many
+ * jinja template that is malformed or runtime error, then we will
+ * end up with no memory ... To solve this problem, we need a major
+ * change to our jinja template which I would like a  per template
+ * per gc-scope style */
+
+int ajj_render_file( struct ajj* a,
+    struct ajj_io* output,
+    const char* file ) {
+  struct ajj_object* jinja = ajj_parse_template(a,file);
+  if(!jinja) return -1;
+  return vm_run_jinja(a,jinja,output);
+}
+
+int ajj_render_data( struct ajj* a,
+    struct ajj_io* output,
+    const char* src,
+    const char* key ) {
+  struct ajj_object* jinja = parse(a,key,src,0);
+  if(!jinja) return -1;
+  return vm_run_jinja(a,jinja,output);
 }
