@@ -256,6 +256,33 @@ void ajj_value_dict_clear( struct ajj* a,
   builtin_dict_clear(a,obj->value.object);
 }
 
+#ifndef NDEBUG
+/* Slot function sanity check -----------------------------
+ * This check routine only works under DEBUG mode which NDEBUG
+ * is not defined. It checks whether certain requirement for
+ * consistence of the API is matched or not */
+static
+void check_slot_sanity( const struct ajj_slot* slot ) {
+  if(slot->iter_start) {
+    assert(slot->iter_has);
+    assert(slot->iter_move);
+    assert(slot->iter_get_key);
+    assert(slot->iter_get_val);
+    assert(slot->len);
+    assert(slot->empty);
+  }
+  if(slot->eq || slot->ne) {
+    assert(slot->eq);
+    assert(slot->ne);
+  }
+}
+
+#define CHECK_SLOT_SANITY(SLOT) check_slot_sanity(SLOT)
+#else
+#define CHECK_SLOT_SANITY(SLOT) (void)(SLOT)
+#endif /* NDEBUG */
+
+
 struct func_table*
 ajj_add_class( struct ajj* a,
     struct upvalue_table* ut,
@@ -264,6 +291,8 @@ ajj_add_class( struct ajj* a,
   struct func_table* tb = slab_malloc(&(a->ft_slab));
   struct upvalue* uv;
   struct string n = string_dupc(cls->name);
+
+  CHECK_SLOT_SANITY(&(cls->slot));
 
   /* initialize the function table */
   func_table_init(tb,
