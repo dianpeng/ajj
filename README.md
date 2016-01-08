@@ -98,7 +98,7 @@ Each extended template will be evaluated separatly and accordingly.
 ```
   {% set OuterVar = None %}
   {% with InnerVar = [] %}
-  {% move OuterVar = InnerVar %}
+    {% move OuterVar = InnerVar %}
   {% endwith %}
 ```
 The above code will move the value of InnerVar to OuterVar.
