@@ -10,7 +10,6 @@ An Almost Complete Jinja2 Port to C
 5. Dynamic global variable value binding through Json file or template itself.
 6. Fully UTF encoding support.
 7. Small code base with less 12000 lines of C code. Design for embedding.
-8. Default value for macro parameter _must_ be constant value or evaluated to constant.
 
 # Not Supported Jinja2 Features
 1. Recurisve loop is not supported, related field in Loop object is not supported as well.
@@ -58,6 +57,7 @@ is same as
 ```
 
 10. Key value pair style function call is not supported.
+11. Default value for macro parameter _must_ be constant value or evaluated to constant.
 
 # Extension to Jinja2
 1. Context definition through json file or template variable. When you want to include another template, you could customize the rendering behavior by setting upvalue for this template. Upvalue is the context variable that cannot be resolved inside of the
