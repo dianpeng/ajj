@@ -1890,7 +1890,7 @@ int test_upper( struct ajj* a,
 }
 
 /* =====================================
- * GLOBAL FUNCTION
+ * Builtin Filter and Function
  * ===================================*/
 
 /* JSON ---------------------------------------------------------
@@ -2441,6 +2441,38 @@ int rm_trail( struct ajj* a,
   }
 }
 
+static
+int filter_abs( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_len,
+    struct ajj_value* ret ) {
+  if(arg_len != 1 ||arg->type != AJJ_VALUE_NUMBER) {
+    EXEC_FAIL1(a,"%s","Function::abs can only accept one argument,"
+        "and it must be a number!");
+    return AJJ_EXEC_FAIL;
+  } else {
+    double number = ajj_value_to_number(arg);
+    *ret = ajj_value_number( fabs(number) );
+    return AJJ_EXEC_OK;
+  }
+}
+
+static
+int filter_attr( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_len,
+    struct ajj_value* ret ) {
+  if(arg_len != 2) {
+    EXEC_FAIL1(a,"%s","Function::attr can accept 2 arguments!");
+    return AJJ_EXEC_FAIL;
+  } else {
+    /* redispatch to ajj_value_attr_get */
+    return ajj_value_attr_get(a,arg,arg+1,ret);
+  }
+}
+
 void ajj_builtin_load( struct ajj* a ) {
   /* list */
   a->list =  ajj_add_class(a,&(a->builtins),
@@ -2487,6 +2519,16 @@ void ajj_builtin_load( struct ajj* a ) {
   ajj_add_function(a,&(a->builtins),
       "rm_trail",
       rm_trail,
+      NULL);
+
+  ajj_add_filter(a,&(a->builtins),
+      "abs",
+      filter_abs,
+      NULL);
+
+  ajj_add_filter(a,&(a->builtins),
+      "attr",
+      filter_attr,
       NULL);
 
   /* builtin test */

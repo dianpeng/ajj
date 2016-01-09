@@ -460,6 +460,8 @@ void ajj_env_add_class( struct ajj* a , const struct ajj_class* );
 void ajj_env_add_function( struct ajj* a, const char* ,
     ajj_function entry, void* );
 
+#define ajj_env_add_filter ajj_env_add_function
+
 /* Add a test function into ajj environment. Test function has exactly
  * same prototype as normal function. But a test function *MUST* return
  * true/false */
@@ -490,6 +492,8 @@ void ajj_upvalue_add_class( struct ajj* a,
 /* Add a function into the upvalue table */
 void ajj_upvalue_add_function( struct ajj* a, const char*,
     ajj_function entry, void* );
+
+#define ajj_upvalue_add_filter ajj_upvalue_add_function
 
 /* Delete a name from the upvalue. The deletion operation is generally
  * not safe at all. If user delete a builtin upvalue or a upvalue that

@@ -97,6 +97,9 @@ ajj_add_function( struct ajj* a , struct upvalue_table* ut,
     ajj_function entry,
     void* );
 
+/* Just for readability, no difference between a function and a filter */
+#define ajj_add_filter ajj_add_function
+
 const struct function*
 ajj_add_test( struct ajj* a, struct upvalue_table* ut,
     const char* name,

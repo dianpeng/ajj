@@ -814,7 +814,7 @@ int parse_atomic( struct parser* p, struct emitter* em ) {
       CALLE(parse_dict(p,em));
       break;
     default:
-      parser_rpt_err(p,"Unexpect token here:%s",
+      parser_rpt_err(p,"Unexpect token here:%s!",
           tk_get_name(tk->tk));
       return -1;
   }
