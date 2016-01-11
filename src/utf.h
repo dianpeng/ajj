@@ -1,5 +1,5 @@
-#ifndef _UTF8_H_
-#define _UTF8_H_
+#ifndef _UTF_H_
+#define _UTF_H_
 /*
  * The authors of this software are Rob Pike and Ken Thompson.
  *              Copyright (c) 2002 by Lucent Technologies.
@@ -85,4 +85,4 @@ typedef unsigned long		ulong;
 #define USED(x) if(x);else
 #endif
 
-#endif /* _UTF8_H_ */
+#endif /* _UTF_H_ */
