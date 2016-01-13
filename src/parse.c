@@ -653,7 +653,7 @@ int parse_pipecmd( struct parser* p , struct emitter* em ,
 }
 
 static
-int parse_prefix( struct parser* p, struct emitter* em ,
+int parse_attr( struct parser* p, struct emitter* em ,
     struct string* prefix ) {
   struct tokenizer* tk = &(p->tk);
 
@@ -671,20 +671,6 @@ int parse_prefix( struct parser* p, struct emitter* em ,
   do {
     if( tk->tk == TK_DOT || tk->tk == TK_LSQR ) {
       CALLE(parse_attr_or_methodcall(p,em,&NULL_STRING));
-    } else if( tk->tk == TK_PIPE ) {
-      tk_move(tk);
-      EXPECT_VARIABLE();
-      CALLE(symbol(p,prefix));
-      tk_move(tk);
-      if( tk->tk == TK_LPAR ) {
-        CALLE(parse_funccall_or_pipe(p,em,prefix,1));
-      } else if( tk->tk != TK_DOT && tk->tk != TK_LSQR ) {
-        CALLE(parse_pipecmd(p,em,prefix));
-      } else {
-        parser_rpt_err(p,"Cannot pipe to a method call or object call "
-            "syntax. Pipe can only work with free function syntax!");
-        return -1;
-      }
     } else {
       break;
     }
@@ -749,7 +735,7 @@ int parse_is( struct parser* p , struct emitter* em ) {
 }
 
 static
-int parse_postfix( struct parser* p , struct emitter* em ) {
+int parse_test( struct parser* p , struct emitter* em ) {
   CALLE(parse_is(p,em));
   do {
     switch(p->tk.tk) {
@@ -761,6 +747,7 @@ int parse_postfix( struct parser* p , struct emitter* em ) {
         return 0;
     }
   } while(1);
+  return 0;
 }
 
 static
@@ -776,7 +763,7 @@ int parse_atomic( struct parser* p, struct emitter* em ) {
     case TK_VARIABLE:
       CALLE(symbol(p,&str)); /* get the symbol name */
       tk_move(tk); /* move the token */
-      CALLE(parse_prefix(p,em,&str));
+      CALLE(parse_attr(p,em,&str));
       break;
     case TK_STRING:
       strbuf_move(&(tk->lexeme),&str);
@@ -804,23 +791,22 @@ int parse_atomic( struct parser* p, struct emitter* em ) {
     case TK_LPAR:
       CALLE(parse_tuple_or_subexpr(p,em,&tp));
       if(tp == TUPLE)
-        CALLE(parse_prefix(p,em,&NULL_STRING));
+        CALLE(parse_attr(p,em,&NULL_STRING));
       break;
     case TK_LSQR:
       CALLE(parse_list(p,em));
-      CALLE(parse_prefix(p,em,&NULL_STRING));
+      CALLE(parse_attr(p,em,&NULL_STRING));
       break;
     case TK_LBRA:
       CALLE(parse_dict(p,em));
       break;
     default:
-      parser_rpt_err(p,"Unexpect token here:%s!",
+      parser_rpt_err(p,"Unexpected token here:%s!",
           tk_get_name(tk->tk));
       return -1;
   }
-  if(tk->tk == TK_IS || tk->tk == TK_ISN) {
-    CALLE(parse_postfix(p,em));
-  }
+  if( tk->tk == TK_IS || tk->tk == TK_ISN )
+    CALLE(parse_test(p,em));
   return 0;
 }
 
@@ -984,6 +970,35 @@ done:
 }
 #undef PUSH_JMP
 
+static
+int parse_pipe( struct parser* p , struct emitter* em ) {
+  struct tokenizer* tk = &(p->tk);
+  struct string prefix;
+  assert( tk->tk == TK_PIPE );
+  tk_move(tk);
+  EXPECT_VARIABLE();
+  CALLE(symbol(p,&prefix));
+  tk_move(tk);
+  if( tk->tk == TK_LPAR ) {
+    CALLE(parse_funccall_or_pipe(p,em,&prefix,1));
+  } else if( tk->tk != TK_DOT && tk->tk != TK_LSQR ) {
+    CALLE(parse_pipecmd(p,em,&prefix));
+  } else {
+    parser_rpt_err(p,"Cannot pipe to a method call or object call "
+        "syntax. Pipe can only work with free function syntax!");
+    return -1;
+  }
+  return 0;
+}
+
+static
+int parse_pipe_list( struct parser* p , struct emitter* em ) {
+  CALLE(parse_logic(p,em));
+  while(p->tk.tk == TK_PIPE)
+    CALLE(parse_pipe(p,em));
+  return 0;
+}
+
 /* Expression.
  * We support value1 if cond else value2 format.
  * The code generation is not simple at all, however. Since the condition is not
@@ -1002,7 +1017,7 @@ int parse_expr( struct parser* p, struct emitter* em ) {
   int fjmp = EMIT_PUT(em,1);
   int val1_l = emitter_label(em);
   struct tokenizer* tk = &(p->tk);
-  CALLE(parse_logic(p,em));
+  CALLE(parse_pipe_list(p,em));
 
   /* Check if we have a pending if or not */
   if( tk->tk == TK_IF ) {
@@ -1015,13 +1030,13 @@ int parse_expr( struct parser* p, struct emitter* em ) {
 
     /* Parse the condition part */
     cond_l = emitter_label(em);
-    CALLE(parse_logic(p,em));
+    CALLE(parse_pipe_list(p,em));
     EMIT1(em,VM_JT,val1_l); /* jump to value1 when condition is true */
 
     CONSUME(TK_ELSE);
 
     /* Parse the alternative value */
-    CALLE(parse_logic(p,em));
+    CALLE(parse_pipe_list(p,em));
     end_l = emitter_label(em);
 
     /* Patch the jump */
@@ -1605,7 +1620,7 @@ parse_call( struct parser* p , struct emitter* em ) {
  * have recursive loop ( I doubt since it is not intuitive ), he/she
  * can just use built-in function to FLATTEN the list/dictionary */
 
-#define parse_loop_cond(P,EM) parse_logic(P,EM)
+#define parse_loop_cond(P,EM) parse_pipe_list(P,EM)
 
 /* This function compiles the for body into the closure. What is for
  * body:

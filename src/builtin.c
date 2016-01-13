@@ -2447,12 +2447,15 @@ int filter_abs( struct ajj* a,
     struct ajj_value* arg,
     size_t arg_len,
     struct ajj_value* ret ) {
-  if(arg_len != 1 ||arg->type != AJJ_VALUE_NUMBER) {
+  if(arg_len != 1) {
     EXEC_FAIL1(a,"%s","Function::abs can only accept one argument,"
         "and it must be a number!");
     return AJJ_EXEC_FAIL;
   } else {
-    double number = ajj_value_to_number(arg);
+    double number;
+    if( vm_to_number(arg,&number) )
+      EXEC_FAIL1(a,"Function::abs can only get one number, but get:%s!",
+          ajj_value_get_type_name(arg));
     *ret = ajj_value_number( fabs(number) );
     return AJJ_EXEC_OK;
   }

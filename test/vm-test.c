@@ -693,7 +693,6 @@ do_test("{% for x in xrange(10)%} III={{x}}\n {% endfor %}" \
         "{% block Test3 %} vargs={{vargs}} {% endblock %}");
 do_test("{% include 'include.txt' %}"
        "Hello World From Child!\n");
-#endif
   do_test("{% include rm_trail(shell('pwd')) + '/include.txt' %}"
           "{% import 'include.txt' as Lib %}"
           "{% set arr = [1,2,3,4,5,6,7,8,9] %}"
@@ -701,4 +700,6 @@ do_test("{% include 'include.txt' %}"
           "Sum = {{ Lib.array_sum(arr) }}\n"
           "Odd = {{ Lib.odd_filter(arr)}}\n"
       );
+#endif
+  do_test("{{ -3*2>7-1998 | abs }}");
 }
