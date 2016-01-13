@@ -1902,6 +1902,8 @@ int test_upper( struct ajj* a,
  * but it won't be very useful.
  * --------------------------------------------------------------*/
 
+/* TODO:: This json parsing needs to be refactoried since it is not
+ * UTF encoding safe !!! */
 
 /* We use a none-recursive way to do parsing , the reason to prefer
  * a none recursive method is simply because this is safer to avoid
