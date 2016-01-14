@@ -98,9 +98,9 @@ enum {
   X(TK_VARIABLE,"<variable>") \
   TOKEN_KEYWORD_LIST(X) \
   X(TK_EOF,"<eof>") \
-  X(TK_UNKNOWN_NUMBER,"<unknown-number:overflow>") \
-  X(TK_UNKNOWN,"<unknown>") \
-  X(TK_UNKNOWN_UTF,"<unknonw:utf rune error!>")
+  X(TK_UNKNOWN_NUMBER,"number is too large,overflow!")\
+  X(TK_UNKNOWN,"token is not recognized!") \
+  X(TK_UNKNOWN_UTF,"utf encoding rune error!")
 
 #define X(A,B) A,
 typedef enum {

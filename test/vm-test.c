@@ -701,5 +701,5 @@ do_test("{% include 'include.txt' %}"
           "Odd = {{ Lib.odd_filter(arr)}}\n"
       );
 #endif
-  do_test("{{ -3*2>7-1998 | abs }}");
+  do_test("{{ -3*2>7-1998 | abs | abs | abs | abs }}");
 }

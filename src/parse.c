@@ -187,7 +187,6 @@ void parser_rpt_err( struct parser* p , const char* format, ... ) {
   vsnprintf(p->a->err+len,ERROR_BUFFER_SIZE-len, format,vl);
 }
 
-
 /* Lexical scope operation for parsing */
 static
 struct lex_scope* lex_scope_enter( struct parser* p , int is_loop ) {

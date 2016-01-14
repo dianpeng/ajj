@@ -2452,7 +2452,6 @@ int filter_abs( struct ajj* a,
   if(arg_len != 1) {
     EXEC_FAIL1(a,"%s","Function::abs can only accept one argument,"
         "and it must be a number!");
-    return AJJ_EXEC_FAIL;
   } else {
     double number;
     if( vm_to_number(arg,&number) )
@@ -2471,10 +2470,31 @@ int filter_attr( struct ajj* a,
     struct ajj_value* ret ) {
   if(arg_len != 2) {
     EXEC_FAIL1(a,"%s","Function::attr can accept 2 arguments!");
-    return AJJ_EXEC_FAIL;
   } else {
     /* redispatch to ajj_value_attr_get */
     return ajj_value_attr_get(a,arg,arg+1,ret);
+  }
+}
+
+/* TODO:: implement capitalize in UTF encoding word */
+
+/* TODO:: implement center in UTF encoding word */
+
+static
+int filter_default( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_len,
+    struct ajj_value* ret ) {
+  if(arg_len != 2) {
+    EXEC_FAIL1(a,"%s","Function::default requires 2 arguments!");
+  } else {
+    if( arg->type == AJJ_NONE ) {
+      *ret = arg[1];
+    } else {
+      *ret = arg[0];
+    }
+    return AJJ_EXEC_OK;
   }
 }
 
@@ -2534,6 +2554,11 @@ void ajj_builtin_load( struct ajj* a ) {
   ajj_add_filter(a,&(a->builtins),
       "attr",
       filter_attr,
+      NULL);
+
+  ajj_add_filter(a,&(a->builtins),
+      "default",
+      filter_default,
       NULL);
 
   /* builtin test */
