@@ -4,6 +4,7 @@
 #include "parse.h"
 #include "builtin.h"
 #include "vm.h"
+#include "opt.h"
 
 #include <stdlib.h>
 #include <assert.h>
@@ -1183,7 +1184,17 @@ ajj_parse_template( struct ajj* a , const char* filename ) {
   if(!src) {
     return NULL;
   } else {
+#ifdef DISABLE_OPTIMIZATION
+    /* During debugging phase we may not want to switch optimization
+     * on for debugging purpose */
     return parse(a,filename,src,1);
+#else
+    struct ajj_object* ret;
+    ret = parse(a,filename,src,1);
+    if(!ret) return NULL;
+    if(optimize(a,ret)) return NULL;
+    return ret;
+#endif
   }
 }
 

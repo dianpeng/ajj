@@ -1,5 +1,5 @@
 OPT := -O0 -g
-FLAGS := $(OPT) -Wpedantic -Wall -I$(PWD)/src
+FLAGS := $(OPT) -Wpedantic -Wall -I$(PWD)/src -DDISABLE_OPTIMIZATION
 PROFILE_FLAGS := -fprofile-arcs -ftest-coverage
 LINK := -L$(PWD)/. -lajj -lm
 SRC := $(wildcard src/*.c)
