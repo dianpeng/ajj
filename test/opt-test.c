@@ -5,9 +5,6 @@
 #include "bc.h"
 #include "opt.h"
 
-
-
-
 static
 void test1() {
 #if 0

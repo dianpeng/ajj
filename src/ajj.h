@@ -449,6 +449,9 @@ void ajj_destroy( struct ajj* );
  * user */
 void ajj_error ( struct ajj* , const char* format , ... );
 
+/* Get last error descriptive string */
+const char* ajj_last_error( struct ajj* a );
+
 /* Add a value into the ajj environment. The environment is *SHARED* by
  * all the template rendered inside of the same ajj engine */
 void ajj_env_add_value( struct ajj* a , const char* , int type , ... );

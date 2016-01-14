@@ -1,14 +1,24 @@
-#include "parse.h"
-#include "bc.h"
-#include "object.h"
-#include "ajj.h"
-
+#include <parse.h>
+#include <bc.h>
+#include <object.h>
+#include <ajj.h>
 #include <assert.h>
+#include <stdlib.h>
+#include <stdio.h>
 
 #define CHECK(X) \
     do { \
-        if(pos) assert(X); \
-        else assert(!(X)); \
+        if(pos) { \
+            if(!(X)) { \
+                fprintf(stderr,"%s",ajj_last_error(a)); \
+                abort(); \
+            } \
+        } else { \
+            if(!(X)) { \
+                fprintf(stderr,"%s",ajj_last_error(a)); \
+                abort(); \
+            } \
+        } \
     } while(0)
 
 void do_test( const char* src , int pos , int dump ) {
@@ -183,7 +193,7 @@ static
 void test_expr() {
 
   { /* simple expression 1 */
-    const char* src = " {% do users+3+4+foo(1,2,3)|user_end + 78-2 %} ";
+    const char* src = " {% do ( users+3+4+foo(1,2,3) | user_end ) + 78-2 %} ";
     do_test(src,1,0);
   }
 
@@ -462,7 +472,7 @@ void test_include() {
   { /* upvalue */
     const char* src = "{% include 'file.html' upvalue %}\n" \
                       "{% set key=my_key+2 %}\n" \
-                      "{% set key2=my_key+3 fix %}\n" \
+                      "{% set key2=my_key+3 optional %}\n" \
                       "{% set key3=my_key+4 override %}\n" \
                       "{% endinclude %}\n";
     do_test(src,1,0);
@@ -476,7 +486,7 @@ void test_include() {
     const char* src = "{% include 'file.html' json 'json.file'+json_path %}\n" \
                       "{% set key1=my_key2 %} \n" \
                       "{% set key2=my_key3 override %}\n" \
-                      "{% set key3=my_key4 fix %}\n" \
+                      "{% set key3=my_key4 optional %}\n" \
                       "{% endinclude %}";
     do_test(src,1,0);
   }
@@ -490,24 +500,8 @@ void test_include() {
 
 static
 void test_import() {
-
-  { /* basic import */
-    const char* src = "{% import 'file.name'+1 as uuvv %}";
-    do_test(src,1,0);
-  }
-  { /* basic import */
-    const char* src = "{% import 'file.name'+1 as uuvv upvalue %}{% endimport %}";
-    do_test(src,1,0);
-  }
-
-  { /* basic import */
-    const char* src = "{% import 'file.name'+1 as uuvv upvalue %}\n" \
-                      "{% set key1=my_key1 %}\n" \
-                      "{% set key2=my_key2 fix %}\n" \
-                      "{% set key3=my_key3 override %}\n" \
-                      "{% endimport %}";
-    do_test(src,1,0);
-  }
+  const char* src = "{% import 'file.name'+1 as uuvv %}";
+  do_test(src,1,0);
 }
 
 static

@@ -17,6 +17,9 @@ test: lex-test
 lex-test: libajj test/lex-test.c
 	cd test; gcc $(FLAGS) lex-test.c $(LINK) -o lex-test; cd -
 
+parser-test: libajj test/parser-test.c
+	cd test; gcc $(FLAGS) parser-test.c $(LINK) -o parser-test; cd -
+
 vm-test: libajj test/vm-test.c
 	cd test; gcc $(FLAGS) vm-test.c $(LINK) -o vm-test; cd -
 

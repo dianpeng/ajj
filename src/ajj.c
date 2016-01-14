@@ -19,6 +19,8 @@ struct ajj_value AJJ_NONE = { {0} , AJJ_VALUE_NONE };
 
 struct ajj* ajj_create() {
   struct ajj* r = malloc(sizeof(*r));
+  r->err[0] = 0;
+
   slab_init(&(r->upval_slab),
       UPVALUE_SLAB_SIZE, sizeof(struct upvalue));
   slab_init(&(r->obj_slab),
@@ -1175,6 +1177,10 @@ void ajj_error( struct ajj* a , const char* format , ... ) {
   va_list vl;
   va_start(vl,format);
   vsnprintf(a->err,ERROR_BUFFER_SIZE,format,vl);
+}
+
+const char* ajj_last_error( struct ajj* a ) {
+  return a->err;
 }
 
 struct ajj_object*
