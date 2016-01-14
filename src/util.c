@@ -264,10 +264,9 @@ static const unsigned char CSTR_TABLE[][2] = {
 
 struct string NULL_STRING = { NULL , 0 };
 struct string EMPTY_STRING = CONST_STRING("");
-struct string TRUE_STRING = CONST_STRING("true");
-struct string FALSE_STRING= CONST_STRING("false");
-struct string NONE_STRING = CONST_STRING("none");
-
+struct string TRUE_STRING = CONST_STRING("True");
+struct string FALSE_STRING= CONST_STRING("False");
+struct string NONE_STRING = CONST_STRING("None");
 
 struct string string_dup( const struct string* str ) {
   struct string ret;
@@ -275,6 +274,7 @@ struct string string_dup( const struct string* str ) {
   ret.str = malloc(str->len+1);
   ret.len = str->len;
   memcpy((void*)ret.str,str->str,str->len);
+  *((char*)ret.str+str->len) = 0;
   return ret;
 }
 

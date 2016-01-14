@@ -76,15 +76,9 @@ struct gc_scope {
     (S)->scp_id = (T)->scp_id; \
   } while(0)
 
-#define gc_temp_merge(X,T) \
-  do{ \
-    if( !LEMPTY(&((X)->gc_tail)) ) { \
-      (X)->gc_tail.prev->next = (T)->gc_tail.next; \
-      (T)->gc_tail.next->prev = (X)->gc_tail.prev; \
-      (T)->gc_tail.next = (X)->gc_tail.next; \
-      (X)->gc_tail.next->prev = &((T)->gc_tail); \
-    } \
-  } while(0)
+/* Merge the object from temporary GC scope to destination GC scope
+ * and this require us to rewrite the scp field in each object as well */
+void gc_scope_merge( struct gc_scope* dst , struct gc_scope* src );
 
 struct gc_scope*
 gc_scope_create( struct ajj* a, struct gc_scope* scp );

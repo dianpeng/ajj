@@ -334,9 +334,11 @@ int opt_to_string( struct opt* o , struct ajj_value* v,
   int own;
   struct string s;
   if(v->type == AJJ_VALUE_STRING) {
+    /* First assign the string to object otherwise we ruin
+     * the union object's memory and pointer */
+    obj.val.str = *((struct string*)v->value.__private__);
     v->value.object = &obj;
     v->value.object->tp = AJJ_VALUE_STRING;
-    obj.val.str = *((struct string*)v->value.__private__);
   }
   if(vm_to_string(v,&s,&own)) {
     assert(v->type != AJJ_VALUE_STRING);

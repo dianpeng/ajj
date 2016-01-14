@@ -4,19 +4,19 @@ Hello World From Parent
 {# ----------------------------------------------------- #}
 {# sum function, it is used to calculate sum of an array #}
 {% macro array_sum(arr) %}
-{% set result = 0 %}
-{% for x in arr %}
-{% set sum = result + x %}
-{% move result = sum %}
-{% endfor %}
-{% return result %}
+  {% set result = 0 %}
+  {% for x in arr %}
+    {% set sum = result + x %}
+    {% move result = sum %}
+  {% endfor %}
+  {% return result %}
 {% endmacro %}
 {# ------------------------------------------------------ #}
 {# odd filter function that filters out all the odd value #}
 {% macro odd_filter(arr) %}
-{% set result = [] %}
-{% for x in arr if x is odd %}
-{% do result.append(x) %}
-{% endfor %}
-{% return result %}
+  {% set result = [] %}
+  {% for x in arr if x is odd %}
+    {% do result.append(x) %}
+  {% endfor %}
+  {% return result %}
 {% endmacro %}

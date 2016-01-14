@@ -2489,7 +2489,7 @@ int filter_default( struct ajj* a,
   if(arg_len != 2) {
     EXEC_FAIL1(a,"%s","Function::default requires 2 arguments!");
   } else {
-    if( arg->type == AJJ_NONE ) {
+    if( arg->type == AJJ_VALUE_NONE ) {
       *ret = arg[1];
     } else {
       *ret = arg[0];

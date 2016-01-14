@@ -1551,8 +1551,7 @@ int vm_call_script_func( struct ajj* a , struct ajj_object* tmpl,
 
 static
 struct ajj_object* caller_object( struct ajj* a ) {
-  assert(cur_frame(a)->obj == NULL &&
-      !(cur_frame(a)->obj->tp != AJJ_VALUE_JINJA));
+  assert(cur_frame(a)->obj == NULL); /* Can only gets called inside of a C function */
   assert(a->rt->cur_call_stk>1);
   assert(a->rt->call_stk[a->rt->cur_call_stk-2].obj->tp == AJJ_VALUE_JINJA);
   return a->rt->call_stk[a->rt->cur_call_stk-2].obj;

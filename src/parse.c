@@ -2533,7 +2533,7 @@ parse( struct ajj* a, const char* key,
 
   /* merge memory in temporary gc to its corresponding
    * gc scope */
-  gc_temp_merge(&temp_scp,tmpl->scp);
+  gc_scope_merge(tmpl->scp,&temp_scp);
 
   /* destroy the parser which will destroy all the lexical
    * scope it creates internally */
