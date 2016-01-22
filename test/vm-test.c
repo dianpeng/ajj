@@ -412,7 +412,6 @@ void test_random_1() {
 }
 
 int main() {
-#if 0
   test_simple();
   test_expr();
   test_loop();
@@ -421,9 +420,4 @@ int main() {
   test_branch();
   test_macro();
   test_random_1();
-#endif
-  do_test("{% for i in xrange(1000) if i % 3 == 0 %}" \
-          "{% set idx = cnt+1 %}" \
-          "{{ idx }}\n" \
-          "{% endfor %}");
 }

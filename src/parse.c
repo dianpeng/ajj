@@ -68,6 +68,9 @@ struct loop_ctrl {
                   * instructions. If means , if we have to shfit
                   * control flow across the scope, then we need
                   * to account for this count as well */
+  int stk_pos;   /* Used to record the exact stack position when
+                  * the loop is entered. It is used to generate
+                  * POP code when break and continue happens */
   struct {
     int code_pos;
     int enter_cnt;
@@ -202,6 +205,7 @@ struct lex_scope* lex_scope_enter( struct parser* p , int is_loop ) {
     scp->lctrl->brks_len = 0;
     scp->lctrl->conts_len= 0;
     scp->lctrl->cur_enter = 0;
+    scp->lctrl->stk_pos = -1;
     scp->is_loop = 1;
   } else {
     scp->in_loop = lex_scope_top(p)->in_loop;
@@ -1645,7 +1649,6 @@ static int parse_for_body( struct parser* p ,
   int itr_idx;
   int obj_idx;
   int deref_tp;
-  int poped_num;
   size_t i;
   struct string obj_name;
   struct string itr_name;
@@ -1741,13 +1744,12 @@ static int parse_for_body( struct parser* p ,
   }
   CONSUME(TK_RSTMT);
 
+  /* change stack pointer which is used for break/continue */
+  scp->lctrl->stk_pos = scp->end;
+  /* parse the scope */
   CALLE(parse_scope(p,em,0,0));
 
   assert( lex_scope_top(p)->is_loop && lex_scope_top(p)->in_loop );
-
-  /* filter jumps to here */
-  if( filter_jmp >0 )
-    EMIT1_AT(em,filter_jmp,VM_JF,emitter_label(em));
 
   /* patch the continue jump table here */
   for( i = 0 ; i < lex_scope_top(p)->lctrl->conts_len ; ++i ) {
@@ -1757,18 +1759,18 @@ static int parse_for_body( struct parser* p ,
         emitter_label(em));
   }
 
-  /* resume the stack status , we need to pop
-   * the following value out from stack :
-   * 1. All the local variable that is inside of
-   * this lexical scope. We don't need to pop it
-   * in other scope but only here because the loop
-   * scope doesn't exit and enter gc scope for each
-   * loop.
-   * 2. All the key value pair */
-  assert(scp->len>=2);
-  poped_num = scp->len -2;
-  if( poped_num )
-    EMIT1(em,VM_POP,poped_num);
+  /* filter jumps to here */
+  if( filter_jmp >0 )
+    EMIT1_AT(em,filter_jmp,VM_JF,emitter_label(em));
+
+  /* generate code for poping the dereferenced value */
+  if(deref_tp!=-1) {
+    if(deref_tp == ITERATOR_KEYVAL) {
+      EMIT1(em,VM_POP,2);
+    } else {
+      EMIT1(em,VM_POP,1);
+    }
+  }
 
   /* move the iterator */
   EMIT0(em,VM_ITER_MOVE);
@@ -1786,7 +1788,7 @@ static int parse_for_body( struct parser* p ,
   EMIT0(em,VM_ITER_EXIT);
 
   /* patch the break jump table here */
-  if( lex_scope_top(p)->lctrl->brks_len && poped_num > 0 ) {
+  if( lex_scope_top(p)->lctrl->brks_len ) {
     /* generate a jump here to make sure normal execution flow
      * will skip the following ONE pop instruction */
     brk_jmp = EMIT_PUT(em,1);
@@ -1799,17 +1801,15 @@ static int parse_for_body( struct parser* p ,
         emitter_label(em));
   }
 
-  if( i && poped_num > 0 ) {
-    /* it means we do see break inside of the loop scope.
-     * we need to generate some other stub code here to pop
-     * the dereferenced value on stack. Currently there are
-     * deref_tp number of value on top of the stack which are
-     * elements inside of the list/dict. We need to pop these
-     * values as well when we patch the break. Otherwise they
-     * will not be cleared since the code for pop these values
-     * actually resides inside of the loop body , not here */
-    EMIT1(em,VM_POP,poped_num); /* pop the value if the break control
-                                 * reaches here */
+  if( i ) {
+    /* generate pop instruction for dereferenced value */
+    if(deref_tp!=-1) {
+      if(deref_tp == ITERATOR_KEYVAL) {
+        EMIT1(em,VM_POP,2);
+      } else {
+        EMIT1(em,VM_POP,1);
+      }
+    }
     EMIT0(em,VM_ITER_EXIT);     /* Generate ITER_EXIT since the loop
                                  * has been breaked */
     assert( brk_jmp >0 );
@@ -2059,6 +2059,7 @@ static int
 parse_break( struct parser* p , struct emitter* em ) {
   struct tokenizer* tk = &(p->tk);
   int pos;
+  struct lex_scope* lscp;
   assert(tk->tk == TK_BREAK);
   tk_move(tk);
 
@@ -2066,6 +2067,15 @@ parse_break( struct parser* p , struct emitter* em ) {
   if( lex_scope_top(p)->lctrl->brks_len == MAX_LOOP_CTRL_SIZE ) {
     parser_rpt_err(p,"Cannot have more break statements in this loop!");
     return -1;
+  }
+  /* Generate code for break instruction. Since when break happend,
+   * the control flow will be changed, the stack status cannot be
+   * maintained properly here. We need to generate POP code to make
+   * stack consistent */
+  lscp = lex_scope_top(p);
+  assert(lscp->end >= lscp->lctrl->stk_pos);
+  if(lscp->end > lscp->lctrl->stk_pos) {
+    EMIT1(em,VM_POP,lscp->end - lscp->lctrl->stk_pos);
   }
   pos = lex_scope_top(p)->lctrl->brks_len;
   lex_scope_top(p)->lctrl->brks[pos].code_pos = EMIT_PUT(em,2);
@@ -2080,6 +2090,7 @@ static int
 parse_continue( struct parser* p , struct emitter* em ) {
   struct tokenizer* tk = &(p->tk);
   int pos;
+  struct lex_scope* lscp;
   assert(tk->tk == TK_CONTINUE);
   tk_move(tk);
 
@@ -2087,6 +2098,11 @@ parse_continue( struct parser* p , struct emitter* em ) {
   if( lex_scope_top(p)->lctrl->conts_len == MAX_LOOP_CTRL_SIZE ) {
     parser_rpt_err(p,"Cannot have more continue statements in this loop!");
     return -1;
+  }
+  lscp = lex_scope_top(p);
+  assert(lscp->end >= lscp->lctrl->stk_pos);
+  if(lscp->end > lscp->lctrl->stk_pos) {
+    EMIT1(em,VM_POP,lscp->end - lscp->lctrl->stk_pos);
   }
   pos = lex_scope_top(p)->lctrl->conts_len;
   lex_scope_top(p)->lctrl->conts[pos].code_pos = EMIT_PUT(em,2);
@@ -2355,6 +2371,8 @@ parse_scope( struct parser* p , struct emitter* em ,
     int enter_scope ,
     int emit_gc ) {
   struct tokenizer* tk = &(p->tk);
+  int stk_start; /* record the stack position before compiling
+                  * any code in this scope */
 
   /* only when we are in global scope and also we see extends
    * we switch ourself into a strict extends mode that refuses
@@ -2363,6 +2381,8 @@ parse_scope( struct parser* p , struct emitter* em ,
 
   if( enter_scope )
     CALLE(lex_scope_enter(p,0) == NULL);
+
+  stk_start = lex_scope_top(p)->end;
 
   if( emit_gc )
     ENTER_SCOPE();
@@ -2471,6 +2491,11 @@ parse_scope( struct parser* p , struct emitter* em ,
 #undef HANDLE_CASE
 
 done:
+  /* generate code for poping temporary value on stack */
+  if(lex_scope_top(p)->end > stk_start) {
+    EMIT1(em,VM_POP,lex_scope_top(p)->end - stk_start);
+  }
+
   if( emit_gc )
     EMIT0(em,VM_EXIT);
 
