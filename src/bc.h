@@ -84,6 +84,7 @@ extern struct string LOOP;
   X(VM_NIN,0,"notin") \
   X(VM_TEST,2,"test") \
   X(VM_TESTN,2,"testn") \
+  X(VM_BOOL,0,"bool") \
   X(VM_LEN,0,"len") \
   X(VM_CAT,0,"cat") \
   X(VM_EQ,0,"eq") \

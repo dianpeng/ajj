@@ -57,30 +57,25 @@ void test_simple() {
  * TEST EXPRESSION
  * ================================*/
 
+#define TEST(A,B) \
+  do { \
+    do_test("{% do assert_expr( A == B , 'A == B')%}"); \
+  } while(0)
+
 static
 void test_expr() {
-  {
-    const char* src = "{{ 1+2*3/4 }}\n";
-    do_test(src);
-  }
-
-  {
-    const char* src = "{{ 1+2*3**4%3 }}\n";
-    do_test(src);
-  }
-
-  {
-    const char* src = "{{ 1+2*3**4%3 > 0 and 1>=1+2*3 or -9 < 0}}\n";
-    do_test(src);
-  }
-  {
-    const char* src = "{{ 3//4 if True == False else 4**2 }}";
-    do_test(src);
-  }
-  {
-    const char* src = "{{ 3//4 if not True == False else 4**2 }}\n";
-    do_test(src);
-  }
+  /* Arithmatic */
+  TEST(1+2*3,7);
+  TEST(1+2**3,9);
+  TEST(1+4,5);
+  TEST(1*5,5);
+  TEST(100*100,10000);
+  TEST(5/100,0.02);
+  TEST(5%6,1);
+  do_test("{% do assert_expr(5//5==1,'5//2==1') %}");
+  TEST(1*2**3 && 4/5 or 1,True);
+  TEST(1+2*3/4 >= 5 and 90,False);
+  TEST(3/4 if True == False else 4**2,4**2);
   {
     const char* src = "{% for index,val in xrange(1000) %}" \
                        "{{ ':'+index }}\n"\
@@ -121,18 +116,36 @@ void test_expr() {
   }
 
   do_test("{% set my_dict = {'abc':123} %}"\
-      "{{ my_dict.abc }}\n" \
-      "{{ my_dict['abc'] }}\n");
+          "{% do assert_expr(my_dict.abc == 123,'_') %}" \
+          "{% do assert_expr(my_dict['abc']==123,'_') %}");
 
-  do_test("{{ True is not None }}\n"
-      "{{ 2 is odd }}\n"
-      "{{ 3 is odd }}\n"
-      "{{ 4 is even}}\n"
-      "{{ 'UvUv' is upper }}\n"
-      "{{ 'UU' is upper }}\n"
-      "{{ 'VuV' is lower}}\n"
-      "{{ 'vvu' is lower}}\n"
-      "{{ NotDefine is not defined }}\n");
+  do_test("{% set my_dict = {'abc':[1,2,3] , 'u'*3:'f'*3 } %}" \
+          "{% do assert_expr(my_dict.abc[1] == 2,'_') %}" \
+          "{% do assert_expr(my_dict.abc[0] == 1,'_') %}" \
+          "{% do assert_expr(my_dict.uuu == 'fff','_') %}" \
+          "{% do assert_expr(my_dict['uuu'] == 'fff','_') %}" \
+          "{% set dict2 = { 'new_dict' : my_dict , 'vv':[1,2,3,4] } %}"\
+          "{% do assert_expr(dict2.new_dict.uuu == 'fff','_') %}" \
+          "{% do assert_expr(dict2.new_dict.abc[2] == 3,'_') %}" \
+          "{% do assert_expr(dict2.vv[3] == 4,'_') %}");
+
+  do_test("{% set my_list = [] %}" \
+          "{% for i in xrange(1000) if i % 3 == 0 %}" \
+          "{% do my_list.append(i) %}" \
+          "{% endfor %}" \
+          "{% set cnt = 0 %}" \
+          "{% for i in xrange(1000) if i % 3 == 0 %}" \
+          "{% set idx = cnt+1 %}" \
+          "{{ 'idx'+':'+idx }}\n"\
+          "{% move cnt = idx %}" \
+          "{{ 'idx'+':'+idx }}\n"\
+          "{% do assert_expr(my_list[idx-1]==i,'_'+i+':'+idx) %}" \
+          "{% endfor %}");
+
+  TEST(2 is odd,False);
+  TEST(3 is odd,True);
+  TEST(4 is even,True);
+  TEST(NotDefine is not defined,True);
 }
 
 void test_loop() {
@@ -399,6 +412,7 @@ void test_random_1() {
 }
 
 int main() {
+#if 0
   test_simple();
   test_expr();
   test_loop();
@@ -407,4 +421,9 @@ int main() {
   test_branch();
   test_macro();
   test_random_1();
+#endif
+  do_test("{% for i in xrange(1000) if i % 3 == 0 %}" \
+          "{% set idx = cnt+1 %}" \
+          "{{ idx }}\n" \
+          "{% endfor %}");
 }

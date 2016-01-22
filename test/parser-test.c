@@ -7,30 +7,30 @@
 #include <stdio.h>
 
 #define CHECK(X) \
-    do { \
-        if(pos) { \
-            if(!(X)) { \
-                fprintf(stderr,"%s",ajj_last_error(a)); \
-                abort(); \
-            } \
-        } else { \
-            if(!(X)) { \
-                fprintf(stderr,"%s",ajj_last_error(a)); \
-                abort(); \
-            } \
-        } \
-    } while(0)
+  do { \
+    if(pos) { \
+      if(!(X)) { \
+        fprintf(stderr,"%s",ajj_last_error(a)); \
+        abort(); \
+      } \
+    } else { \
+      if(!(X)) { \
+        fprintf(stderr,"%s",ajj_last_error(a)); \
+        abort(); \
+      } \
+    } \
+  } while(0)
 
 void do_test( const char* src , int pos , int dump ) {
-    struct ajj* a = ajj_create();
-    struct ajj_object* obj = parse(a,"HelloWorld",src,0);
-    const struct program* prg;
+  struct ajj* a = ajj_create();
+  struct ajj_object* obj = parse(a,"HelloWorld",src,0);
+  const struct program* prg;
 
-    (void)dump;
+  (void)dump;
 
-    CHECK(obj);
-    prg = ajj_object_jinja_main(obj);
-    CHECK(prg);
+  CHECK(obj);
+  prg = ajj_object_jinja_main(obj);
+  CHECK(prg);
 }
 
 

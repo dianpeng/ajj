@@ -1,4 +1,4 @@
-OPT := -O0 -g
+OPT := -g
 FLAGS := $(OPT) -Wpedantic -Wall -I$(PWD)/src -DDISABLE_OPTIMIZATION
 PROFILE_FLAGS := -fprofile-arcs -ftest-coverage
 LINK := -L$(PWD)/. -lajj -lm
@@ -22,6 +22,9 @@ parser-test: libajj test/parser-test.c
 
 vm-test: libajj test/vm-test.c
 	cd test; gcc $(FLAGS) vm-test.c $(LINK) -o vm-test; cd -
+
+opt-test: libajj test/opt-test.c
+	cd test; gcc $(FLAGS) opt-test.c $(LINK) -o opt-test; cd -
 
 clean:
 	rm *.o

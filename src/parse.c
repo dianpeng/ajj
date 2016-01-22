@@ -951,15 +951,16 @@ int parse_logic( struct parser* p, struct emitter* em ) {
       case TK_AND: PUSH_JMP(VM_JLF); break;
       case TK_OR:  PUSH_JMP(VM_JLT); break;
       default:
+        if( sz != 0 ) {
+          /* for the last value, we just booleanize
+           * it to true and false */
+          EMIT0(em,VM_BOOL);
+        }
         goto done;
     }
     tk_move(tk);
     CALLE(parse_cmp(p,em));
   } while(1);
-  /* fallback position means we evaluate it to true , since
-   * if all component passes jump, we end up having nothing
-   * on stack. So we need to load true value on stack here */
-  EMIT0(em,VM_LTRUE);
 done:
   pos = emitter_label(em);
   for( i = 0 ; i < sz ; ++i ) {

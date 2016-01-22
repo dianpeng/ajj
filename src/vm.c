@@ -1686,7 +1686,7 @@ int vm_main( struct ajj* a ) {
         struct ajj_value o;
         l = to_number(a,stk_top(a,2),RCHECK);
         r = to_number(a,stk_top(a,1),RCHECK);
-        o = ajj_value_number(l+r);
+        o = ajj_value_number(l-r);
         stk_pop(a,2);
         stk_push(a,o);
       } vm_end(SUB)
@@ -1840,6 +1840,16 @@ int vm_main( struct ajj* a ) {
         int an = instr_2nd_arg(a);
         vm_test(a,fn_idx,an,1,RCHECK);
       } vm_end(TEST)
+
+      vm_beg(BOOL) {
+        if( vm_is_true(stk_top(a,1)) ) {
+          stk_pop(a,1);
+          stk_push(a,AJJ_TRUE);
+        } else {
+          stk_pop(a,1);
+          stk_push(a,AJJ_FALSE);
+        }
+      } vm_end(BOOL)
 
       vm_beg(TESTN) {
         int fn_idx = instr_1st_arg(c);
@@ -2009,9 +2019,7 @@ int vm_main( struct ajj* a ) {
       vm_beg(MOVE) {
         int l = instr_1st_arg(c);
         int r = instr_2nd_arg(a);
-        struct ajj_value temp = *stk_bot(a,l);
         *stk_bot(a,l) = *stk_bot(a,r);
-        *stk_bot(a,r) = temp;
       } vm_end(MOVE)
 
       vm_beg(LIFT) {

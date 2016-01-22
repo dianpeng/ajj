@@ -1663,36 +1663,6 @@ int test_iterator( struct ajj* a,
 }
 
 static
-int test_lower( struct ajj* a,
-    void* udata,
-    struct ajj_value* arg,
-    size_t arg_num,
-    struct ajj_value* ret ) {
-  UNUSE_ARG(udata);
-  if(arg_num != 1) {
-    EXEC_FAIL1(a,"%s","Test function:lower cannot "
-        "accept extra arguments!");
-  } else {
-    if(arg[0].type != AJJ_VALUE_STRING) {
-      EXEC_FAIL1(a,"%s","Test function:lower can only "
-          "accept string type as its argument!");
-    } else {
-      const char* str = ajj_value_to_cstr(arg);
-      for( ; *str ; ++str ) {
-        if(isupper(*str))
-          break;
-      }
-      if(*str) {
-        *ret = AJJ_FALSE;
-      } else {
-        *ret = AJJ_TRUE;
-      }
-    }
-    return AJJ_EXEC_OK;
-  }
-}
-
-static
 int test_mapping( struct ajj* a,
     void* udata,
     struct ajj_value* arg,
@@ -2443,6 +2413,30 @@ int rm_trail( struct ajj* a,
   }
 }
 
+/* Useful function for testing the AJJ itself */
+static
+int assert_expr( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_len,
+    struct ajj_value* ret ) {
+  if(arg_len != 2) {
+    EXEC_FAIL1(a,"%s","Function::assert_expr can only accept 2 arguments!");
+  } else {
+    if( arg[1].type != AJJ_VALUE_STRING ) {
+      EXEC_FAIL1(a,"%s","Function::assert_expr's second argument must be a "
+          "string!");
+    }
+    if( vm_is_true(arg) ) {
+      return AJJ_EXEC_OK;
+    } else {
+      ajj_error(a,"Function::assert_expr failed with message:%s!",
+          ajj_value_to_cstr(arg+1));
+      return AJJ_EXEC_FAIL;
+    }
+  }
+}
+
 static
 int filter_abs( struct ajj* a,
     void* udata,
@@ -2546,6 +2540,11 @@ void ajj_builtin_load( struct ajj* a ) {
       rm_trail,
       NULL);
 
+  ajj_add_function(a,&(a->builtins),
+      "assert_expr",
+      assert_expr,
+      NULL);
+
   ajj_add_filter(a,&(a->builtins),
       "abs",
       filter_abs,
@@ -2595,8 +2594,14 @@ void ajj_builtin_load( struct ajj* a ) {
   ajj_add_test(a,&(a->builtins),
       "iterable",test_iterator,NULL);
 
+  /* This version is deleted since it doesn't
+   * support UTF encoding. Later on I will write
+   * a new one
+   *
   ajj_add_test(a,&(a->builtins),
       "lower",test_lower,NULL);
+   *
+   */
 
   ajj_add_test(a,&(a->builtins),
       "mapping",test_mapping,NULL);

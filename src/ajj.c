@@ -569,6 +569,7 @@ ajj_io_create_mem( struct ajj* a , size_t cap ) {
   struct ajj_io* r = malloc(sizeof(*r));
   UNUSE_ARG(a);
   strbuf_init(&(r->out.m));
+  r->tp = AJJ_IO_MEM;
   return r;
 }
 
@@ -734,7 +735,7 @@ int ajj_value_attr_push( struct ajj* a,
 struct ajj_value ajj_value_move( struct ajj* a,
     const struct ajj_value* self,
     struct ajj_value* tar ) {
-  if( self->type == AJJ_VALUE_OBJECT ) {
+  if( self->type == AJJ_VALUE_OBJECT ){
     ajj_value_move_scope(a,
         self->value.object->scp,
         tar);
