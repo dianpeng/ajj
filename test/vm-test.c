@@ -512,7 +512,6 @@ void test_random_1() {
 }
 
 int main() {
-#if 0
   test_simple();
   test_expr();
   test_loop();
@@ -521,7 +520,4 @@ int main() {
   test_branch();
   test_macro();
   test_random_1();
-#endif
-  do_test("{% do assert_expr( #'HelloWorld' == 10 ) %}" \
-          "{% do assert_expr( #True == 1 ) %}");
 }
