@@ -776,6 +776,7 @@ utf_fail:
 static
 token_id tk_lex_jinja( struct tokenizer* tk ) {
   int i = tk->pos;
+
   Rune c1,c2; /* c1 is the current character,
                * c2 is the look ahead one */
   size_t o1,o2; /* offset1 is the current character's offset
@@ -871,7 +872,6 @@ token_id tk_lex( struct tokenizer* tk ) {
 token_id tk_move( struct tokenizer* tk ) {
   token_id ret;
   assert( tk->tk != TK_UNKNOWN && tk->tk != TK_EOF );
-  assert( tk->tk_len > 0 );
 
   if( tk->tk == TK_LSTMT || tk->tk == TK_LEXP ) {
     tk->mode = TOKENIZE_SCRIPT;

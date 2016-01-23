@@ -735,7 +735,8 @@ int ajj_value_attr_push( struct ajj* a,
 struct ajj_value ajj_value_move( struct ajj* a,
     const struct ajj_value* self,
     struct ajj_value* tar ) {
-  if( self->type == AJJ_VALUE_OBJECT ){
+  if( self->type == AJJ_VALUE_OBJECT ||
+      self->type == AJJ_VALUE_STRING ){
     ajj_value_move_scope(a,
         self->value.object->scp,
         tar);
@@ -791,7 +792,7 @@ int ajj_value_iter_move( struct ajj* a,
     int itr , int* result ) {
   if( obj->type == AJJ_VALUE_STRING ) {
     *result = itr+1;
-    return -1;
+    return 0;
   } else if( obj->type == AJJ_VALUE_OBJECT ) {
     struct object* o = &(obj->value.object->val.obj);
     assert( o->fn_tb->slot.iter_move );

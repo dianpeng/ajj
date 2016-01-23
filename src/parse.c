@@ -1246,7 +1246,7 @@ parse_constexpr( struct parser* p , struct ajj_value* output ) {
  * or not */
 static
 int parse_scope( struct parser* , struct emitter* em ,
-    int enter_scope , int emit_gc );
+    int enter_scope , int emit_gc , int pop_num );
 
 static
 int parse_print( struct parser* p, struct emitter* em ) {
@@ -1289,7 +1289,7 @@ int parse_branch ( struct parser* p, struct emitter* em ) {
 
   CONSUME(TK_RSTMT);
 
-  CALLE(parse_scope(p,em,1,1));
+  CALLE(parse_scope(p,em,1,1,0));
   /* jump out of the scope */
   PUSH_JMP(EMIT_PUT(em,1));
   do {
@@ -1333,7 +1333,7 @@ int parse_branch ( struct parser* p, struct emitter* em ) {
             tk_get_name(tk->tk));
         return -1;
     }
-    CALLE(parse_scope(p,em,1,1));
+    CALLE(parse_scope(p,em,1,1,0));
     PUSH_JMP(EMIT_PUT(em,1));
   } while(1);
 done:
@@ -1419,7 +1419,7 @@ parse_func_body( struct parser* p , struct emitter* em ) {
 
   /* start to parse the function body ,which is just
    * another small code scope */
-  CALLE(parse_scope(p,em,1,1));
+  CALLE(parse_scope(p,em,1,1,0));
 
   /* Generate return instructions */
   EMIT0(em,VM_RET);
@@ -1747,7 +1747,7 @@ static int parse_for_body( struct parser* p ,
   /* change stack pointer which is used for break/continue */
   scp->lctrl->stk_pos = scp->end;
   /* parse the scope */
-  CALLE(parse_scope(p,em,0,0));
+  CALLE(parse_scope(p,em,0,0,0));
 
   assert( lex_scope_top(p)->is_loop && lex_scope_top(p)->in_loop );
 
@@ -1837,7 +1837,7 @@ static int parse_for_body( struct parser* p ,
     tk_move(&(p->tk));
     CONSUME(TK_RSTMT);
     /* Parse the else scope */
-    CALLE(parse_scope(p,em,1,1));
+    CALLE(parse_scope(p,em,1,1,0));
   } else {
     /* Patch the else_jmp */
     EMIT1_AT(em,else_jmp,VM_JEPT,emitter_label(em));
@@ -2134,7 +2134,7 @@ parse_with( struct parser* p , struct emitter* em ) {
     CALLE(parse_assign(p,em,idx));
     CONSUME(TK_RSTMT);
     /* Now parsing the whole scope body */
-    CALLE(parse_scope(p,em,0,0));
+    CALLE(parse_scope(p,em,0,0,1));
     EMIT0(em,VM_EXIT); /* exit the scope */
     CONSUME(TK_ENDWITH);
     CONSUME(TK_RSTMT);
@@ -2142,7 +2142,7 @@ parse_with( struct parser* p , struct emitter* em ) {
     lex_scope_exit(p);
   } else {
     CONSUME(TK_RSTMT);
-    CALLE(parse_scope(p,em,1,1));
+    CALLE(parse_scope(p,em,1,1,0));
     CONSUME(TK_ENDWITH);
     CONSUME(TK_RSTMT);
   }
@@ -2369,7 +2369,8 @@ parse_extends( struct parser * p , struct emitter* em ) {
 static int
 parse_scope( struct parser* p , struct emitter* em ,
     int enter_scope ,
-    int emit_gc ) {
+    int emit_gc ,
+    int pop_num ) {
   struct tokenizer* tk = &(p->tk);
   int stk_start; /* record the stack position before compiling
                   * any code in this scope */
@@ -2491,9 +2492,11 @@ parse_scope( struct parser* p , struct emitter* em ,
 #undef HANDLE_CASE
 
 done:
+  assert( lex_scope_top(p)->end >= stk_start );
+  pop_num += lex_scope_top(p)->end - stk_start;
   /* generate code for poping temporary value on stack */
-  if(lex_scope_top(p)->end > stk_start) {
-    EMIT1(em,VM_POP,lex_scope_top(p)->end - stk_start);
+  if(pop_num) {
+    EMIT1(em,VM_POP,pop_num);
   }
 
   if( emit_gc )
@@ -2544,7 +2547,7 @@ parse( struct ajj* a, const char* key,
   emitter_init(&em,prg);
   /* reserve space for builtin values */
   alloc_func_builtin_var(&p);
-  if(parse_scope(&p,&em,1,1)) {
+  if(parse_scope(&p,&em,1,1,0)) {
     /* delete all the data in temporary gc scope */
     gc_scope_exit(a,&temp_scp);
     /* destroy the parser, it will delete all the stacked

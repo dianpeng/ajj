@@ -2420,18 +2420,22 @@ int assert_expr( struct ajj* a,
     struct ajj_value* arg,
     size_t arg_len,
     struct ajj_value* ret ) {
-  if(arg_len != 2) {
-    EXEC_FAIL1(a,"%s","Function::assert_expr can only accept 2 arguments!");
+  if(arg_len <=0 || arg_len > 2) {
+    EXEC_FAIL1(a,"%s","Function::assert_expr can only accept 1 or 2 arguments!");
   } else {
-    if( arg[1].type != AJJ_VALUE_STRING ) {
+    if( arg_len == 2 && arg[1].type != AJJ_VALUE_STRING ) {
       EXEC_FAIL1(a,"%s","Function::assert_expr's second argument must be a "
           "string!");
     }
     if( vm_is_true(arg) ) {
       return AJJ_EXEC_OK;
     } else {
-      ajj_error(a,"Function::assert_expr failed with message:%s!",
-          ajj_value_to_cstr(arg+1));
+      if( arg_len == 1 ) {
+        ajj_error(a,"Function::assert_expr failed!");
+      } else {
+        ajj_error(a,"Function::assert_expr failed with message:%s!",
+            ajj_value_to_cstr(arg+1));
+      }
       return AJJ_EXEC_FAIL;
     }
   }

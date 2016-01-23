@@ -412,7 +412,8 @@ ajj_object_move( struct ajj* a,
     obj->scp = scp;
     /* Now propogate the move operation into the object's internal
      * states */
-    if(obj->tp != AJJ_VALUE_STRING) {
+    if(obj->tp != AJJ_VALUE_STRING &&
+       obj->tp != AJJ_VALUE_CONST_STRING) {
       if(obj->val.obj.fn_tb->slot.move) {
         struct ajj_value objv = ajj_value_assign(obj);
         /* Notify the object to move all its children object */

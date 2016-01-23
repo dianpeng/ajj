@@ -724,6 +724,7 @@ is_empty( struct ajj* a , struct ajj_value* val , int* fail ) {
     rewrite_error(a);
     return -1;
   } else {
+    *fail = 0;
     return res;
   }
 }
