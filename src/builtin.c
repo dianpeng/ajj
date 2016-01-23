@@ -1831,34 +1831,6 @@ int test_defined( struct ajj* a,
   }
 }
 
-static
-int test_upper( struct ajj* a,
-    void* udata,
-    struct ajj_value* arg,
-    size_t arg_num,
-    struct ajj_value* ret ) {
-  if(arg_num != 1) {
-    EXEC_FAIL1(a,"%s","Test function:upper cannot accept "
-        "extra arguments!");
-  } else {
-    if(arg->type != AJJ_VALUE_STRING) {
-      EXEC_FAIL1(a,"Test function:upper's argument must be string,"
-          "but get type:%s!",ajj_value_get_type_name(arg));
-    } else {
-      const char* str = ajj_value_to_cstr(arg);
-      for( ; *str; ++str ) {
-        if(islower(*str))
-          break;
-      }
-      if(*str)
-        *ret = AJJ_FALSE;
-      else
-        *ret = AJJ_TRUE;
-      return AJJ_EXEC_OK;
-    }
-  }
-}
-
 /* =====================================
  * Builtin Filter and Function
  * ===================================*/
@@ -2598,15 +2570,6 @@ void ajj_builtin_load( struct ajj* a ) {
   ajj_add_test(a,&(a->builtins),
       "iterable",test_iterator,NULL);
 
-  /* This version is deleted since it doesn't
-   * support UTF encoding. Later on I will write
-   * a new one
-   *
-  ajj_add_test(a,&(a->builtins),
-      "lower",test_lower,NULL);
-   *
-   */
-
   ajj_add_test(a,&(a->builtins),
       "mapping",test_mapping,NULL);
 
@@ -2624,8 +2587,4 @@ void ajj_builtin_load( struct ajj* a ) {
 
   ajj_add_test(a,&(a->builtins),
       "object",test_object,NULL);
-
-  ajj_add_test(a,&(a->builtins),
-      "upper",test_upper,NULL);
-
 }

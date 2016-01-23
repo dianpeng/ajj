@@ -696,6 +696,7 @@ struct ajj_value vm_len(struct ajj* a,
     rewrite_error(a);
     return AJJ_NONE;
   } else {
+    *fail = 0;
     return ajj_value_number(res);
   }
 }
@@ -710,6 +711,7 @@ vm_in( struct ajj* a , struct ajj_value* obj ,
     rewrite_error(a);
     return AJJ_NONE;
   } else {
+    *fail = 0;
     return ajj_value_boolean(res);
   }
 }
