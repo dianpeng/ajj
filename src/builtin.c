@@ -379,7 +379,7 @@ int list_eq(struct ajj* a, const struct ajj_value* l,
         struct ajj_value* lval = L->entry + i;
         struct ajj_value* rval = R->entry + i;
         int cmp;
-        if( !ajj_value_eq(a,lval,rval,&cmp) ) {
+        if( ajj_value_eq(a,lval,rval,&cmp) ) {
           return AJJ_EXEC_FAIL;
         }
         if(!cmp) {

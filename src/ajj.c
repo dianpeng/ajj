@@ -910,19 +910,29 @@ int ajj_value_iter_get_val( struct ajj* a,
     } \
   } while(0)
 
+#define DEFINE_NONE_CMP(L,R,RVAL,OP) \
+  do { \
+    if( (L)->type == AJJ_VALUE_NONE ) { \
+      if( (R)->type == AJJ_VALUE_NONE ) { \
+        *(RVAL) = OP ? 1 : 0; return 0; \
+      } else { \
+        *(RVAL) = OP ? 0 : 1; return 0; \
+      } \
+    } else if( (R)->type == AJJ_VALUE_NONE ) { \
+      if( (L)->type == AJJ_VALUE_NONE ) { \
+        *(RVAL) = OP ? 1 : 0; return 0; \
+      } else { \
+        *(RVAL) = OP ? 0 : 1; return 0; \
+      } \
+    } \
+  } while(0)
+
 int ajj_value_eq( struct ajj* a,
     const struct ajj_value* l,
     const struct ajj_value* r,
     int* result ) {
-  if(l->type == AJJ_VALUE_NONE) {
-    if(r->type == AJJ_VALUE_NONE) {
-      *result = 1; return 0;
-    } else {
-      *result = 0; return 0;
-    }
-  } else {
-    DEFINE_CMP_BODY(l,r,result,==,eq);
-  }
+  DEFINE_NONE_CMP(l,r,result,1);
+  DEFINE_CMP_BODY(l,r,result,==,eq);
 }
 
 /* DO NOT implement ne as !eq , if we do this all the
@@ -934,15 +944,8 @@ int ajj_value_ne( struct ajj* a,
     const struct ajj_value* l,
     const struct ajj_value* r,
     int* result ) {
-  if(l->type == AJJ_VALUE_NONE) {
-    if(r->type == AJJ_VALUE_NONE) {
-      *result = 1; return 0;
-    } else {
-      *result = 0; return 0;
-    }
-  } else {
-    DEFINE_CMP_BODY(l,r,result,!=,ne);
-  }
+  DEFINE_NONE_CMP(l,r,result,0);
+  DEFINE_CMP_BODY(l,r,result,!=,ne);
 }
 
 int ajj_value_lt( struct ajj* a,
@@ -997,6 +1000,7 @@ int ajj_value_ge( struct ajj* a,
   }
 }
 
+#undef DEFINE_NONE_CMP
 #undef DEFINE_CMP_BODY
 
 int ajj_value_in( struct ajj* a,

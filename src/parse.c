@@ -1206,9 +1206,9 @@ parse_constexpr( struct parser* p , struct ajj_value* output ) {
       break;
     case TK_FALSE:
       if( neg ) {
-        *output = AJJ_FALSE;
-      } else {
         *output = AJJ_TRUE;
+      } else {
+        *output = AJJ_FALSE;
       }
       break;
     case TK_LSQR:
@@ -2131,6 +2131,7 @@ parse_with( struct parser* p , struct emitter* em ) {
     CALLE((idx=lex_scope_set(p,&sym))==-2);
     tk_move(tk);
     ENTER_SCOPE(); /* enter the scope */
+    EXPECT(TK_ASSIGN); /* check wether we have an assignment operator */
     CALLE(parse_assign(p,em,idx));
     CONSUME(TK_RSTMT);
     /* Now parsing the whole scope body */

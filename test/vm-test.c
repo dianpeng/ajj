@@ -10,11 +10,9 @@
 static void do_test( const char* src ) {
   struct ajj* a = ajj_create();
   struct ajj_object* jinja;
-  const struct program* prg;
-  const struct program* another_prg;
   struct ajj_io* output = ajj_io_create_file(a,stdout);
   const struct string NAME = { "Input" , 5 };
-  jinja = parse(a,"Hello World",src,0);
+  jinja = parse(a,"vm-test-jinja",src,0);
   if(!jinja) {
     fprintf(stderr,"%s",a->err);
     abort();
@@ -26,27 +24,6 @@ static void do_test( const char* src ) {
   }
   ajj_io_destroy(output);
   ajj_destroy(a); /* all memory should gone */
-}
-
-static
-void test_simple() {
-  {
-    const char* src = "ABCDEF {{ yyy }} {{ __func__ }} {{ __argnum__*2 if __argnum__ > 0 else 1989 }} BCDEF\n" \
-                       "{% set var='abc123' %}\n" \
-                       "{% if __argnum__ != 0 %} __argnum__ : {{ __argnum__ }} \n" \
-                       "{% elif var >= 1*2-3/4 %} __argnum__ : TRUE {{ __argnum__ }} \n" \
-                       "{% else %} __argnum__ : {{ False }} False {{ 8*8*8 }} \n" \
-                       "{% endif %}\n";
-    do_test(src);
-  }
-  {
-    const char* src = "ABCDEF {{ yyy }} {{ __func__ }} {{ __argnum__*2 if __argnum__ > 0 else 1989 }} BCDEF\n" \
-                       "{% set var = 'hello_world' %}\n" \
-                       "{% set vb = true %}\n" \
-                       "{% if var == 'hello_world' %} {{ 'Hello World' }} {% endif %}\n" \
-                       "{% if vb %} {{ 'TRUE' }} {% endif %}\n";
-    do_test(src);
-  }
 }
 
 /* ==================================
@@ -293,7 +270,7 @@ void test_loop() {
   do_test("{% for i in xrange(100) if i % 5 == 0 %}" \
           "{# Set up a local variable #}" \
           "{% set val1 = i %}" \
-          "% do assert_expr(val1 == i) %}" \
+          "{% do assert_expr(val1 == i) %}" \
           "{# Set up a jump branch #}" \
           "{% if i >= 20 %} {% break %} {% endif %}" \
           "{# Set up another local variable which is right after the jump #}" \
@@ -357,79 +334,104 @@ void test_loop() {
 }
 
 void test_branch() {
-  {
-    struct ajj* a = ajj_create();
-    const char* src = "{% if 101+123 >= 245 %}" \
-                       "{{ True }}\n" \
-                       "{% else %}" \
-                       "{{ False }}\n" \
-                       "{% endif %}";
-    do_test(src);
-  }
-  {
-    const char* src = "{% set l = xrange(100) %}" \
-                       "{% for a in l %}" \
-                       "{{ 'List='+#l }}\n" \
-                       "{% if a % 10 == 0 %}" \
-                       "{{ '1'+':'+a }}\n" \
-                       "{% elif a % 10 == 1 %}" \
-                       "{{ '2'+':'+a }}\n" \
-                       "{% elif a % 10 == 3 %}" \
-                       "{{ '3'+':'+a }}\n" \
-                       "{% elif a % 10 == 4 %}" \
-                       "{{ '4'+':'+a }}\n" \
-                       "{% elif a % 10 == 5 %}" \
-                       "{{ '5'+':'+a }}\n" \
-                       "{% elif a % 10 == 6 %}" \
-                       "{{ '6'+':'+a }}\n" \
-                       "{% else %}" \
-                       "{{ 'Rest'+':'+a }}\n" \
-                       "{% endif %}" \
-                       "{% endfor %}";
-    do_test(src);
-  }
-  do_test("{% set c = cycler('a','b','c','UUV',[1,2,3,4,{'b':true,'f':false}]) %}" \
-      "{% for x in xrange(1000) %}" \
-      "x={{x}}\n" \
-      "current = {{ c.next() }}\n" \
-      "{% endfor %}");
+  do_test("{% if True is True %}" \
+          "{% do assert_expr(1+3*4==13) %}" \
+          "{% else %}" \
+          "{% do assert_expr(False) %}" \
+          "{% endif %}");
+  do_test("{% set variable = 3 %}" \
+          "{% if variable > 4 %}" \
+          "{% do assert_expr(False) %}" \
+          "{% elif variable == 3 %}" \
+          "{% do assert_expr(True) %}" \
+          "{% else %}" \
+          "{% do assert_expr(False)%}" \
+          "{% endif %}" );
+  do_test("{% set variable = 3 %}" \
+          "{% if variable >= 3 %}" \
+          "  {% if variable % 3 == 0 %}" \
+          "     {% do assert_expr(True) %}" \
+          "  {% else %}" \
+          "  {% do assert_expr(False) %}" \
+          "  {% endif %}" \
+          "{% elif variable <= 1 %}" \
+          "{% do assert_expr(False) %}" \
+          "{% else %}" \
+          "{% do assert_expr(False) %}" \
+          "{% endif %}");
 }
 
 /* MOVE operations */
 void test_move() {
-  {
-    const char* src = "{% set L = 0 %}" \
-                       "{{ 'L='+L }}\n" \
-                       "{% with %}"
-                       "{% with %}" \
-                       "{% set MyVar = [1,2,3,4] %}" \
-                       "{% move L = MyVar %}" \
-                       "{% endwith %}" \
-                       "{% endwith %}"
-                       "{{ 'L=' }}{{ L }}\n";
-    do_test(src);
-  }
-  { /* move within same scope/lexical scope */
-    const char* src = "{% set L = 0 %}" \
-                       "{{ 'L='+L }}\n" \
-                       "{% set MyVar = [1,2,3,4] %}" \
-                       "{% move L = MyVar %}" \
-                       "{{ 'L=' }}{{ L }}\n";
-    do_test(src);
-  }
+  /* Move to outer scope with primitive , should nothing changed */
+  do_test("{% set Outer = 0 %}" \
+          "{% with %}" \
+          "{% set Inner = 100 %}" \
+          "{% do assert_expr(Outer==0 )  %}" \
+          "{% move Outer=Inner %}" \
+          "{% do assert_expr(Inner==100) %}" \
+          "{% endwith %}" \
+          "{% do assert_expr(Outer==100) %}");
+  do_test("{% set Outer = True %}" \
+          "{% with %}" \
+          "{% set Inner = False %}" \
+          "{% do assert_expr( Outer == True  ) %}" \
+          "{% move Outer = Inner %}" \
+          "{% do assert_expr( Inner == False ) %}" \
+          "{% endwith %}" \
+          "{% do assert_expr( Outer == False ) %}");
+  do_test("{% set Outer = False %}" \
+          "{% with %}" \
+          "{% set Inner = True %}" \
+          "{% do assert_expr( Outer == False) %}" \
+          "{% move Outer=Inner %}" \
+          "{% do assert_expr( Inner == True ) %}" \
+          "{% endwith %}" \
+          "{% do assert_expr( Outer == True ) %}");
+  /* Move object out of the scope.
+   * The correctness of this move semantic is also related
+   * to the correctness of implementation for this object */
+  do_test("{% set Outer = [1,2,3,4] %}" \
+          "{% with %}" \
+          "{% with %}" \
+          "{% with %}" \
+          "{% with Inner = [100,101,102] %}" \
+          "{% do assert_expr( Outer[0] == 1 ) %}" \
+          "{% do assert_expr( Outer[1] == 2 ) %}" \
+          "{% do assert_expr( Outer[2] == 3 ) %}" \
+          "{% do assert_expr( Outer[3] == 4 ) %}" \
+          "{% move Outer=Inner %}" \
+          "{% do assert_expr( Inner[0] == 100 ) %}" \
+          "{% do assert_expr( Inner[1] == 101 ) %}" \
+          "{% do assert_expr( Inner[2] == 102 ) %}" \
+          "{% endwith %}" \
+          "{% endwith %}" \
+          "{% endwith %}" \
+          "{% endwith %}" \
+          "{% do assert_expr( Outer[0] == 100 ) %}" \
+          "{% do assert_expr( Outer[1] == 101 ) %}" \
+          "{% do assert_expr( Outer[2] == 102 ) %}");
+  do_test("{% set Outer = { 'U'*3 : [ 1 , 2 ] } %}" \
+          "{% with %}" \
+          "{% with Inner = { 'V'*3 : [ 3, 4 ] } %}" \
+          "{% do assert_expr( Outer.UUU[0] == 1 ) %}" \
+          "{% do assert_expr( Outer['UUU'][1] == 2 ) %}" \
+          "{% move Outer=Inner %}" \
+          "{% do assert_expr( Inner.VVV[0] == 3 ) %}" \
+          "{% do assert_expr( Inner['VVV'][1] == 4 ) %}" \
+          "{% endwith %}" \
+          "{% endwith %}" \
+          "{% do assert_expr( Outer.VVV[0] == 3 ) %}" \
+          "{% do assert_expr( Outer.VVV[1] == 4 ) %}");
 }
 
 /* WITH */
 void test_with() {
-  { /* move within same scope/lexical scope */
-    const char* src = "{% with L = None %}" \
-                       "{% with L = 200 %}" \
-                       "{{ 'InnerL'+L }}\n" \
-                       "{% endwith %}" \
-                       "{{ 'OuterL'+L }}\n" \
-                       "{% endwith %}";
-    do_test(src);
-  }
+  do_test("{% do assert_expr( local_variable == None ) %}" \
+          "{% with local_variable = True %}" \
+          "{% do assert_expr( local_variable ) %}" \
+          "{% endwith %}" \
+          "{% do assert_expr( local_variable is None ) %}");
 }
 
 /* ============================
@@ -437,39 +439,110 @@ void test_with() {
  * ==========================*/
 
 void test_macro() {
-  /* simple macro */
-  do_test("{% macro User(Name,Value) %}" \
-      "Name={{Name}};Value={{Value}}\n"\
-      "{% endmacro %}"\
-      "{% for a in xrange(100) %}" \
-      "{% do User('YourName',100) %}"
-      "{% endfor %}"
-      );
-  do_test("{% macro User(Name,Value,Def=['123',456],UUVV='345') %}" \
-      "Name={{Name}}\nValue={{Value}}\nDef={{Def}}\nUUVV={{UUVV}}\n" \
-      "{% endmacro %}" \
-      "{% for a in xrange(2) %}" \
-      "{% do User('Hulu'+a,a) %}\n"\
-      "{% endfor %}");
-  do_test(
-      "{% macro Foo(my_foo,bar='123') %}" \
-      "ARGNUM:{{__argnum__}}\n" \
-      "FUNC:{{__func__}}\n" \
-      "{% for a in xrange(2) %}" \
-      "my_foo:{{a}}={{my_foo}}\n"\
-      "{% do Bar(a,bar) %}"\
-      "{% endfor %}" \
-      "{% endmacro %}" \
-      "{% macro Bar(arg,def={'abc':[1,2,3,[123123123,23]],'A':'B'}) %}"\
-      "ARGNUM:{{__argnum__}}\n" \
-      "FUNC:{{__func__}}\n" \
-      "{% for p in xrange(2) %}" \
-      "arg:{{p}}={{arg}}\n" \
-      "def={{def}}\n"\
-      "{% endfor %}" \
-      "{% endmacro %}"\
-      "{% do Foo('Hi') %}"
-      );
+  /* arguments passing is correct or not */
+  do_test("{% macro func(arg1,arg2,arg3,arg4,arg5,arg6,arg7) %}" \
+          "{% do assert_expr( arg1 == True ) %}" \
+          "{% do assert_expr( arg2 == False) %}" \
+          "{% do assert_expr( arg3 == 10 ) %}" \
+          "{% do assert_expr( arg4 == None ) %}" \
+          "{% do assert_expr( arg5 == [1,2,3,4] ) %}" \
+          "{% do assert_expr( arg6 == {'uu':3 } ) %}" \
+          "{% do assert_expr( arg7 == 'HelloWorld') %}" \
+          "{# Test builtin value of macro/functions. #}" \
+          "{% do assert_expr( __argnum__ == 7 ) %}" \
+          "{% do assert_expr( __func__ == 'func' ) %}" \
+          "{% do assert_expr( caller == '__main__' ) %}" \
+          "{% do assert_expr( vargs == None ) %}" \
+          "{% do assert_expr( self != None ) %}" \
+          "{% endmacro %}" \
+          "{% do func(True,False,10,None,[1,2,3,4],{'uu':3},'HelloWorld') %}");
+  /* default arguments */
+  do_test("{% macro func(arg1,arg2=True,arg3=False,arg4='HelloWorld',arg5=[1,2,3,4],arg6={'UU':'Hello'}) %}" \
+          "{% do assert_expr( arg1 == 10 ) %}" \
+          "{% do assert_expr( arg2 == True ) %}" \
+          "{% do assert_expr( arg3 == False ) %}" \
+          "{% do assert_expr( arg4 == 'HelloWorld') %}" \
+          "{% do assert_expr( arg5 == [1,2,3,4] ) %}" \
+          "{% do assert_expr( arg6 == { 'UU' : 'Hello' } ) %}" \
+          "{% do assert_expr( __argnum__ == 1 ) %}" \
+          "{% do assert_expr( __func__ == 'func' )%}" \
+          "{% do assert_expr( caller == '__main__' ) %}" \
+          "{% do assert_expr( vargs == None ) %}" \
+          "{% do assert_expr( self != None ) %}" \
+          "{% endmacro %}" \
+          "{% do func(10) %}");
+  /* varags */
+  do_test("{% macro func(arg1) %}" \
+          "{% do assert_expr(arg1 == 10) %}" \
+          "{% do assert_expr(vargs != None) %}" \
+          "{% do assert_expr(vargs[0] == True) %}" \
+          "{% do assert_expr(vargs[1] == False) %}" \
+          "{% do assert_expr(vargs[2] == 10) %}" \
+          "{% do assert_expr(vargs[3] == 'HelloWorld') %}" \
+          "{% do assert_expr(vargs[4] == [1,2,3,4] ) %}" \
+          "{% do assert_expr(vargs[5] == {'UU':'Hello' } ) %}" \
+          "{% do assert_expr(#vargs == 6) %}" \
+          "{% do assert_expr(__argnum__ == 1+6) %}" \
+          "{% endmacro %}" \
+          "{% do func(10,True,False,10,'HelloWorld',[1,2,3,4],{'UU':'Hello'}) %}");
+  /* return */
+  do_test("{% macro Sum(arg) %}" \
+          "{% set result = 0 %}" \
+          "{% for i in arg %}" \
+          "{% set sum = i + result %}" \
+          "{% move result = sum %}" \
+          "{% endfor %}" \
+          "{% return result %}" \
+          "{% endmacro %}" \
+          "{% do assert_expr(Sum([1,2,3,4,5]) == 1+2+3+4+5) %}" );
+  /* return in different branch */
+  do_test("{% macro ComplicatedReturn(arg) %}" \
+          "{% set result1 = [] %}" \
+          "{% set result2 = [] %}" \
+          "{% set result3 = [] %}" \
+          "{% if #arg >= 6  %}" \
+          "{% for i in arg %}" \
+          "{% if i % 3 == 0 %}" \
+          "{% do result1.append(i) %}" \
+          "{% endif %}" \
+          "{% endfor %}" \
+          "{% return result1 %}" \
+          "{% elif #arg <= 3 %}" \
+          "{% set local_var = 0 %}" \
+          "{% for i in arg %}" \
+          "{% set sum = local_var + i %}" \
+          "{% move local_var = sum %}" \
+          "{% do result2.append(sum) %}" \
+          "{% endfor %}" \
+          "{% return result2 %}" \
+          "{% else %}" \
+          "{% return arg %}"\
+          "{% endif %}" \
+          "{% endmacro %}" \
+          "{% set LocalVar1 = 1 %}" \
+          "{% set LocalVar2 = True %}" \
+          "{% set LocalVar3 = [1,2,3,4] %}" \
+          "{% set LocalVar4 = {'uu':'vv','hh':'pp'} %}" \
+          "{% do assert_expr(ComplicatedReturn([1,2,3,4]) == [1,2,3,4]) %}" \
+          "{% do assert_expr(ComplicatedReturn([1,2,3]) == [1,3,6]) %}" \
+          "{% do assert_expr(ComplicatedReturn([1,2,3]) == [1,3,6]) %}" \
+          "{% do assert_expr(ComplicatedReturn([1,2,3,4,5,6]) == [3,6]) %}" \
+          "{% do assert_expr(LocalVar1 == 1 ) %}" \
+          "{% do assert_expr(LocalVar2 == True) %}" \
+          "{% do assert_expr(LocalVar3 == [1,2,3,4] ) %}" \
+          "{% do assert_expr(LocalVar4 == {'uu':'vv','hh':'pp'} ) %}"
+          );
+  /* recursive call */
+  do_test("{% macro fib(num) %}" \
+          "{% if num == 0 %}" \
+          "{% return 0 %}" \
+          "{% elif num == 1 %}" \
+          "{% return 1 %}" \
+          "{% else %}" \
+          "{% return fib(num-1) + fib(num-2) %}" \
+          "{% endif %}" \
+          "{% endmacro %}" \
+          "{% do assert_expr(fib(20) == 3*5*11*41)  %}");
 }
 
 static
@@ -512,11 +585,10 @@ void test_random_1() {
 }
 
 int main() {
-  test_simple();
   test_expr();
   test_loop();
-  test_with();
   test_move();
+  test_with();
   test_branch();
   test_macro();
   test_random_1();

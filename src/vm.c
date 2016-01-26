@@ -823,11 +823,11 @@ void prepare_script_call( struct ajj* a ) {
     /* the extra arguments passed in serves as the vargs
      * local variables here */
     vargs = ajj_object_create_list(a,a->rt->cur_gc);
-
-    for( i = fr->par_cnt ; i > prg->par_size ; --i ) {
-      builtin_list_push(a,vargs,stk_top(a,1));
-      stk_pop(a,1);
+    for( i = prg->par_size ; i < fr->par_cnt ; ++i ) {
+      size_t idx = (fr->par_cnt-i);
+      builtin_list_push(a,vargs,stk_top(a,idx));
     }
+    stk_pop(a,fr->par_cnt-prg->par_size);
   }
 
   /* set up the builtin variables */
