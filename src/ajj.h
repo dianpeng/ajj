@@ -463,6 +463,7 @@ void ajj_env_add_class( struct ajj* a , const struct ajj_class* );
 void ajj_env_add_function( struct ajj* a, const char* ,
     ajj_function entry, void* );
 
+/* Add a filter function */
 #define ajj_env_add_filter ajj_env_add_function
 
 /* Add a test function into ajj environment. Test function has exactly
@@ -518,7 +519,9 @@ void ajj_env_clear( struct ajj* a );
 struct ajj_io* ajj_io_create_file( struct ajj* a , FILE* );
 /* Create an IO from memory with size */
 struct ajj_io* ajj_io_create_mem ( struct ajj* a , size_t size );
-/* Destroy an IO object */
+/* Destroy an IO object , this won't result in the FILE* handler been
+ * closed, user needs to call fclose on the handler if the ajj_io object
+ * is a file handler IO object */
 void ajj_io_destroy( struct ajj_io* );
 /* Printf to an IO object */
 int ajj_io_printf( struct ajj_io* , const char* fmt , ... );

@@ -1007,12 +1007,12 @@ int parse_pipe_list( struct parser* p , struct emitter* em ) {
  * We support value1 if cond else value2 format.
  * The code generation is not simple at all, however. Since the condition is not
  * the first component, the parser needs to look ahead unlimited tokens to say
- * whether this is a tenary format or not. We don't have AST, this becomes very
+ * whether this is a ternary format or not. We don't have AST, this becomes very
  * hard. So how to generate the code ?
  * We inject a jump point before the expression. We turn this instruction into
- * NOP when it is not tenary. If it is, this instruction will just jump to the
+ * NOP when it is not ternary. If it is, this instruction will just jump to the
  * condition part. Then at the end of this expression, we have another jump to
- * skip the alternative value path. Condition part will follow by a tenary byte
+ * skip the alternative value path. Condition part will follow by a ternary byte
  * code which simply jumps to corresponding position based on the evaluation.
  * The NOP is removed during the peephole optimization phase
  */
