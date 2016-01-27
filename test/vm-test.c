@@ -371,6 +371,7 @@ void test_move() {
           "{% do assert_expr(Inner==100) %}" \
           "{% endwith %}" \
           "{% do assert_expr(Outer==100) %}");
+
   do_test("{% set Outer = True %}" \
           "{% with %}" \
           "{% set Inner = False %}" \
@@ -379,6 +380,7 @@ void test_move() {
           "{% do assert_expr( Inner == False ) %}" \
           "{% endwith %}" \
           "{% do assert_expr( Outer == False ) %}");
+
   do_test("{% set Outer = False %}" \
           "{% with %}" \
           "{% set Inner = True %}" \
@@ -387,6 +389,7 @@ void test_move() {
           "{% do assert_expr( Inner == True ) %}" \
           "{% endwith %}" \
           "{% do assert_expr( Outer == True ) %}");
+
   /* Move object out of the scope.
    * The correctness of this move semantic is also related
    * to the correctness of implementation for this object */
@@ -410,6 +413,7 @@ void test_move() {
           "{% do assert_expr( Outer[0] == 100 ) %}" \
           "{% do assert_expr( Outer[1] == 101 ) %}" \
           "{% do assert_expr( Outer[2] == 102 ) %}");
+
   do_test("{% set Outer = { 'U'*3 : [ 1 , 2 ] } %}" \
           "{% with %}" \
           "{% with Inner = { 'V'*3 : [ 3, 4 ] } %}" \
@@ -621,6 +625,39 @@ void test_macro() {
 }
 
 static
+void test_call() {
+  do_test("{% macro child(arg) %}" \
+          "{% do assert_expr(arg == 10) %}" \
+          "{% do assert_expr(caller() == 'HelloWorld') %}" \
+          "{% endmacro %}" \
+          "{% call child(10) %}" \
+          "{% return 'HelloWorld' %}" \
+          "{% endcall %}");
+
+  do_test("{% macro child(arg1,arg2=True,arg3=False,arg4=[1,2,3,4]) %}" \
+          "{% do assert_expr(arg1 == 10) %}" \
+          "{% do assert_expr(arg2 == True ) %}" \
+          "{% do assert_expr(arg3 == False) %}" \
+          "{% do assert_expr(arg4 == [1,2,3,4] ) %}" \
+          "{% do assert_expr(caller('HelloWorld') == 'Correct') %}" \
+          "{% endmacro %}" \
+          "{% call(arg) child(10) %}" \
+          "{% do assert_expr(arg == 'HelloWorld') %}" \
+          "{% return 'Correct' %}" \
+          "{% endcall %}");
+
+  do_test("{% macro child(arg) %}" \
+          "{% if __caller_stub__ is not None %}" \
+          "{% do assert_expr( caller() == 'HelloWorld' ) %}" \
+          "{% endif %}" \
+          "{% endmacro %}" \
+          "{% call child(10) %}" \
+          "{% return 'HelloWorld' %}" \
+          "{% endcall %}" \
+          "{% do child(10) %}");
+}
+
+static
 void test_random_1() {
   do_test("{% macro Input(title,class='dialog') %}" \
       "CallerStub=\n{{ caller('MyBoss','Overwrite') }}\n" \
@@ -666,5 +703,6 @@ int main() {
   test_with();
   test_branch();
   test_macro();
+  test_call();
   test_random_1();
 }

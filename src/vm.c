@@ -1406,7 +1406,6 @@ void enter_function( struct ajj* a , const struct function* f,
     struct ajj_object* obj , int* fail ) {
   struct runtime* rt = a->rt;
   if( rt->cur_call_stk == AJJ_MAX_CALL_STACK ) {
-    assert(0);
     vm_rpt_err(a,"Function recursive call too much,"
         "frame stack overflow!");
     *fail = 1;
@@ -1577,10 +1576,9 @@ int vm_caller( struct ajj* a,
       &CALLER_STUB,NULL);
 
   if(!uv) {
-    ajj_error(a,"The upvalue variable:%s for internal usage is not "
-        "set!This is seriously wrong and it is possibly caused "
-        "by user delete this value using C-API manually! Please "
-        "do not delete internal variable!",
+    ajj_error(a,"The upvalue variable:%s for internal usage is not " \
+        "set! This is caused by user try to call this macro as a " \
+        "free function but not invoke it inside of a call block !",
         CALLER_STUB.str);
     return AJJ_EXEC_FAIL;
   }
