@@ -7,6 +7,7 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <math.h>
 
 #define EXEC_FAIL1(a,f,val) \
   do { \
@@ -2258,7 +2259,7 @@ int to_json( struct ajj* a,
     struct ajj_value* arg,
     size_t arg_len,
     struct ajj_value* ret ) {
-
+  UNUSE_ARG(udata);
   if( arg_len != 1 ) {
     EXEC_FAIL1(a,"%s","Function::to_json can only accept one argument,"
         "and it must be a string!");
@@ -2287,6 +2288,7 @@ int to_jsonc( struct ajj* a,
     struct ajj_value* arg,
     size_t arg_len,
     struct ajj_value* ret ) {
+  UNUSE_ARG(udata);
   if( arg_len != 1 ) {
     EXEC_FAIL1(a,"%s","Function::to_jsonc can only accept one argument,"
         "and it must be a string!");
@@ -2316,6 +2318,7 @@ int shell( struct ajj* a,
     struct ajj_value* arg,
     size_t arg_len,
     struct ajj_value* ret ) {
+  UNUSE_ARG(udata);
   if( arg_len != 1 ) {
     EXEC_FAIL1(a,"%s","Function::shell can only accept one argument,"
         "and it must be a string!");
@@ -2351,6 +2354,7 @@ int rm_trail( struct ajj* a,
     struct ajj_value* arg,
     size_t arg_len,
     struct ajj_value* ret ) {
+  UNUSE_ARG(udata);
   if( arg_len != 1 ) {
     EXEC_FAIL1(a,"%s","Function::shell can only accept one argument,"
         "and it must be a string!");
@@ -2385,6 +2389,38 @@ int rm_trail( struct ajj* a,
   }
 }
 
+static
+int number_floor( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_len,
+    struct ajj_value* ret ) {
+  UNUSE_ARG(udata);
+  if( arg_len != 1 && arg->type != AJJ_VALUE_NUMBER ) {
+    EXEC_FAIL1(a,"%s","Function::floor must accept one number!");
+  } else {
+    double val = floor( ajj_value_to_number(arg) );
+    *ret = ajj_value_number(val);
+    return AJJ_EXEC_OK;
+  }
+}
+
+static
+int number_ceil( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_len,
+    struct ajj_value* ret ) {
+  UNUSE_ARG(udata);
+  if( arg_len != 1 && arg->type != AJJ_VALUE_NUMBER ) {
+    EXEC_FAIL1(a,"%s","Function::ceil must accept one number!");
+  } else {
+    double val = ceil( ajj_value_to_number(arg) );
+    *ret = ajj_value_number(val);
+    return AJJ_EXEC_OK;
+  }
+}
+
 /* Useful function for testing the AJJ itself */
 static
 int assert_expr( struct ajj* a,
@@ -2392,6 +2428,7 @@ int assert_expr( struct ajj* a,
     struct ajj_value* arg,
     size_t arg_len,
     struct ajj_value* ret ) {
+  UNUSE_ARG(udata);
   if(arg_len <=0 || arg_len > 2) {
     EXEC_FAIL1(a,"%s","Function::assert_expr can only accept 1 or 2 arguments!");
   } else {
@@ -2419,6 +2456,7 @@ int filter_abs( struct ajj* a,
     struct ajj_value* arg,
     size_t arg_len,
     struct ajj_value* ret ) {
+  UNUSE_ARG(udata);
   if(arg_len != 1) {
     EXEC_FAIL1(a,"%s","Function::abs can only accept one argument,"
         "and it must be a number!");
@@ -2438,6 +2476,7 @@ int filter_attr( struct ajj* a,
     struct ajj_value* arg,
     size_t arg_len,
     struct ajj_value* ret ) {
+  UNUSE_ARG(udata);
   if(arg_len != 2) {
     EXEC_FAIL1(a,"%s","Function::attr can accept 2 arguments!");
   } else {
@@ -2456,6 +2495,7 @@ int filter_default( struct ajj* a,
     struct ajj_value* arg,
     size_t arg_len,
     struct ajj_value* ret ) {
+  UNUSE_ARG(udata);
   if(arg_len != 2) {
     EXEC_FAIL1(a,"%s","Function::default requires 2 arguments!");
   } else {
@@ -2519,6 +2559,16 @@ void ajj_builtin_load( struct ajj* a ) {
   ajj_add_function(a,&(a->builtins),
       "assert_expr",
       assert_expr,
+      NULL);
+
+  ajj_add_function(a,&(a->builtins),
+      "floor",
+      number_floor,
+      NULL);
+
+  ajj_add_function(a,&(a->builtins),
+      "ceil",
+      number_ceil,
       NULL);
 
   ajj_add_filter(a,&(a->builtins),

@@ -17,7 +17,6 @@ static void do_test( const char* src ) {
     fprintf(stderr,"%s",a->err);
     abort();
   }
-  prg = ajj_object_jinja_main(jinja);
   if(vm_run_jinja(a,jinja,output)) {
     fprintf(stderr,"%s",a->err);
     abort();
@@ -543,6 +542,82 @@ void test_macro() {
           "{% endif %}" \
           "{% endmacro %}" \
           "{% do assert_expr(fib(20) == 3*5*11*41)  %}");
+  /* combine the call with other complicated structure */
+  /* filter odd number */
+  do_test("{% macro filter_odd(arr) %}" \
+          "{% set result = [] %}" \
+          "{% for i in arr if i % 2 == 0 %}" \
+          "{% do result.append(i) %}" \
+          "{% endfor %}" \
+          "{% return result %}" \
+          "{% endmacro %}" \
+          "{% do assert_expr( ([1,2,3,4] | filter_odd) == [2,4] ) %}");
+  /* fib with iteration */
+  do_test("{% macro fib(num) %}" \
+          "{% if num == 0 %}" \
+          "{% return 0 %}" \
+          "{% elif num == 1 %}" \
+          "{% return 1 %}" \
+          "{% else %}" \
+          "{% set a = 0 %}" \
+          "{% set b = 1 %}" \
+          "{% for i in xrange(num-1) %}" \
+          "{% set sum = a + b %}" \
+          "{% set l = b %}" \
+          "{% move a= l %}" \
+          "{% move b= sum %}" \
+          "{% endfor %}" \
+          "{% return b %}"\
+          "{% endif %}" \
+          "{% endmacro %}"\
+          "{% do assert_expr(fib(20) == 3*5*11*41) %}");
+
+  /* binary search */
+  do_test("{% macro bsearch(arr,low,high,val) %}" \
+          "{% if low > high %}" \
+          "{% return -1 %}" \
+          "{% else %}" \
+          "{% if low == high %}" \
+          "{% if val == arr[low] %}" \
+          "{% return low %}"
+          "{% else %}" \
+          "{% return -1 %}" \
+          "{% endif %}" \
+          "{% endif %}" \
+          "{% endif %}" \
+          "{% set mid = (low+high)/2 | floor %}" \
+          "{% if arr[mid] == val %}" \
+          "{% return mid %}" \
+          "{% elif arr[mid] > val %}" \
+          "{% if mid-1 < low %}" \
+          "{% return -1 %}" \
+          "{% else %}" \
+          "{% return bsearch(arr,low,mid-1,val) %}" \
+          "{% endif %}" \
+          "{% else %}" \
+          "{% if mid + 1 > high %} "\
+          "{% return -1 %}" \
+          "{% else %}" \
+          "{% return bsearch(arr,mid+1,high,val) %}" \
+          "{% endif %}" \
+          "{% endif %}" \
+          "{% endmacro %}" \
+          "{% set arr = [1,2,3,4,5,6,7,8,9] %}" \
+          "{% set capture = bsearch(arr,0,#arr-1,7) %}" \
+          "{% do assert_expr(arr[capture] == 7) %}");
+
+  /* slice */
+  do_test("{% macro slice(arr,low,up) %}" \
+          "{% set result = [] %}" \
+          "{% if low >= up %}" \
+          "{% return result %}" \
+          "{% endif %}" \
+          "{% for i in xrange(up-low) %}" \
+          "{% do result.append(arr[low+i]) %}" \
+          "{% endfor %}" \
+          "{% return result %}" \
+          "{% endmacro %}" \
+          "{% do assert_expr( ( [ 1,2,3,4,5 ] | slice(2,3) ) == [3] ) %}");
 }
 
 static

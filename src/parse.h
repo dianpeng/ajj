@@ -1,8 +1,6 @@
 #ifndef _PARSE_H_
 #define _PARSE_H_
 #include "conf.h"
-#include "ajj.h"
-#include "util.h"
 
 #define MAX_LOOP_CTRL_SIZE 32
 
@@ -10,6 +8,7 @@
  * output. The compiled object's memory is owned by the correpsonding
  * garbage collector scope */
 struct ajj_object;
+struct ajj;
 
 struct ajj_object*
 parse( struct ajj* , const char* key, const char* src, int own);
