@@ -336,7 +336,6 @@ ajj_object_destroy_jinja( struct ajj* a , struct ajj_object* obj ) {
   assert( obj->tp == AJJ_VALUE_JINJA );
   func_table_destroy(a,obj->val.obj.fn_tb);
   free((void*)obj->val.obj.src);
-  slab_free(&(a->obj_slab),obj);
 }
 
 struct ajj_object*

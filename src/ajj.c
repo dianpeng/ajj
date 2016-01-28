@@ -665,7 +665,7 @@ int ajj_value_attr_get( struct ajj* a,
         return 0;
       }
     } else {
-      int k;
+      int k = 0;
       if( vm_to_integer(key,&k) ) {
         *ret = AJJ_NONE; return 0;
       } else {
@@ -1192,7 +1192,14 @@ const char* ajj_last_error( struct ajj* a ) {
 struct ajj_object*
 ajj_parse_template( struct ajj* a , const char* filename ) {
   size_t len;
-  const char* src = ajj_load_file(a,filename,&len);
+  const char* src;
+  struct ajj_object* ret;
+  /* try to load the template directly from existed one */
+  ret = ajj_find_template(a,filename);
+  if(ret) return ret;
+
+  /* try load from file */
+  src = ajj_load_file(a,filename,&len);
   if(!src) {
     return NULL;
   } else {

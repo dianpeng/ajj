@@ -9,7 +9,7 @@ upvalue_table_add( struct ajj* a,
     int own ,
     int force,
     int fixed ) {
-  struct upvalue* ret = slab_malloc(&(a->upval_slab));
+  struct upvalue* ret;
   struct upvalue** slot;
   /* find out if we have such value in the table, if so
    * we just link a value on top of it */
@@ -39,7 +39,7 @@ upvalue_table_add_c( struct ajj* a,
     const char* key,
     int force,
     int fixed) {
-  struct upvalue* ret = slab_malloc(&(a->upval_slab));
+  struct upvalue* ret;
   struct upvalue** slot;
   if( (slot = map_find_c(&(tb->d),key)) == NULL ) {
     ret = slab_malloc(&(a->upval_slab));

@@ -94,7 +94,8 @@ struct runtime {
   struct ajj_object* jinja; /* jinja template related to this runtime */
   struct func_frame call_stk[ AJJ_MAX_CALL_STACK ];
   int cur_call_stk; /* Current stk position */
-  struct ajj_value val_stk[AJJ_MAX_VALUE_STACK_SIZE]; /* current value stack size */
+  struct ajj_value* val_stk;
+  size_t val_stk_cap;
   struct gc_scope* cur_gc; /* current gc scope */
   struct gc_scope* root_gc;/* root gc scope for *this* jinja template */
   struct ajj_io* output;

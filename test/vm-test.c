@@ -6,12 +6,13 @@
 #include <bc.h>
 #include <opt.h>
 #include <stdlib.h>
+#include <sys/time.h>
+#include <inttypes.h>
 
 static void do_test( const char* src ) {
   struct ajj* a = ajj_create();
   struct ajj_object* jinja;
   struct ajj_io* output = ajj_io_create_file(a,stdout);
-  const struct string NAME = { "Input" , 5 };
   jinja = parse(a,"vm-test-jinja",src,0);
   if(!jinja) {
     fprintf(stderr,"%s",a->err);
@@ -657,6 +658,114 @@ void test_call() {
           "{% do child(10) %}");
 }
 
+static void do_import( const char* source , const char* lib ) {
+  struct ajj* a ;
+  struct ajj_object* jinja;
+  struct ajj_object* m;
+  struct ajj_io* output;
+  a = ajj_create();
+  jinja = parse(a,"External",lib,0);
+  if(!jinja) {
+    fprintf(stderr,"%s",a->err);
+    abort();
+  }
+  m = parse(a,"Main",source,0);
+  if(!m) {
+    fprintf(stderr,"%s",a->err);
+    abort();
+  }
+  output = ajj_io_create_file(a,stdout);
+  if(vm_run_jinja(a,m,output)) {
+    fprintf(stderr,"%s",a->err);
+    abort();
+  }
+  ajj_io_destroy(output);
+  ajj_destroy(a);
+}
+
+static
+void test_import() {
+  do_import("{% import 'External' as Lib %}" \
+            "{% do assert_expr( Lib.HelloWorld() == 'HelloWorld' ) %}",
+            "{% macro HelloWorld() %}" \
+            "{% return 'HelloWorld' %}" \
+            "{% endmacro %}");
+}
+
+static
+struct ajj_object*
+load_template( struct ajj* a , const char* key , const char* src ) {
+  struct ajj_object* jinja;
+  jinja = parse(a,key,src,0);
+  if(!jinja) {
+    fprintf(stderr,"%s",a->err);
+    abort();
+  }
+  return jinja;
+}
+
+static
+void test_extends() {
+  {
+    struct ajj* a = ajj_create();
+    struct ajj_object* jinja;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+    load_template(a,"Base",
+        "{% block head %}" \
+        "This line should never show up!\n" \
+        "{% endblock %}");
+
+    jinja = load_template(a,"Child",
+        "{% extends 'Base' %}" \
+        "{% block head %}" \
+        "This line should show up!\n"
+        "{% endblock %}");
+    if( vm_run_jinja(a,jinja,output) ) {
+      fprintf(stderr,"%s",a->err);
+      abort();
+    }
+    ajj_io_destroy(output);
+    ajj_destroy(a);
+  }
+
+  {
+    struct ajj* a = ajj_create();
+    struct ajj_object* jinja;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+    load_template(a,"Base",
+        "{% block head %}" \
+        "This line should never show up!\n" \
+        "{% endblock %}");
+
+    load_template(a,"Child",
+        "{% block tail %}" \
+        "This is a block will never showed up when this "\
+        "template is inherited or it will be showed when "\
+        "this template is used as a leaf node !" \
+        "{% endblock %}" \
+        "{% extends 'Base' %}" \
+        "{% block head %}" \
+        "This line should show up!\n"
+        "{% endblock %}");
+
+    jinja = load_template(a,"Leaf",
+        "{% extends 'Child' %}" \
+        "{% block tail %}" \
+        "This is a tail overload ~\n"\
+        "{% endblock %}" \
+        "{% block head %}" \
+        "This is from leaf~\n"\
+        "{% endblock %}");
+
+    if( vm_run_jinja(a,jinja,output) ) {
+      fprintf(stderr,"%s",a->err);
+      abort();
+    }
+    ajj_io_destroy(output);
+    ajj_destroy(a);
+  }
+}
+
 static
 void test_random_1() {
   do_test("{% macro Input(title,class='dialog') %}" \
@@ -696,6 +805,56 @@ void test_random_1() {
   do_test("{{ -3*2>7-1998 | abs | abs | abs | abs }}");
 }
 
+#if 0
+
+static
+uint64_t NowInMicroSeconds() {
+    struct timeval tv;
+    gettimeofday(&tv,NULL);
+    return tv.tv_usec + (tv.tv_sec*1000000);
+}
+
+static
+void bench() {
+  struct ajj* a = ajj_create();
+  struct ajj_object* jinja;
+  uint64_t start,end;
+  struct program* prg;
+  struct ajj_io* output = ajj_io_create_mem(a,100);
+  struct ajj_io* std = ajj_io_create_file(a,stdout);
+  const char* src = "{% for _ in xrange(10000) %}" \
+                    "{% with %}" \
+                    "{% for raw in { 'A':'Item1' ," \
+                                   " 'B':'Item2' ," \
+                                   " 'C':'Item3' ," \
+                                   " 'D':'Item4' } %}" \
+                    "{{ raw }}" \
+                    "{% endfor %}" \
+                    "{% endwith %}" \
+                    "{% endfor %}";
+
+  jinja = parse(a,"H",src,0);
+  if(!jinja) {
+    fprintf(stderr,"Cannot load!");
+    abort();
+  }
+
+  start =NowInMicroSeconds();
+  if( vm_run_jinja(a,jinja,output) ) {
+    fprintf(stderr,"Cannot run!");
+    abort();
+  }
+  end =NowInMicroSeconds();
+
+  fprintf(stderr,"\n\n\n%d\n",(int)(end-start));
+
+  ajj_io_destroy(output);
+  ajj_io_destroy(std);
+  ajj_destroy(a);
+}
+
+#endif
+
 int main() {
   test_expr();
   test_loop();
@@ -704,5 +863,7 @@ int main() {
   test_branch();
   test_macro();
   test_call();
-  test_random_1();
+  test_import();
+  test_extends();
+  return 0;
 }

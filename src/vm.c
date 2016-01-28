@@ -81,8 +81,8 @@ stack_value( struct ajj* a , int x ) {
 #define stk_bot(A,X) stack_value((A),cur_frame((A))->ebp+(X))
 #define stk_top(A,X) stack_value((A),cur_frame((A))->esp-(X))
 #else
-#define stk_bot(A,X) ((A)->rt->val_stk[cur_frame((A))->ebp+(X)])
-#define stk_top(A,X) ((A)->rt->val_stk[cur_frame((A))->esp-(X)])
+#define stk_bot(A,X) ((A)->rt->val_stk+cur_frame((A))->ebp+(X))
+#define stk_top(A,X) ((A)->rt->val_stk+cur_frame((A))->esp-(X))
 #endif /* NDEBUG */
 
 int program_add_par( struct program* prg , struct string* name ,
@@ -235,18 +235,18 @@ void stk_pop(struct ajj* a , int off ) {
   fr->esp -= val;
 }
 
-static
-int stk_push( struct ajj* a , struct ajj_value v ) {
-  struct func_frame* fr = cur_frame(a);
-  if( fr->esp == AJJ_MAX_VALUE_STACK_SIZE ) {
-    vm_rpt_err(a,"Too much value on value stack!");
-    return -1;
-  } else {
-    a->rt->val_stk[fr->esp] = v;
-    ++fr->esp;
-  }
-  return 0;
-}
+#define stk_push(a,v) \
+  do { \
+    struct func_frame* fr = cur_frame(a); \
+    if( fr->esp == a->rt->val_stk_cap ) { \
+      a->rt->val_stk = mem_grow(a->rt->val_stk, \
+          sizeof(struct ajj_value), \
+          0, \
+          &(a->rt->val_stk_cap)); \
+    } \
+    a->rt->val_stk[fr->esp] = v; \
+    ++(fr->esp); \
+  } while(0)
 
 static
 const struct string* const_str( struct ajj* a , int idx ) {
@@ -277,6 +277,9 @@ void runtime_init( struct ajj* a , struct runtime* rt,
   rt->cur_call_stk = 0;
   rt->cur_gc = rt->root_gc =
     gc_scope_create(a,&(a->gc_root));
+  rt->val_stk_cap = AJJ_INIT_VALUE_STACK_SIZE;
+  rt->val_stk = malloc(sizeof(struct ajj_value)*
+      AJJ_INIT_VALUE_STACK_SIZE);
   rt->output = output;
   rt->global = upvalue_table_create(&(a->env));
 }
@@ -292,6 +295,7 @@ void runtime_destroy( struct ajj* a , struct runtime* rt ) {
   }
   /* destroy all the global variable scope */
   upvalue_table_destroy(a,rt->global,&(a->env));
+  free(rt->val_stk);
 }
 
 static
@@ -1661,7 +1665,9 @@ int vm_super( struct ajj* a,
 
 /* The function for invoke a certain code. Before entering into this
  * function user should already prepared well for the stack and the
- * target the function must be already on the stk_top of the stack */
+ * target the function must be already on the stk_top of the stack.
+ * Notes: The inline threading is not used but an old and slow while
+ * switch cases. The reason is inline threading is *not* portable */
 static
 int vm_main( struct ajj* a ) {
 
@@ -1905,9 +1911,14 @@ int vm_main( struct ajj* a ) {
           goto fail;
         } else {
           struct ajj_value ret;
+#ifndef NDEBUG
           int r;
+#endif
           enter_function(a,f,an,0,obj,RCHECK);
-          r = vm_call(a,obj,&ret);
+#ifndef NDEBUG
+          r =
+#endif
+            vm_call(a,obj,&ret);
           assert( r == VM_FUNC_CALL );
         }
       } vm_end(BCALL)

@@ -330,8 +330,11 @@ token_id tk_lex_keyword_or_id( struct tokenizer* tk ) {
   size_t i = tk->pos;
   int len;
   Rune c;
-  int o;
-  o = chartorune(&c,tk->src+i);
+
+#ifndef NDEBUG
+  int o =
+#endif
+    chartorune(&c,tk->src+i);
 
   switch(c) {
     case 'a': assert(o == 1);
@@ -681,7 +684,10 @@ int tk_check_single_keyword( struct tokenizer* tk , size_t pos ,
   size_t i = pos;
   do {
     Rune c;
-    int o = chartorune(&c,tk->src+i);
+#ifndef NDEBUG
+    int o =
+#endif
+      chartorune(&c,tk->src+i);
     if( c == str[0] ) {
       assert( o == 1 );
       if( (size_t)(tk_keyword_check( tk,str+1,i+1)) == len-1 &&

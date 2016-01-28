@@ -124,7 +124,7 @@ void dump_program_ctable( struct ajj* a,
   for( i = 0 ; i < prg->par_size ; ++i ) {
     const char* c;
     size_t l;
-    int own;
+    int own = 0;
     ajj_io_printf(output,"%zu:%s:",i,prg->par_list[i].name.str);
     c = ajj_display(a,
         &(prg->par_list[i].def_val),

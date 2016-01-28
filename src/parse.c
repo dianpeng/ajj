@@ -317,12 +317,17 @@ static
 struct string
 random_name( struct parser* p , char l ) {
   char name[1024];
+#ifndef NDEBUG
   int result;
+#endif
   if(p->unname_cnt == USHRT_MAX) {
     parser_rpt_err(p,"Too much scope/blocks,more than:%d!",USHRT_MAX);
     return NULL_STRING;
   }
-  result = sprintf(name,"@%c%d",l,p->unname_cnt);
+#ifndef NDEBUG
+  result =
+#endif
+    sprintf(name,"@%c%d",l,p->unname_cnt);
   assert(result < AJJ_SYMBOL_NAME_MAX_SIZE );
   ++p->unname_cnt;
   return string_dupc(name);
@@ -635,8 +640,7 @@ int parse_funccall_or_pipe( struct parser* p , struct emitter* em ,
     struct string* prefix , int pipe ) {
   int idx;
   int num ;
-  struct tokenizer* tk = &(p->tk);
-  assert(tk->tk == TK_LPAR);
+  assert(p->tk.tk == TK_LPAR);
 
   idx=program_const_str(em->prg,prefix,1);
   CALLE((num=parse_invoke_par(p,em))<0); /* generate call parameter for function */
@@ -1407,7 +1411,9 @@ int alloc_func_builtin_var( struct parser* p ) {
 
 static int
 parse_func_body( struct parser* p , struct emitter* em ) {
+#ifndef NDEBUG
   struct lex_scope* scp = lex_scope_top(p);
+#endif
 
   CALLE(lex_scope_jump(p) == NULL);
   assert( lex_scope_top(p)->parent == NULL );
@@ -2528,12 +2534,8 @@ parse( struct ajj* a, const char* key,
                              * to delete all the garbage if we parse
                              * failed */
 
-  if((tmpl = ajj_new_template(a,key,src,own)) == NULL) {
-      tmpl = ajj_find_template(a,key);
-      assert(tmpl != NULL);
-      if(own) free((void*)src);
-      return tmpl;
-  }
+  tmpl = ajj_new_template(a,key,src,own);
+  assert(tmpl);
 
   /* init the temporary gc scope */
   gc_init_temp(&temp_scp,tmpl->scp);
