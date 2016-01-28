@@ -805,14 +805,14 @@ void test_random_1() {
   do_test("{{ -3*2>7-1998 | abs | abs | abs | abs }}");
 }
 
-#if 0
-
 static
 uint64_t NowInMicroSeconds() {
     struct timeval tv;
     gettimeofday(&tv,NULL);
     return tv.tv_usec + (tv.tv_sec*1000000);
 }
+
+#if 0
 
 static
 void bench() {

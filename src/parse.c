@@ -1652,8 +1652,11 @@ static int parse_for_body( struct parser* p ,
   int brk_jmp = -1;
 
   int loop_cond_pos;
-  int itr_idx;
-  int obj_idx;
+
+#ifndef NDEBUG
+  int local_idx;
+#endif
+
   int deref_tp;
   size_t i;
   struct string obj_name;
@@ -1663,15 +1666,37 @@ static int parse_for_body( struct parser* p ,
   obj_name = random_name(p,'i');
   itr_name = random_name(p,'i');
 
-  CALLE(parse_loop_cond(p,em));
+  /* before parsing the loop condition , we push an empty slot
+   * here on the stack named loop for the VM to initialize the
+   * loop objects */
+  EMIT0(em,VM_LNONE); /* loop object */
+  CALLE(parse_loop_cond(p,em)); /* map/list object */
 
   CALLE((scp=lex_scope_enter(p,1))==NULL);
 
-  CALLE((obj_idx=lex_scope_set(p,&obj_name))==-2);
-  assert(obj_idx == -1);
+  /* for loop object */
+#ifndef NDEBUG
+  CALLE((local_idx = lex_scope_set(p,&LOOP)) == -2);
+  assert(local_idx == -1);
+#else
+  CALLE(lex_scope_set(p,&LOOP) == -2);
+#endif
 
-  CALLE((itr_idx=lex_scope_set(p,&itr_name))==-2);
-  assert(itr_idx == -1);
+  /* for object itself */
+#ifndef NDEBUG
+  CALLE((local_idx=lex_scope_set(p,&obj_name))==-2);
+  assert(local_idx == -1);
+#else
+  CALLE(lex_scope_set(p,&LOOP) == -2);
+#endif
+
+  /* for iterator */
+#ifndef NDEBUG
+  CALLE((local_idx=lex_scope_set(p,&itr_name))==-2);
+  assert(local_idx == -1);
+#else
+  CALLE(lex_scope_set(p,&LOOP) == -2);
+#endif
 
   string_destroy(&obj_name); /* object name */
   string_destroy(&itr_name); /* iterator name */
@@ -1689,9 +1714,10 @@ static int parse_for_body( struct parser* p ,
 
   EMIT0(em,VM_ITER_START); /* start the iterator */
 
-  /* Now the top 2 stack elements are
+  /* Now the top 3 stack elements are
    * 1. iterator
-   * 2. object */
+   * 2. object
+   * 3. loop object */
   loop_cond_pos = emitter_label(em);
   EMIT0(em,VM_ITER_HAS);
   loop_jmp = EMIT_PUT(em,1); /* loop jump */
@@ -1789,10 +1815,6 @@ static int parse_for_body( struct parser* p ,
   EMIT1_AT(em,loop_jmp,VM_JF,
       emitter_label(em)); /* patch the jmp */
 
-  /* here we generate a ITER_EXIT instructions to make
-   * our vm aware that we gonna exit the loop */
-  EMIT0(em,VM_ITER_EXIT);
-
   /* patch the break jump table here */
   if( lex_scope_top(p)->lctrl->brks_len ) {
     /* generate a jump here to make sure normal execution flow
@@ -1816,8 +1838,7 @@ static int parse_for_body( struct parser* p ,
         EMIT1(em,VM_POP,1);
       }
     }
-    EMIT0(em,VM_ITER_EXIT);     /* Generate ITER_EXIT since the loop
-                                 * has been breaked */
+
     assert( brk_jmp >0 );
     EMIT1_AT(em,brk_jmp,VM_JMP,emitter_label(em)); /* patch the jump to skip
                                                     * the POP instruction above */
@@ -1853,8 +1874,9 @@ static int parse_for_body( struct parser* p ,
     EMIT1_AT(em,loop_body_jmp,VM_JMP,emitter_label(em));
   }
 
-  /* pop the map/list object on top of the stack */
-  EMIT1(em,VM_POP,1);
+  /* pop the map/list object and the loop object if we
+   * have used on top of the stack */
+  EMIT1(em,VM_POP,2);
 
   /* consume remained tokens */
   CONSUME(TK_ENDFOR);
@@ -2163,32 +2185,17 @@ parse_with( struct parser* p , struct emitter* em ) {
 static
 int parse_return( struct parser* p ,struct emitter* em ) {
   struct tokenizer* tk = &(p->tk);
-  int itr_exit_cnt =0;
-  struct lex_scope* scp = lex_scope_top(p);
   assert(tk->tk == TK_RETURN);
   tk_move(tk);
-  /* Here because our execution flow changes, the clean up instruction
-   * will be skipped. We have 2 clean instructions must be executed,
-   * 1. VM_EXIT
-   * 2. VM_ITER_EXIT
-   * For the first one we don't need to care since VM is able to track
-   * it and execute it accordingly when a function is returned.
-   * But for the VM_ITER_EXIT, we need to explicitly calculate the times
-   * it requires to execute because VM doesn't have picture of lexical
-   * scope */
-  do {
-    if(scp->is_loop) ++ itr_exit_cnt;
-    scp = scp->parent;
-  } while(scp);
 
   if(tk->tk == TK_RSTMT) {
     /* empty return statements */
     EMIT0(em,VM_LNONE); /* return None */
-    EMIT1(em,VM_RET,itr_exit_cnt); /* return */
+    EMIT0(em,VM_RET); /* return */
   } else {
     /* evaluate the expression */
     CALLE(parse_expr(p,em));
-    EMIT1(em,VM_RET,itr_exit_cnt);
+    EMIT0(em,VM_RET);
   }
   CONSUME(TK_RSTMT);
   return 0;

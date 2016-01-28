@@ -299,50 +299,15 @@ void runtime_destroy( struct ajj* a , struct runtime* rt ) {
 }
 
 static
-void enter_loop( struct ajj* a, size_t len ) {
+struct ajj_value create_loop_object( struct ajj* a, size_t len ) {
+  struct ajj_value lval;
   struct ajj_object* lobj;
-  struct func_frame* fr = cur_frame(a);
-  int fail;
-  if(len == 0) {
-    /* We don't have a length operator for this object,
-     * so we just insert a NULL pointer at the current
-     * position */
-    fr->loops[fr->cur_loops++] = NULL;
-  } else {
-    struct ajj_value lval;
-    lobj = ajj_object_create_loop(a,
-        a->rt->cur_gc,
-        len);
-    lval = ajj_value_assign(lobj);
-    assert(fr->cur_loops < MAX_LOOP_CTRL_SIZE );
-    set_upvalue(a,&LOOP,&lval,1,1,&fail);
-    assert(!fail);
-    fr->loops[fr->cur_loops++] = lobj;
-  }
-}
 
-static
-void exit_loop( struct ajj* a , int times ) {
-  while( times-- > 0 ) {
-    struct func_frame* fr = cur_frame(a);
-    struct ajj_object* lobj = fr->loops[fr->cur_loops-1];
-    assert(fr->cur_loops >0);
-    --fr->cur_loops;
-    if(lobj)
-      del_upvalue(a,&LOOP);
-  }
-}
-
-static
-void move_loop( struct ajj* a ) {
-  struct func_frame* fr = cur_frame(a);
-  struct ajj_value l;
-  struct ajj_object* lobj;
-  assert(fr->cur_loops >0);
-  if( (lobj = fr->loops[fr->cur_loops-1]) ) {
-    l = ajj_value_assign(fr->loops[fr->cur_loops-1]);
-    builtin_loop_move(&l);
-  }
+  lobj = ajj_object_create_loop(a,
+      a->rt->cur_gc,
+      len);
+  lval = ajj_value_assign(lobj);
+  return lval;
 }
 
 /* =============================
@@ -1430,7 +1395,6 @@ void enter_function( struct ajj* a , const struct function* f,
     fr->par_cnt = par_cnt;
     fr->method = method;
     fr->obj = obj;
-    fr->cur_loops = 0;
     fr->enter_gc = a->rt->cur_gc;
     ++rt->cur_call_stk;
     *fail = 0;
@@ -1444,7 +1408,6 @@ int exit_function( struct ajj* a , const struct ajj_value* ret ) {
   int stk_sz = fr->par_cnt;
   struct gc_scope* gc = fr->enter_gc;
   assert(rt->cur_call_stk >0);
-  assert(fr->cur_loops == 0);
   /* test whether we need to update our par_cnt
    * because we are a call for a method which means
    * we have an object on stack */
@@ -1969,12 +1932,8 @@ int vm_main( struct ajj* a ) {
       vm_beg(RET) {
         /* check if we have return value here or not !
          * if not, put a dummy NONE on stk_top of the caller stack */
-        int itr_cnt = instr_1st_arg(c);
-        struct func_frame* fr = cur_frame(a);
         struct ajj_value ret = *stk_top(a,1); /* TOP of the stack contains our
                                                * return value */
-        /* exit loop iterator */
-        exit_loop(a,itr_cnt);
         /* do clean up things */
         exit_function(a,&ret);
         /* check the current function frame to see whether we previously
@@ -1982,7 +1941,7 @@ int vm_main( struct ajj* a ) {
          * we just stk_pop that c function again, looks like one return stk_pops
          * 2 function frames */
         if( a->rt->cur_call_stk > 0 ) {
-          fr = cur_frame(a);
+          struct func_frame* fr = cur_frame(a);
           if( IS_C(fr->entry) ) {
             /* do a consecutive stk_pop here */
             stk_pop(a,1); /* stk_pop the original return value on stack */
@@ -2215,6 +2174,8 @@ int vm_main( struct ajj* a ) {
         int itr;
         size_t len;
         struct ajj_value* obj = stk_top(a,1);
+        struct ajj_value loop;
+
         if(ajj_value_iter_start(a,obj,&itr)) {
           rewrite_error(a);
           goto fail;
@@ -2223,7 +2184,14 @@ int vm_main( struct ajj* a ) {
           rewrite_error(a);
           goto fail;
         }
-        enter_loop(a,len);
+
+        /* get loop object */
+        loop = create_loop_object(a,len);
+        assert( stk_top(a,2)->type == AJJ_VALUE_NONE );
+        /* since we've already *got* a space to set
+         * the loop object which is the one slots that
+         * is before the current top of the stack */
+        (*stk_top(a,2)) = loop;
         /* do not stk_pop the object out */
         stk_push(a,ajj_value_iter(itr));
       } vm_end(ITER_START)
@@ -2298,6 +2266,7 @@ int vm_main( struct ajj* a ) {
       vm_beg(ITER_MOVE){
         struct ajj_value* obj = stk_top(a,2);
         struct ajj_value* itr = stk_top(a,1);
+        struct ajj_value* loop= stk_top(a,3);
         int i_itr;
         assert( itr->type == AJJ_VALUE_ITERATOR );
         if(ajj_value_iter_move(a,
@@ -2307,14 +2276,10 @@ int vm_main( struct ajj* a ) {
           rewrite_error(a);
           goto fail;
         }
+        builtin_loop_move(loop); /* move the loop object */
         stk_pop(a,1); /* stk_pop the stk_top iterator */
         stk_push( a , ajj_value_iter(i_itr) );
-        move_loop(a); /* step the loop object */
       } vm_end(ITER_MOVE)
-
-      vm_beg(ITER_EXIT) {
-        exit_loop(a,1); /* tear down loop object */
-      } vm_end(ITER_EXIT)
 
       /* MISC -------------------------------------- */
       vm_beg(ENTER) {

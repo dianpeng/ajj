@@ -69,10 +69,6 @@ struct func_frame {
                       * is always the defined number */
   int method  : 1 ;  /* indicate whether this call is a method call or not */
 
-  /* Optimization for LOOP object */
-  struct ajj_object* loops[ MAX_LOOP_CTRL_SIZE ];
-  size_t cur_loops;
-
   /* Entry GC pointer, used to clean the gc scope when an early return is
    * executed */
   struct gc_scope* enter_gc;
