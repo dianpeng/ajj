@@ -72,12 +72,12 @@ is not supported. We also extended include instruction in some other way. Read m
 {% endmacro $}
 ```
 But list of builtin variables are available in template.
-`__func__`: represent the name of current function/macro/block/callable
++ `__func__`: represent the name of current function/macro/block/callable
 
-`__argnum__`:represent the number of arguments for this function/macro/block/callable
-`vargs`: same with python's vargs.
-`caller`: name of the caller function
-`self`: this Jinja2 object
++ `__argnum__`:represent the number of arguments for this function/macro/block/callable
++ `vargs`: same with python's vargs.
++ `caller`: name of the caller function
++ `self`: this Jinja2 object
 
 With these builtin variables, you could don't need macro object indeed. I remove this object is basically because it is redundancy in AJJ.
 
