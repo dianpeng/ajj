@@ -92,18 +92,20 @@ void test_macro() {
 static
 void test_string() {
   assert( string_null(&NULL_STRING) );
-  assert( string_eqc(&TRUE_STRING,"true") );
-  assert( string_eqc(&FALSE_STRING,"false") );
-  assert( string_eqc(&NONE_STRING,"none") );
+  assert( string_eqc(&TRUE_STRING,"True") );
+  assert( string_eqc(&FALSE_STRING,"False") );
+  assert( string_eqc(&NONE_STRING,"None") );
   {
     struct string Dup1 = string_dup(&TRUE_STRING);
     assert( string_eq(&Dup1,&TRUE_STRING) );
     string_destroy(&Dup1);
-    Dup1 = string_dupc("true");
+    Dup1 = string_dupc("True");
     assert( string_eq(&Dup1,&TRUE_STRING) );
     string_destroy(&Dup1);
   }
 }
+
+#define STRBUF_INIT_SIZE INITIAL_MEMORY_SIZE
 
 static
 void test_strbuf() {
@@ -111,7 +113,6 @@ void test_strbuf() {
     struct strbuf b1;
     int i;
     strbuf_init(&b1); /* initialize the buffer */
-    assert( b1.cap == STRBUF_INIT_SIZE );
     assert( b1.len == 0 );
     for( i = 0 ; i < 8; ++i ) {
       strbuf_push(&b1,'c');
@@ -222,7 +223,7 @@ void test_map() {
     assert(!map_insert_c(&d,"Zvbcc",&val));
 
     assert(d.cap ==4);
-    assert(d.len ==4);
+    assert(d.use ==4);
 
     assert((find=map_find_c(&d,"ABCDE")));
     assert(*(int*)(find)==1);
@@ -253,10 +254,10 @@ void test_map() {
       itr = map_iter_move(&d,itr);
     }
     map_clear(&d);
-    assert(d.len==0);
+    assert(d.use==0);
     assert(d.cap==4);
     map_destroy(&d);
-    assert(d.len==0);
+    assert(d.use==0);
     assert(d.cap==0);
   }
   {
@@ -278,7 +279,7 @@ void test_map() {
       assert((ptr=map_find_c(&d,name)));
       assert(*(int*)(ptr)==i);
     }
-    assert(d.len==128);
+    assert(d.use==128);
     assert(d.cap==128);
     for( i = 0 ; i < 128 ; ++i ) {
       char name[1024];
@@ -287,7 +288,7 @@ void test_map() {
       assert(!map_remove_c(&d,name,&val));
       assert(val==i);
     }
-    assert(d.len==0);
+    assert(d.use==0);
     assert(d.cap==128);
 
     for( i = 0 ; i < 128 ; ++i ) {
@@ -298,7 +299,7 @@ void test_map() {
     }
 
     map_clear(&d);
-    assert(d.len==0);
+    assert(d.use==0);
     map_destroy(&d);
   }
 }
@@ -321,7 +322,7 @@ void test_slab() {
       *ptr = i;
       assert(!map_insert_c(&m,name,&ptr));
     }
-    assert(m.len==1024);
+    assert(m.use==1024);
     assert(m.cap==1024);
 
     for( i = 0 ; i < 1024; ++i ) {
@@ -357,7 +358,7 @@ void test_slab() {
     }
 
     assert(m.cap==1024);
-    assert(m.len==0);
+    assert(m.use==0);
 
     slab_destroy(&slb);
     map_destroy(&m);

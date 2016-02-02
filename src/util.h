@@ -225,7 +225,8 @@ struct map {
   void* value;
 
   size_t cap;
-  size_t len;
+  size_t len; /* The occupied slots in map , which includes deleted one */
+  size_t use; /* The actual used slots in map */
   size_t obj_sz;
 };
 
@@ -248,7 +249,7 @@ int map_remove_c( struct map* , const char* key , void* val );
 void* map_find  ( struct map* , const struct string* );
 void* map_find_c( struct map* , const char* key );
 void map_clear( struct map* );
-#define map_size(d) ((d)->len)
+#define map_size(d) ((d)->use)
 /* iterator for mapionary */
 int map_iter_start( const struct map* );
 #define map_iter_has(D,I) ((size_t)(I) < (D)->cap)

@@ -26,6 +26,9 @@ vm-test: libajj test/vm-test.c
 opt-test: libajj test/opt-test.c
 	cd test; gcc $(FLAGS) opt-test.c $(LINK) -o opt-test; cd -
 
+util-test: libajj test/util-test.c
+	cd test; gcc $(FLAGS) util-test.c $(LINK) -o util-test; cd -
+
 clean:
 	rm *.o
 	rm *.a

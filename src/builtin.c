@@ -651,7 +651,7 @@ int dict_count( struct ajj* a ,
     EXEC_FAIL1(a,"%s","dict::count cannot accept argument!");
   } else {
     struct map* m = DICT(obj);
-    *ret = ajj_value_number(m->len);
+    *ret = ajj_value_number(map_size(m));
     return AJJ_EXEC_OK;
   }
 }

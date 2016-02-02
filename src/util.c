@@ -677,7 +677,8 @@ void map_rehash( struct map* d ) {
   /* free old memory if we have to */
   free(d->entry);
 
-  temp_d.len = d->len;
+  temp_d.len = d->use;
+  temp_d.use = d->use;
   *d = temp_d;
 }
 
@@ -701,6 +702,7 @@ int map_insert( struct map* d, const struct string* key , int own ,
     e->more = 0;
   }
   ++d->len;
+  ++d->use;
   e->hash = fh;
   map_value_store(d,e,val);
   return 0;
@@ -729,6 +731,7 @@ int map_insert_c( struct map* d, const char* key ,
     e->more = 0;
   }
   ++d->len;
+  ++d->use;
   e->hash = fh;
   map_value_store(d,e,val);
   return 0;
@@ -747,7 +750,7 @@ int map_remove( struct map* d , const struct string* key , void* output ) {
     if( output )
       map_value_load(d,e,output);
     e->del = 1;
-    --d->len;
+    --d->use;
     return 0;
   }
 }
@@ -769,7 +772,7 @@ int map_remove_c( struct map* d , const char* key , void* output ) {
     if( output )
       map_value_load(d,e,output);
     e->del = 1;
-    --d->len;
+    --d->use;
     return 0;
   }
 }
@@ -802,6 +805,7 @@ void map_create( struct map* d , size_t obj_sz , size_t cap ) {
   d->obj_sz = obj_sz;
   d->cap = cap;
   d->len = 0;
+  d->use = 0;
   d->entry = calloc(cap,sizeof(struct map_entry)+obj_sz);
   d->value = ((char*)(d->entry)) + cap*sizeof(struct map_entry);
 }
@@ -818,7 +822,7 @@ void map_destroy( struct map* d ) {
   }
   free(d->entry);
   d->entry = d->value = NULL;
-  d->cap = d->len = 0;
+  d->use = d->cap = d->len = 0;
 }
 
 void map_clear( struct map* d ) {
@@ -833,6 +837,7 @@ void map_clear( struct map* d ) {
     }
   }
   d->len = 0;
+  d->use = 0;
 }
 
 int map_iter_start( const struct map* d ) {
