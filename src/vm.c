@@ -1286,10 +1286,21 @@ resolve_obj_function(struct ajj_object* val,
 
 static
 const struct function*
+resolve_self_block(struct ajj_object* val,
+    const struct string* name ) {
+  const struct function* f = resolve_obj_function(val,name);
+  if( f && IS_JJBLOCK(f) )
+    return f;
+  else
+    return NULL;
+}
+
+static
+const struct function*
 resolve_obj_method(struct ajj_object* val,
     const struct string* name ) {
   const struct function* f = resolve_obj_function(val,name);
-  if( !IS_JJBLOCK(f) ) {
+  if( f && !IS_JJBLOCK(f) ) {
     assert( !IS_OBJECTCTOR(f) );
     return f;
   } else {
@@ -1608,9 +1619,9 @@ int vm_super( struct ajj* a,
   } else {
     rt = rt->prev;
     do {
-      const struct function* f = resolve_obj_method(rt->jinja,
+      const struct function* f = resolve_self_block(rt->jinja,
           &(caller_fr->name));
-      if(!f) {
+      if(f) {
         return vm_call_script(a,rt->jinja,f,arg,arg_num);
       }
       rt = rt->prev;

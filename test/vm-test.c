@@ -331,6 +331,25 @@ void test_loop() {
           "{% endfor %}" \
           "{# Now we get our matrix sum #}" \
           "{% do assert_expr(result==45) %}");
+
+  /* Loop object maniuplation */
+  do_test("{% for i in xrange(10) %}" \
+          "{% do assert_expr( loop.index == i + 1 ) %}" \
+          "{% do assert_expr( loop.index0== i ) %}" \
+          "{% do assert_expr( loop.revindex == 10-i ) %}" \
+          "{% do assert_expr( loop.revindex0 == 9-i ) %}" \
+          "{% do assert_expr( loop.length == 10 ) %}" \
+          "{% if i == 9 %}" \
+          "{% do assert_expr( loop.last ) %}" \
+          "{% do assert_expr( loop.first == False ) %}" \
+          "{% elif i == 0 %}" \
+          "{% do assert_expr( loop.last == False ) %}" \
+          "{% do assert_expr( loop.first ) %}" \
+          "{% else %}" \
+          "{% do assert_expr( not loop.last ) %}" \
+          "{% do assert_expr( not loop.first) %}" \
+          "{% endif %}" \
+          "{% endfor %}");
 }
 
 void test_branch() {
@@ -728,7 +747,7 @@ void test_extends() {
     ajj_destroy(a);
   }
 
-  {
+  { /* Multi-level inheritance */
     struct ajj* a = ajj_create();
     struct ajj_object* jinja;
     struct ajj_io* output = ajj_io_create_file(a,stdout);
@@ -764,6 +783,94 @@ void test_extends() {
     ajj_io_destroy(output);
     ajj_destroy(a);
   }
+
+  { /* Multiple inheritance */
+    struct ajj* a = ajj_create();
+    struct ajj_object* jinja;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+
+    load_template(a,"Base1",
+        "{% block b1_head %}" \
+        "Hello from Base1::b1_head!" \
+        "{% endblock %}");
+
+    load_template(a,"Base2",
+        "{% block b2_head %}" \
+        "Hello from Base2::b2_head!" \
+        "{% endblock %}");
+
+    jinja = load_template(a,"Child",
+        "{% extends 'Base1' %}" \
+        "{% extends 'Base2' %}" \
+        "{% block b1_head %}" \
+        "Child for b1_head\n" \
+        "{% endblock %}" \
+        "{% block b2_head %}" \
+        "Child for b2_head\n" \
+        "{% endblock %}");
+    if( vm_run_jinja(a,jinja,output) ) {
+      fprintf(stderr,"%s",a->err);
+      abort();
+    }
+    ajj_io_destroy(output);
+    ajj_destroy(a);
+  }
+
+  { /* Calling blocks as normal function */
+    struct ajj* a = ajj_create();
+    struct ajj_object* jinja;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+
+    load_template(a,"Base",
+        "{% block b1 %}" \
+        "Won't show up\n" \
+        "{% endblock %}" \
+        "{% block b2 %}" \
+        "{% do self.b1() %}" \
+        "{% endblock %}");
+
+    jinja = load_template(a,"Child",
+        "{% extends 'Base' %}" \
+        "{% block b1 %}" \
+        "Show me \n" \
+        "{% endblock %}");
+
+    if( vm_run_jinja(a,jinja,output) ) {
+      fprintf(stderr,"%s",a->err);
+      abort();
+    }
+    ajj_io_destroy(output);
+    ajj_destroy(a);
+  }
+
+  { /* Super */
+    struct ajj* a = ajj_create();
+    struct ajj_object* jinja;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+
+    load_template(a,"Base",
+        "{% block b1 %}" \
+        "Won't show up\n" \
+        "{% endblock %}" \
+        "{% block b2 %}" \
+        "{% do self.b1() %}" \
+        "{% endblock %}");
+
+    jinja = load_template(a,"Child",
+        "{% extends 'Base' %}" \
+        "{% block b1 %}" \
+        "{% do super() %}" \
+        "Show me \n" \
+        "{% endblock %}");
+
+    if( vm_run_jinja(a,jinja,output) ) {
+      fprintf(stderr,"%s",a->err);
+      abort();
+    }
+    ajj_io_destroy(output);
+    ajj_destroy(a);
+  }
+
 }
 
 static

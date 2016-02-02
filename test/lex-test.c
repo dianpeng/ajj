@@ -117,7 +117,7 @@ void test_basic() {
   {
     struct tokenizer tk;
     const char* source = \
-      "{% raw %} ChouBI {% HelloWorld %} {% endraw %}" \
+      "{% raw %} Hi {% HelloWorld %} {% endraw %}" \
       "{% +-*/ // /// % true false 1234.56 \'helloworld\' %}";
     token_id token[] = {
       TK_TEXT,
@@ -231,7 +231,7 @@ void test_basic() {
 
     assert(tk.tk == TK_NONE);
     tk_move(&tk);
-    
+
     assert(tk.tk == TK_NONE);
     tk_move(&tk);
 

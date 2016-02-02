@@ -88,7 +88,7 @@ int tk_next_skip_cmt( struct tokenizer* tk , size_t pos ) {
       GET_C2(c2,i,o1,o2);
       if( c2 == '}' ) {
         tk->pos = i + o1+o2 +
-          tk_lex_rmlead(tk,i+o1+o2); /* remove leading 
+          tk_lex_rmlead(tk,i+o1+o2); /* remove leading
                                       * space or new line */
         return 0;
       }
@@ -121,7 +121,7 @@ token_id tk_lex_str( struct tokenizer* tk ) {
     } else if( c1 == '\'' ) {
       break;
     }
-    strbuf_push(&(tk->lexeme),c1);
+    strbuf_push_rune(&(tk->lexeme),c1);
     i += o1;
   }
   /* include the quotes length for this token length */
