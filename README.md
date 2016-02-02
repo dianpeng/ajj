@@ -79,7 +79,7 @@ But list of builtin variables are available in template.
 + `caller`: name of the caller function
 + `self`: this Jinja2 object
 
-With these builtin variables, you could don't need macro object indeed. I remove this object is basically because it is redundancy in AJJ.
+With these builtin variables, you don't need macro object indeed. I remove this object is basically because it is redundancy in AJJ.
 
 9.Scopped block is supported through different syntax but not by tag a "scoped" keyword.
 
@@ -200,7 +200,7 @@ Although questionable, but having a return statements may be useful for some tas
 ```
 This code implement a macro that calculates the sum of an array and it will output 15.
 
-8.Flexible extension API. AJJ is designed to be a library and its solo goal is make user who wants to embed Jinja2 template script engine into whatever host environment. So AJJ provides lots of API for user to extend the AJJ runtime. It allows you to register global function, filter, pipe and test written in C. Also AJJ allows you register global variable and can be assigned with different value , including number, boolean , string and objects. Lastly, since AJJ is actually simulating the Python environment for Jinja2, it allows you register a new type of class using C API. With this user could write a class/object in C code and then instantiated it and use it in template.
+8.Flexible extension API. AJJ is designed to be a library and its solo goal is make user who wants to embed Jinja2 template script engine into whatever host environment feel easy and comfortable. So AJJ provides lots of API for user to extend the AJJ runtime. It allows you to register global function, filter, pipe and test written in C. Also AJJ allows you register global variable and can be assigned with different value , including number, boolean , string and objects. Lastly, since AJJ is actually simulating the Python environment for Jinja2, it allows you register a new type of class using C API. With this user could write a class/object in C code and then instantiated it and use it in template.
 
 # How does AJJ work ?
 It turns out porting Jinja2 is not a easy task simply because from the point of porting Jinja2, it actually means porting the Python environment PLUS the Jinja2 front end. AJJ itself is designed as a very traditional script engine , ( do not think it as yet another template engine in any script language, but a python/ruby/perl implementation ). The whole work flow is as follow : User's template source code will be parsed into a byte code sequence initially, then these byte codes will be sent to a peephole optimizer to do constant folding + conditional jump elimination . To render the template, the final byte code sequence will be sent to then virtual machine for execution.
