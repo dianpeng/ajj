@@ -182,7 +182,7 @@ void opt_rpt_err( struct opt* o ,const char* fmt , ... ) {
   tk_get_code_snippet(src,o->prg->spos[o->ppc],cs,64);
 
   /* dump the error */
-  len = snprintf(o->a->err,1024,
+  len = snprintf(o->a->err,ERROR_BUFFER_SIZE,
       "[Optimizer:(%s:" SIZEF "," SIZEF ")] at:... %s ...!\nMessage:",
       obj->fn_tb->name.str,
       SIZEP(ln),SIZEP(pos),

@@ -1897,15 +1897,15 @@ void json_report_error(struct ajj* a, const char* beg,
 
 #define JSON_MAX_NESTED_SIZE 128
 
-#define ARRAY_MASK (1<<30)
-#define OBJECT_MASK (1<<29)
-#define ROOT_MASK (1<<31)
+#define JS_ARRAY_MASK (1<<30)
+#define JS_OBJECT_MASK (1<<29)
+#define JS_ROOT_MASK (1<<31)
 
-#define IS_ROOT(I) ((I) & ROOT_MASK)
-#define IS_ARRAY(I) ((I) & ARRAY_MASK)
-#define IS_OBJECT(I) ((I) & OBJECT_MASK)
-#define SET_ARRAY(I) ((I) = ((I) | ARRAY_MASK))
-#define SET_OBJECT(I) ((I) = ((I) | OBJECT_MASK))
+#define JS_IS_ROOT(I) ((I) & JS_ROOT_MASK)
+#define JS_IS_ARRAY(I) ((I) & JS_ARRAY_MASK)
+#define JS_IS_OBJECT(I) ((I) & JS_OBJECT_MASK)
+#define JS_SET_ARRAY(I) ((I) = ((I) | JS_ARRAY_MASK))
+#define JS_SET_OBJECT(I) ((I) = ((I) | JS_OBJECT_MASK))
 
 struct ajj_object*
 json_parsec( struct ajj* a , struct gc_scope* scp,
@@ -1919,19 +1919,19 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
   int c;
   size_t i;
 
-  st[cur] = VALUE | ROOT_MASK;
+  st[cur] = VALUE | JS_ROOT_MASK;
   val[0] = AJJ_NONE;
 
-#define CUR() (st[cur])
-#define SET(X) (st[cur] =((st[cur] & STATE_MASK) | (X)))
-#define IS(X) (CUR()&(X))
-#define PUSH() (++cur)
-#define POP() (--cur)
+#define JS_CUR() (st[cur])
+#define JS_SET(X) (st[cur] =((st[cur] & STATE_MASK) | (X)))
+#define JS_IS(X) (JS_CUR()&(X))
+#define JS_PUSH() (++cur)
+#define JS_POP() (--cur)
 
 #define MAP_INSERT(V) \
   do { \
     struct map* m; \
-    assert( IS_OBJECT(CUR()) ); \
+    assert( JS_IS_OBJECT(JS_CUR()) ); \
     assert( IS_A(val+cur,DICT_TYPE) ); \
     m = OBJECT(val+cur); \
     map_insert(m,key+cur,1,(V)); \
@@ -1941,10 +1941,10 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
   for( ; (c=*src) ; ++src ) {
     switch(c) {
       case '[':
-        if ( IS(VALUE) ) {
-          PUSH();
-          SET_ARRAY(CUR());
-          SET(VALUEE);
+        if ( JS_IS(VALUE) ) {
+          JS_PUSH();
+          JS_SET_ARRAY(JS_CUR());
+          JS_SET(VALUEE);
           val[cur] = ajj_value_assign(
               ajj_object_create_list(a,scp));
         } else {
@@ -1954,10 +1954,10 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
         }
         break;
       case '{':
-        if( IS(VALUE) ) {
-          PUSH();
-          SET_OBJECT(CUR());
-          SET(KEYE);
+        if( JS_IS(VALUE) ) {
+          JS_PUSH();
+          JS_SET_OBJECT(JS_CUR());
+          JS_SET(KEYE);
           val[cur] = ajj_value_assign(
               ajj_object_create_dict(a,scp));
           key[cur] = NULL_STRING;
@@ -1968,18 +1968,18 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
         }
         break;
       case ']':
-        if( (IS(VALUEE) || IS(COMMA)) && IS_ARRAY(CUR())) {
-          POP();
-          if( IS_ARRAY(CUR()) ) {
+        if( (JS_IS(VALUEE) || JS_IS(COMMA)) && JS_IS_ARRAY(JS_CUR())) {
+          JS_POP();
+          if( JS_IS_ARRAY(JS_CUR()) ) {
             CHECK(list_append(a,
                   val+cur,
                   val+cur+1,
                   1,
                   &ret) == AJJ_EXEC_OK );
-            SET(COMMA);
-          } else if( IS_OBJECT(CUR()) ) {
+            JS_SET(COMMA);
+          } else if( JS_IS_OBJECT(JS_CUR()) ) {
             MAP_INSERT(val+cur+1);
-            SET(COMMA);
+            JS_SET(COMMA);
           } else {
             val[cur]=val[cur+1];
             goto done;
@@ -1991,18 +1991,18 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
         }
         break;
       case '}':
-        if( (IS(KEYE) || IS(COMMA)) && IS_OBJECT(CUR())) {
-          POP();
-          if( IS_ARRAY(CUR()) ) {
+        if( (JS_IS(KEYE) || JS_IS(COMMA)) && JS_IS_OBJECT(JS_CUR())) {
+          JS_POP();
+          if( JS_IS_ARRAY(JS_CUR()) ) {
             CHECK(list_append(a,
                   val+cur,
                   val+cur+1,
                   1,
                   &ret) == AJJ_EXEC_OK );
-            SET(COMMA);
-          } else if( IS_OBJECT(CUR()) ) {
+            JS_SET(COMMA);
+          } else if( JS_IS_OBJECT(JS_CUR()) ) {
             MAP_INSERT(val+cur+1);
-            SET(COMMA);
+            JS_SET(COMMA);
           } else {
             val[cur]=val[cur+1];
             goto done;
@@ -2016,7 +2016,7 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
       case '-':
       case '0':case '1':case '2':case '3':case '4':
       case '5':case '6':case '7':case '8':case '9':
-        if( (IS(VALUEE) || IS(VALUE)) && !IS_ROOT(CUR()) ) {
+        if( (JS_IS(VALUEE) || JS_IS(VALUE)) && !JS_IS_ROOT(JS_CUR()) ) {
           /* using strtod is a perfect fit here */
           double num;
           char* end;
@@ -2031,7 +2031,7 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
           }
           src = end-1; /* we have an extra increment */
           dval = ajj_value_number(num);
-          if( IS_ARRAY(CUR()) ) {
+          if( JS_IS_ARRAY(JS_CUR()) ) {
             CHECK(list_append(a,
                   val+cur,
                   &dval,
@@ -2045,11 +2045,11 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
               "Unexpected number!");
           goto fail;
         }
-        SET(COMMA); /* expect a comma */
+        JS_SET(COMMA); /* expect a comma */
         break;
       case '\"':
-        if( (( IS(VALUE) || IS(VALUEE))&& IS_ARRAY(CUR())) ||
-            (( IS(VALUE) || IS(KEY) || IS(KEYE)) && IS_OBJECT(CUR()))) {
+        if( (( JS_IS(VALUE) || JS_IS(VALUEE))&& JS_IS_ARRAY(JS_CUR())) ||
+            (( JS_IS(VALUE) || JS_IS(KEY) || JS_IS(KEYE)) && JS_IS_OBJECT(JS_CUR()))) {
           struct strbuf sbuf;
           strbuf_init_cap(&sbuf,256); /* default buffer */
           ++src;
@@ -2069,8 +2069,8 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
                 "Unexpected EOF!");
             goto fail;
           } else {
-            if( IS_OBJECT(CUR())) {
-              if( IS(KEY) || IS(KEYE) ) {
+            if( JS_IS_OBJECT(JS_CUR())) {
+              if( JS_IS(KEY) || JS_IS(KEYE) ) {
                 key[cur] = strbuf_tostring(&sbuf);
               } else {
                 struct ajj_value str_val;
@@ -2083,7 +2083,7 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
             } else {
               struct ajj_value str_val;
               struct string str = strbuf_tostring(&sbuf);
-              assert( IS_ARRAY(CUR()) );
+              assert( JS_IS_ARRAY(JS_CUR()) );
               str_val = ajj_value_assign(
                   ajj_object_create_string(a,scp,str.str,str.len,1));
               CHECK(list_append(a,
@@ -2098,21 +2098,21 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
               "Unexpected string!");
           goto fail;
         }
-        if( IS_ARRAY(CUR()) ) {
-          SET(COMMA);
+        if( JS_IS_ARRAY(JS_CUR()) ) {
+          JS_SET(COMMA);
         } else {
-          if( IS_OBJECT(CUR()) ) {
-            if( IS(VALUE) || IS(VALUEE) ) {
-              SET(COMMA);
+          if( JS_IS_OBJECT(JS_CUR()) ) {
+            if( JS_IS(VALUE) || JS_IS(VALUEE) ) {
+              JS_SET(COMMA);
             } else {
-              SET(COLON);
+              JS_SET(COLON);
             }
           }
         }
         break;
       case ':':
-        if( IS_OBJECT(CUR()) && IS(COLON) ) {
-          SET(VALUE);
+        if( JS_IS_OBJECT(JS_CUR()) && JS_IS(COLON) ) {
+          JS_SET(VALUE);
         } else {
           json_report_error(a,beg,src,
               "Unexpected \":\"!");
@@ -2120,11 +2120,11 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
         }
         break;
       case ',':
-        if( IS(COMMA) ) {
-          if(IS_ARRAY(CUR()))
-            SET(VALUE);
+        if( JS_IS(COMMA) ) {
+          if(JS_IS_ARRAY(JS_CUR()))
+            JS_SET(VALUE);
           else
-            SET(KEY);
+            JS_SET(KEY);
         }
         break;
         /* skip whitespaces */
@@ -2134,9 +2134,9 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
       case 't':
         if(src[1] =='r' && src[2] =='u' &&
            src[3] =='e' ) {
-          if( (IS(VALUE) || IS(VALUEE)) && !IS_ROOT(CUR()) ) {
+          if( (JS_IS(VALUE) || JS_IS(VALUEE)) && !JS_IS_ROOT(JS_CUR()) ) {
             src += 3;
-            if( IS_ARRAY(CUR()) ) {
+            if( JS_IS_ARRAY(JS_CUR()) ) {
               CHECK(list_append(a,
                     val+cur,
                     &AJJ_TRUE,
@@ -2150,15 +2150,15 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
                 "Unexpected token 't'!");
             goto fail;
           }
-          SET(COMMA); /* expect a comma */
+          JS_SET(COMMA); /* expect a comma */
         }
         break;
       case 'f':
         if(src[1] == 'a' && src[2] =='l' &&
            src[3] == 's' && src[4] =='e') {
-          if( (IS(VALUE) || IS(VALUEE)) && !IS_ROOT(CUR()) ) {
+          if( (JS_IS(VALUE) || JS_IS(VALUEE)) && !JS_IS_ROOT(JS_CUR()) ) {
             src += 4;
-            if( IS_ARRAY(CUR()) ) {
+            if( JS_IS_ARRAY(JS_CUR()) ) {
               CHECK(list_append(a,
                     val+cur,
                     &AJJ_FALSE,
@@ -2172,15 +2172,15 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
                 "Unexpected token 'f'!");
             goto fail;
           }
-          SET(COMMA); /* expect a comma */
+          JS_SET(COMMA); /* expect a comma */
         }
         break;
       case 'n':
         if(src[1] == 'u' && src[2] == 'l' &&
            src[3] == 'l' ) {
-          if( (IS(VALUE) || IS(VALUEE)) && !IS_ROOT(CUR()) ) {
+          if( (JS_IS(VALUE) || JS_IS(VALUEE)) && !JS_IS_ROOT(JS_CUR()) ) {
             src += 3;
-            if( IS_ARRAY(CUR()) ) {
+            if( JS_IS_ARRAY(JS_CUR()) ) {
               CHECK(list_append(a,
                     val+cur,
                     &AJJ_NONE,
@@ -2194,7 +2194,7 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
                 "Unexpected token 'n'!");
             goto fail;
           }
-          SET(COMMA); /* expect a comma */
+          JS_SET(COMMA); /* expect a comma */
         }
         break;
       default:
@@ -2223,15 +2223,15 @@ fail:
   return NULL;
 }
 
-#undef ARRAY_MASK
-#undef ROOT_MASK
-#undef OBJECT_MASK
-#undef IS_ARRAY
-#undef IS_OBJECT
-#undef IS_ROOT
-#undef SET_OBJECT
-#undef SET_ARRAY
-#undef CUR
+#undef JS_ARRAY_MASK
+#undef JS_ROOT_MASK
+#undef JS_OBJECT_MASK
+#undef JS_IS_ARRAY
+#undef JS_IS_OBJECT
+#undef JS_IS_ROOT
+#undef JS_SET_OBJECT
+#undef JS_SET_ARRAY
+#undef JS_CUR
 #undef SET
 #undef IS
 #undef PUSH

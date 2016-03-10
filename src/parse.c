@@ -179,7 +179,7 @@ void parser_rpt_err( struct parser* p , const char* format, ... ) {
   tk_get_current_code_snippet(tk,cs,32);
 
   /* output the prefix message */
-  len = snprintf(p->a->err,1024,
+  len = snprintf(p->a->err,ERROR_BUFFER_SIZE,
       "[Parser:(%s:" SIZEF "," SIZEF ")] at:(... %s ...)\nMessage:",
       p->src_key,SIZEP(pos),SIZEP(ln),cs);
 
@@ -217,12 +217,12 @@ struct lex_scope* lex_scope_enter( struct parser* p , int is_loop ) {
 
 static
 struct lex_scope* lex_scope_jump( struct parser* p ) {
-  struct lex_scope* scp;
-  scp = malloc(sizeof(*scp));
   if( p->scp_tp == MAX_NESTED_FUNCTION_DEFINE ) {
     parser_rpt_err(p,"Too much nested functoin definition!");
     return NULL;
   } else {
+    struct lex_scope* scp;
+    scp = malloc(sizeof(*scp));
     ++p->scp_tp;
     lex_scope_top(p) = scp;
     scp->parent = NULL;
