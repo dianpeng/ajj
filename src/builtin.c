@@ -1855,7 +1855,7 @@ int test_defined( struct ajj* a,
  * have limitation on how much recursion we could have */
 
 enum {
-  COMMA=1,        /* expect a comma */
+  COMMA=1,           /* expect a comma */
   KEY=1<<1,          /* expect a key   */
   VALUE=1<<2,        /* expect a value */
   COLON=1<<3,        /* expect a colon */
@@ -1895,6 +1895,37 @@ void json_report_error(struct ajj* a, const char* beg,
   vsnprintf(buf, bend-buf, fmt,vl);
 }
 
+/* Compare the left hand side (UTF encode) with right hand side
+ * (Pure ansi string) in a safe way */
+static
+int json_ustr_equal( const char* left , const char* right ) {
+  int off;
+  Rune c;
+#define CHECK_CHAR(OFF) \
+  do { \
+    off = chartorune(&c,left); \
+    if(c == Runeerror) goto fail; \
+    if( c != right[OFF] ) return -1; \
+    if(!right[OFF+1]) return 0; \
+    left += off; \
+  } while(0)
+
+  CHECK_CHAR(0);
+  CHECK_CHAR(1);
+  CHECK_CHAR(2);
+  CHECK_CHAR(3);
+  CHECK_CHAR(4);
+  CHECK_CHAR(5);
+
+#undef CHECK_CHAR
+
+  assert(0);
+  return -1;
+
+fail:
+  return 1;
+}
+
 #define JSON_MAX_NESTED_SIZE 128
 
 #define JS_ARRAY_MASK (1<<30)
@@ -1916,8 +1947,9 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
   struct string key[JSON_MAX_NESTED_SIZE];
   struct ajj_value ret;
   int cur = 0;
-  int c;
+  Rune c;
   size_t i;
+  int off = 0;
 
   st[cur] = VALUE | JS_ROOT_MASK;
   val[0] = AJJ_NONE;
@@ -1938,7 +1970,13 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
     key[cur] = NULL_STRING; \
   } while(0)
 
-  for( ; (c=*src) ; ++src ) {
+  for( ; ; src += off ) {
+    off = chartorune(&c,src);
+    if(c == Runeerror) {
+      json_report_error(a,beg,src,"UTF decode error!");
+      goto fail;
+    }
+
     switch(c) {
       case '[':
         if ( JS_IS(VALUE) ) {
@@ -2017,10 +2055,12 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
       case '0':case '1':case '2':case '3':case '4':
       case '5':case '6':case '7':case '8':case '9':
         if( (JS_IS(VALUEE) || JS_IS(VALUE)) && !JS_IS_ROOT(JS_CUR()) ) {
-          /* using strtod is a perfect fit here */
           double num;
           char* end;
           struct ajj_value dval;
+
+          /* this function is utf encoding safe since libc guarantee us to
+           * be so, but not on Windows :) */
           errno = 0;
           num = strtod(src,&end);
           if(errno) {
@@ -2029,7 +2069,7 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
                 strerror(errno));
             goto fail;
           }
-          src = end-1; /* we have an extra increment */
+          src = end-1; off = 1; /* Make outer loop bump correctly */
           dval = ajj_value_number(num);
           if( JS_IS_ARRAY(JS_CUR()) ) {
             CHECK(list_append(a,
@@ -2051,19 +2091,37 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
         if( (( JS_IS(VALUE) || JS_IS(VALUEE))&& JS_IS_ARRAY(JS_CUR())) ||
             (( JS_IS(VALUE) || JS_IS(KEY) || JS_IS(KEYE)) && JS_IS_OBJECT(JS_CUR()))) {
           struct strbuf sbuf;
+          int s_off = 0;
+
           strbuf_init_cap(&sbuf,256); /* default buffer */
-          ++src;
-          for( ; (c = *src) ; ++src ) {
+          /* fetch the string literal here. since we support UTF and string can
+           * contain valid UTF characters so we need to do a UTF decode on each
+           * character */
+          src += off;
+
+          for( ; 1 ; src += s_off ) {
+            s_off = chartorune(&c,src);
+            if(c == Runeerror) {
+              json_report_error(a,beg,src,"UTF decode error!");
+              goto fail;
+            } else if( c == 0 ) {
+              json_report_error(a,beg,src,"String not closed by \"!");
+              goto fail;
+            }
             if( c == '\\' ) {
-              /* we do a blind escape here, we don't
-               * check whether the escape is valid or
-               * not */
-              c = *(++src);
+              src += s_off;
+              s_off = chartorune(&c,src);
+              if(c == Runeerror) {
+                json_report_error(a,beg,src,"UTF decode error!");
+                goto fail;
+              }
             } else if( c == '\"' ) {
+              off = 1; /* Make the outer loop skip the quote */
               break;
             }
-            strbuf_push(&sbuf,c);
+            strbuf_push_rune(&sbuf,c);
           }
+
           if(!c) {
             json_report_error(a,beg,src,
                 "Unexpected EOF!");
@@ -2085,7 +2143,11 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
               struct string str = strbuf_tostring(&sbuf);
               assert( JS_IS_ARRAY(JS_CUR()) );
               str_val = ajj_value_assign(
-                  ajj_object_create_string(a,scp,str.str,str.len,1));
+                  ajj_object_create_string(a,
+                    scp,
+                    str.str,
+                    str.len,
+                    1));
               CHECK(list_append(a,
                     val+cur,
                     &str_val,
@@ -2131,11 +2193,14 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
       case ' ':case '\n':case '\r':
       case '\b':case '\t':
         break;
-      case 't':
-        if(src[1] =='r' && src[2] =='u' &&
-           src[3] =='e' ) {
+      case 't': {
+        int err = json_ustr_equal(src+off,"rue");
+        if(err == 1) {
+          json_report_error(a,beg,src,"UTF decode error!");
+          goto fail;
+        } else if(!err) {
           if( (JS_IS(VALUE) || JS_IS(VALUEE)) && !JS_IS_ROOT(JS_CUR()) ) {
-            src += 3;
+            src += 3; off = 1;
             if( JS_IS_ARRAY(JS_CUR()) ) {
               CHECK(list_append(a,
                     val+cur,
@@ -2153,11 +2218,15 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
           JS_SET(COMMA); /* expect a comma */
         }
         break;
-      case 'f':
-        if(src[1] == 'a' && src[2] =='l' &&
-           src[3] == 's' && src[4] =='e') {
+      }
+      case 'f': {
+        int err = json_ustr_equal(src+off,"alse");
+        if(err == 1) {
+          json_report_error(a,beg,src,"UTF decode error!");
+          goto fail;
+        } else if(!err) {
           if( (JS_IS(VALUE) || JS_IS(VALUEE)) && !JS_IS_ROOT(JS_CUR()) ) {
-            src += 4;
+            src += 4; off = 1;
             if( JS_IS_ARRAY(JS_CUR()) ) {
               CHECK(list_append(a,
                     val+cur,
@@ -2175,11 +2244,15 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
           JS_SET(COMMA); /* expect a comma */
         }
         break;
-      case 'n':
-        if(src[1] == 'u' && src[2] == 'l' &&
-           src[3] == 'l' ) {
+      }
+      case 'n': {
+        int err = json_ustr_equal(src+off,"ull");
+        if(err == 1) {
+          json_report_error(a,beg,src,"UTF decode error!");
+          goto fail;
+        } else {
           if( (JS_IS(VALUE) || JS_IS(VALUEE)) && !JS_IS_ROOT(JS_CUR()) ) {
-            src += 3;
+            src += 3; off = 1;
             if( JS_IS_ARRAY(JS_CUR()) ) {
               CHECK(list_append(a,
                     val+cur,
@@ -2197,6 +2270,7 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
           JS_SET(COMMA); /* expect a comma */
         }
         break;
+      }
       default:
         if(!c) {
           json_report_error(a,beg,src,

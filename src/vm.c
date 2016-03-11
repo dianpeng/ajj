@@ -214,7 +214,7 @@ void vm_rpt_err( struct ajj* a , const char* fmt , ... ) {
   va_start(vl,fmt);
   b += vsnprintf(b,end-b,fmt,vl);
   *b = '\n'; ++b;
-  b += unwind_stack(a,b);
+  unwind_stack(a,b);
 }
 
 /* This function is used to rewrite user throwned error
@@ -1416,7 +1416,7 @@ static
 int exit_function( struct ajj* a , const struct ajj_value* ret ) {
   struct func_frame* fr = cur_frame(a);
   struct runtime* rt = a->rt;
-  int stk_sz = fr->par_cnt;
+  int stk_sz;
   struct gc_scope* gc = fr->enter_gc;
   assert(rt->cur_call_stk >0);
   /* test whether we need to update our par_cnt
@@ -1705,7 +1705,7 @@ int vm_main( struct ajj* a ) {
 
       vm_beg(MOD) {
         int l , r;
-        struct ajj_value o = AJJ_NONE;
+        struct ajj_value o;
         l = to_integer(a,stk_top(a,2),RCHECK);
         r = to_integer(a,stk_top(a,1),RCHECK);
         o = ajj_value_number(l%r);

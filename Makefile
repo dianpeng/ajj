@@ -1,3 +1,4 @@
+CC?=gcc
 OPT := -g
 FLAGS := $(OPT) -Wpedantic -Wall -I$(PWD)/src -DDISABLE_OPTIMIZATION
 PROFILE_FLAGS := -fprofile-arcs -ftest-coverage
@@ -7,7 +8,7 @@ SRC := $(wildcard src/*.c)
 all: libajj
 
 ajjobj: $(SRC)
-	gcc $(FLAGS) -c src/all-in-one.c $(LINK)
+	$(CC) $(FLAGS) -c src/all-in-one.c $(LINK)
 
 libajj: ajjobj
 	ar rcs libajj.a all-in-one.o
