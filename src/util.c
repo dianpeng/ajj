@@ -506,9 +506,12 @@ int strbuf_vprintf( struct strbuf* buf, const char* format, va_list vl ) {
         buf->cap - buf->len,
         format,
         vl);
-    if( ret == (int)(buf->cap-buf->len) ) {
+    if( ret >= (int)(buf->cap-buf->len) ) {
       /* resize the memory again */
-      buf->str = mem_grow(buf->str,sizeof(char),0,&(buf->cap));
+      buf->str = mem_grow(buf->str,
+          sizeof(char),
+          ret,
+          &(buf->cap));
     } else {
       if(ret >0) buf->len += ret;
       return ret;
