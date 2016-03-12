@@ -7,7 +7,6 @@ struct ajj_value;
 struct ajj_object;
 struct gc_scope;
 
-
 void ajj_builtin_load( struct ajj* );
 
 /* ==============================

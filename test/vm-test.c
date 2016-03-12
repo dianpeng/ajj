@@ -874,6 +874,43 @@ void test_extends() {
 }
 
 static
+void test_include() {
+  {
+    /* Simple version */
+    struct ajj* a = ajj_create();
+    struct ajj_object* jinja;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+
+    load_template(a,"Inc1","{{ 'Hello World' }}\n");
+    jinja = load_template(a,"Main","{% include 'Inc1' %}From Main\n");
+
+    if( vm_run_jinja(a,jinja,output) ) {
+      fprintf(stderr,"%s",a->err);
+      abort();
+    }
+    ajj_io_destroy(output);
+    ajj_destroy(a);
+  }
+  { /* include in a macro is not ALLOWED ? */
+    struct ajj* a = ajj_create();
+    struct ajj_object* jinja;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+
+    load_template(a,"Inc1","{{ 'Hello World' }}\n");
+    jinja = load_template(a,"Main","{% macro show() %}" \
+        "{% return 'Hello SB' %}" \
+        "{% endmacro %}" \
+        "{{ show() }}\n");
+    if( vm_run_jinja(a,jinja,output) ) {
+      fprintf(stderr,"%s",a->err);
+      abort();
+    }
+    ajj_io_destroy(output);
+    ajj_destroy(a);
+  }
+}
+
+static
 void test_random_1() {
   do_test("{% macro Input(title,class='dialog') %}" \
       "CallerStub=\n{{ caller('MyBoss','Overwrite') }}\n" \
@@ -914,9 +951,9 @@ void test_random_1() {
 
 static
 uint64_t NowInMicroSeconds() {
-    struct timeval tv;
-    gettimeofday(&tv,NULL);
-    return tv.tv_usec + (tv.tv_sec*1000000);
+  struct timeval tv;
+  gettimeofday(&tv,NULL);
+  return tv.tv_usec + (tv.tv_sec*1000000);
 }
 
 #if 0
@@ -930,15 +967,15 @@ void bench() {
   struct ajj_io* output = ajj_io_create_mem(a,100);
   struct ajj_io* std = ajj_io_create_file(a,stdout);
   const char* src = "{% for _ in xrange(10000) %}" \
-                    "{% with %}" \
-                    "{% for raw in { 'A':'Item1' ," \
-                                   " 'B':'Item2' ," \
-                                   " 'C':'Item3' ," \
-                                   " 'D':'Item4' } %}" \
-                    "{{ raw }}" \
-                    "{% endfor %}" \
-                    "{% endwith %}" \
-                    "{% endfor %}";
+                     "{% with %}" \
+                     "{% for raw in { 'A':'Item1' ," \
+                     " 'B':'Item2' ," \
+                     " 'C':'Item3' ," \
+                     " 'D':'Item4' } %}" \
+                     "{{ raw }}" \
+                     "{% endfor %}" \
+                     "{% endwith %}" \
+                     "{% endfor %}";
 
   jinja = parse(a,"H",src,0);
   if(!jinja) {
@@ -963,6 +1000,7 @@ void bench() {
 #endif
 
 int main() {
+#if 0
   test_expr();
   test_loop();
   test_move();
@@ -972,5 +1010,7 @@ int main() {
   test_call();
   test_import();
   test_extends();
+#endif
+  test_include();
   return 0;
 }

@@ -2365,11 +2365,13 @@ int run_jinja( struct ajj* a ) {
 int vm_run_jinja( struct ajj* a , struct ajj_object* jj,
     struct ajj_io* output ) {
   struct runtime rt;
+  struct runtime* o_rt = a->rt;
   int fail;
   runtime_init(a,&rt,jj,output,0);
   a->rt = &rt;
   fail = run_jinja(a);
   runtime_destroy(a,&rt);
-  a->rt = NULL;
+  a->rt = o_rt; /* resume the old runtime since this
+                 * function can be nested */
   return fail;
 }
