@@ -9,6 +9,8 @@
 #include <sys/time.h>
 #include <inttypes.h>
 
+#include <dirent.h>
+
 static void do_test( const char* src ) {
   struct ajj* a = ajj_create();
   struct ajj_object* jinja;
@@ -891,22 +893,50 @@ void test_include() {
     ajj_io_destroy(output);
     ajj_destroy(a);
   }
-  { /* include in a macro is not ALLOWED ? */
+  {
     struct ajj* a = ajj_create();
     struct ajj_object* jinja;
     struct ajj_io* output = ajj_io_create_file(a,stdout);
 
-    load_template(a,"Inc1","{{ 'Hello World' }}\n");
-    jinja = load_template(a,"Main","{% macro show() %}" \
-        "{% return 'Hello SB' %}" \
+    load_template(a,"Inc1","{{ 'Hello World' }}\n" \
+        "{% macro MyTestMacro1() %}" \
+        "{{ 'Hello World\n' }}" \
+        "{% return 'Hello World2\n' %}" \
         "{% endmacro %}" \
-        "{{ show() }}\n");
+        "{{ MyTestMacro1() }}");
+
+    jinja = load_template(a,"Main","{% include 'Inc1' %}");
     if( vm_run_jinja(a,jinja,output) ) {
       fprintf(stderr,"%s",a->err);
       abort();
     }
     ajj_io_destroy(output);
     ajj_destroy(a);
+  }
+}
+
+static
+void test_json() {
+  DIR *d;
+  struct dirent* dir;
+  struct ajj* a;
+  a = ajj_create();
+
+  d = opendir("json-test/");
+  if(d) {
+    while((dir = readdir(d)) != NULL) {
+      char filename[1024];
+      struct ajj_object* json;
+      if(dir->d_type == DT_REG) {
+        sprintf(filename,"json-test/%s",dir->d_name);
+
+        json = json_parse(a,&(a->gc_root),filename,"test");
+        if(!json) {
+          fprintf(stderr,"%s:%s\n",dir->d_name,a->err);
+        } 
+      }
+    }
+    closedir(d);
   }
 }
 
@@ -949,14 +979,14 @@ void test_random_1() {
   do_test("{{ -3*2>7-1998 | abs | abs | abs | abs }}");
 }
 
+
+#if 0
 static
 uint64_t NowInMicroSeconds() {
   struct timeval tv;
   gettimeofday(&tv,NULL);
   return tv.tv_usec + (tv.tv_sec*1000000);
 }
-
-#if 0
 
 static
 void bench() {
@@ -1011,6 +1041,6 @@ int main() {
   test_import();
   test_extends();
 #endif
-  test_include();
+  test_json();
   return 0;
 }

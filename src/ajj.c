@@ -13,6 +13,8 @@
 
 #define PRETTY_PRINT_INDENT "    "
 
+#define MAX_FILE_SIZE (1024*1024*1024)
+
 struct ajj_value AJJ_TRUE = { {1} , AJJ_VALUE_BOOLEAN };
 struct ajj_value AJJ_FALSE= { {0} , AJJ_VALUE_BOOLEAN };
 struct ajj_value AJJ_NONE = { {0} , AJJ_VALUE_NONE };
@@ -1170,6 +1172,11 @@ void* ajj_load_file( struct ajj* a , const char* fname ,
   end = ftell(f);
   fseek(f,0,SEEK_SET);
   len = (size_t)(end-start);
+  if(len >= MAX_FILE_SIZE) {
+    fclose(f); /* close the file */
+    ajj_error(a,"The file:%s is too large or it is not a file!",fname);
+    return NULL;
+  }
   r = malloc(len+1);
   rsz = fread(r,1,len,f);
   assert( rsz <= len );

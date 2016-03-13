@@ -1,5 +1,5 @@
 CC?=gcc
-OPT := -Os
+OPT := -g
 FLAGS := $(OPT) -Wpedantic -Wall -I$(PWD)/src -DDISABLE_OPTIMIZATION
 PROFILE_FLAGS := -fprofile-arcs -ftest-coverage
 LINK := -L$(PWD)/. -lajj -lm
