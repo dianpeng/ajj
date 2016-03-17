@@ -956,6 +956,26 @@ void test_json() {
   }
 }
 
+/* Test include with json as its MODEL */
+static
+void test_include_with_json() {
+  {
+    struct ajj* a = ajj_create();
+    struct ajj_object* jinja;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+
+    load_template(a,"Inc1","{{ Hello_World }}\n");
+
+    jinja = load_template(a,"Main","{% include 'Inc1' json 'hello_world.json' %}{% endinclude %}");
+    if( vm_run_jinja(a,jinja,output) ) {
+      fprintf(stderr,"%s",a->err);
+      abort();
+    }
+    ajj_io_destroy(output);
+    ajj_destroy(a);
+  }
+}
+
 static
 void test_random_1() {
   do_test("{% macro Input(title,class='dialog') %}" \
@@ -1056,7 +1076,8 @@ int main() {
   test_call();
   test_import();
   test_extends();
-#endif
   test_json();
+#endif
+  test_include_with_json();
   return 0;
 }

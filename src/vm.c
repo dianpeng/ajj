@@ -1061,7 +1061,7 @@ void setup_env( struct ajj* a , int cnt , struct runtime* nrt ) {
 
 static
 int setup_json_env( struct ajj* a , int cnt ,struct runtime* nrt) {
-  struct ajj_value* fn = stk_top(a,3*cnt+2);
+  struct ajj_value* fn = stk_top(a,3*cnt+1);
   struct ajj_object* json;
   struct map* d;
   struct ajj_value json_v;
@@ -1150,8 +1150,10 @@ void vm_include( struct ajj* a , int type,
   if(type == INCLUDE_UPVALUE) {
     setup_env(a,cnt,&nrt);
   } else {
-    if(setup_json_env(a,cnt,&nrt))
+    if(setup_json_env(a,cnt,&nrt)) {
+      *fail = 1;
       goto fail;
+    }
   }
 
   a->rt = &nrt; /* new runtime set up */
