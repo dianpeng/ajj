@@ -1,0 +1,3 @@
+1. Refactory the lexer current its default behavior for whitespace elimination is kind of wired!
+2. Refactory those builtin function that is not aware of UTF encoding
+3. Implement branch elimination in optimizer
