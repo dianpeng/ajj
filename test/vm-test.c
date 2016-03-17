@@ -927,13 +927,27 @@ void test_json() {
     while((dir = readdir(d)) != NULL) {
       char filename[1024];
       struct ajj_object* json;
+      int valid;
+
       if(dir->d_type == DT_REG) {
         sprintf(filename,"json-test/%s",dir->d_name);
 
         json = json_parse(a,&(a->gc_root),filename,"test");
-        if(!json) {
-          fprintf(stderr,"%s:%s\n",dir->d_name,a->err);
-        } 
+        if(strstr(filename,"invalid") || strstr(filename,"fail"))
+          valid = 0;
+        else
+          valid = 1;
+
+        if(valid) {
+          if(!json) {
+            fprintf(stderr,"%s:%s\n",dir->d_name,a->err);
+          }
+        } else {
+          if(json) {
+            fprintf(stderr,"This is a invalid example but gets parsed:%s!\n",
+                dir->d_name);
+          }
+        }
       }
     }
     closedir(d);

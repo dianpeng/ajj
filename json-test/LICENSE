@@ -1,0 +1,4 @@
+ALL THE TESTS ARE COPIED FROM FOLLOWING 2 REPOS
+
+FROM REPO: https://github.com/nlohmann/json | LICENCE MIT
+FROM REPO: https://github.com/udp/json-parser | LICENCE (SEE ITS REPO)

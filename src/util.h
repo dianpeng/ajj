@@ -168,11 +168,11 @@ struct strbuf {
   size_t cap;
 };
 
-void strbuf_reserve( struct strbuf* buf , size_t cap );
-
 void strbuf_init( struct strbuf* buf );
 
 void strbuf_init_cap( struct strbuf* buf , size_t cap );
+
+void strbuf_reserve( struct strbuf* buf , size_t cap );
 
 void strbuf_push_rune( struct strbuf* buf , Rune );
 

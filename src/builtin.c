@@ -1845,37 +1845,26 @@ int test_defined( struct ajj* a,
  * but it won't be very useful.
  * --------------------------------------------------------------*/
 
-/* TODO:: This json parsing needs to be refactoried since it is not
- * UTF encoding safe !!! */
-
-/* We use a none-recursive way to do parsing , the reason to prefer
- * a none recursive method is simply because this is safer to avoid
- * too many nested json scopes which makes parsing prone to be attack.For
- * jinja grammar parsing, although we use a recursive parser , but we
- * have limitation on how much recursion we could have */
-
-enum {
-  COMMA=1,           /* expect a comma */
-  KEY=1<<1,          /* expect a key   */
-  VALUE=1<<2,        /* expect a value */
-  COLON=1<<3,        /* expect a colon */
-  VALUEE=1<<4,       /* expect a value or END */
-  KEYE=1<<5          /* expect a value or END */
+struct json_lexer {
+  size_t pos;
+  const char* src;
 };
 
-#define STATE_MASK (~63)
 #define JSON_ERROR_CODE_SNIPPET_SIZE 32
 
 static
-void json_report_error(struct ajj* a, const char* beg,
-    const char* pos , const char* fmt , ... ) {
+void json_report_error(struct ajj* a, struct json_lexer* jl,
+    const char* fmt , ... ) {
   /* get the code snippet */
-  size_t start = pos - beg;
-  size_t end = strlen(pos);
+  size_t start = jl->pos;
+  size_t end = strlen(jl->pos+jl->src);
   char cbuf[ JSON_ERROR_CODE_SNIPPET_SIZE + 1 ];
   char* buf = a->err;
   char* bend= a->err + ERROR_BUFFER_SIZE;
   va_list vl;
+  int lnum;
+  int ccnt;
+  size_t i;
 
   va_start(vl,fmt);
 
@@ -1885,11 +1874,33 @@ void json_report_error(struct ajj* a, const char* beg,
   end = MIN(JSON_ERROR_CODE_SNIPPET_SIZE/2,
       end);
 
-  strncpy(cbuf,pos-start,end+start);
+  strncpy(cbuf,jl->src+jl->pos-start,end+start);
   cbuf[end+start] = 0;
 
+  /* grab the linenum and ccount */
+  lnum = 1;
+  ccnt = 1;
+  i =0;
+
+  while(i<jl->pos) {
+    Rune c;
+    int off;
+
+    off = chartorune(&c,jl->src+i);
+    assert(c != Runeerror);
+    if(c == '\n') {
+      lnum++; ccnt = 1;
+    } else {
+      ++ccnt;
+    }
+    i += off;
+  }
+
+
   buf += snprintf(buf,ERROR_BUFFER_SIZE,
-      "Json parsing error:(... %s ...):",
+      "Json parsing error(%d|%d):(... %s ...):",
+      lnum,
+      ccnt,
       cbuf);
 
   vsnprintf(buf, bend-buf, fmt,vl);
@@ -1905,7 +1916,7 @@ int json_ustr_equal( const char* left , const char* right ) {
   do { \
     off = chartorune(&c,left); \
     if(c == Runeerror) goto fail; \
-    if( c != right[OFF] ) return -1; \
+    if( c != right[OFF] )goto fail; \
     if(!right[OFF+1]) return 0; \
     left += off; \
   } while(0)
@@ -1926,390 +1937,532 @@ fail:
   return 1;
 }
 
+static int
+json_parse_array( struct ajj* a, struct gc_scope* scp,
+    struct json_lexer* jl, int rec , struct ajj_value* out );
+
+static int
+json_parse_object( struct ajj* a, struct gc_scope* scp,
+    struct json_lexer* jl, int rec , struct ajj_value* out );
+
+static int
+json_parse_string( struct ajj* a, struct gc_scope* scp,
+    struct json_lexer* jl , struct ajj_value* out );
+
+static int
+json_parse_number( struct ajj* a, struct json_lexer* jl,
+    struct ajj_value* out );
+
+/* subroutine for parsing the json in a recursive way.
+ *
+ * The recursive parser is easy to understand but has
+ * some flaws while dealing unknown input. Since if the
+ * attacker crafts an input with too much nested json
+ * format then we may run out of stack. Here to impose
+ * some limits, we put a constant value called
+ * JSON_MAX_NESTED_SIZE which indicates how many nested
+ * layer of the input json should have. This limitation
+ * some how help us dealing with purposely crafted json
+ * input */
+
 #define JSON_MAX_NESTED_SIZE 128
+enum {
+  JSON_ERROR = -1,
+  JSON_OBJECT,
+  JSON_ARRAY,
+  JSON_TRUE,
+  JSON_FALSE,
+  JSON_NULL,
+  JSON_STRING,
+  JSON_NUMBER
+};
 
-#define JS_ARRAY_MASK (1<<30)
-#define JS_OBJECT_MASK (1<<29)
-#define JS_ROOT_MASK (1<<31)
-
-#define JS_IS_ROOT(I) ((I) & JS_ROOT_MASK)
-#define JS_IS_ARRAY(I) ((I) & JS_ARRAY_MASK)
-#define JS_IS_OBJECT(I) ((I) & JS_OBJECT_MASK)
-#define JS_SET_ARRAY(I) ((I) = ((I) | JS_ARRAY_MASK))
-#define JS_SET_OBJECT(I) ((I) = ((I) | JS_OBJECT_MASK))
-
-struct ajj_object*
-json_parsec( struct ajj* a , struct gc_scope* scp,
-    const char* src ) {
-  const char* beg = src;
-  unsigned int st[JSON_MAX_NESTED_SIZE];
-  struct ajj_value val[JSON_MAX_NESTED_SIZE];
-  struct string key[JSON_MAX_NESTED_SIZE];
-  struct ajj_value ret;
-  int cur = 0;
-  Rune c;
-  size_t i;
-  int off = 0;
-
-  st[cur] = VALUE | JS_ROOT_MASK;
-  val[0] = AJJ_NONE;
-
-#define JS_CUR() (st[cur])
-#define JS_SET(X) (st[cur] =((st[cur] & STATE_MASK) | (X)))
-#define JS_IS(X) (JS_CUR()&(X))
-#define JS_PUSH() (++cur)
-#define JS_POP() (--cur)
-
-#define MAP_INSERT(V) \
+#define TRY_PARSE(X,TAG) \
   do { \
-    struct map* m; \
-    assert( JS_IS_OBJECT(JS_CUR()) ); \
-    assert( IS_A(val+cur,DICT_TYPE) ); \
-    m = OBJECT(val+cur); \
-    map_insert(m,key+cur,1,(V)); \
-    key[cur] = NULL_STRING; \
+    if(X) { \
+      goto fail; \
+    } else { \
+      ret = TAG; \
+      goto done; \
+    } \
   } while(0)
 
-  for( ; ; src += off ) {
-    off = chartorune(&c,src);
+#define JSON_CHECK_NEST() \
+  do { \
+    if(rec+1 == JSON_MAX_NESTED_SIZE) {\
+      json_report_error(a,jl,"Too much nested scope in " \
+          "json file,more than:%d!",JSON_MAX_NESTED_SIZE); \
+      goto fail; \
+    } \
+  } while(0)
+
+/* Helper function for skipping those white spaces and get the
+ * deliminator. Only support find 2 because json only needs 2 */
+static int json_next_char( struct ajj* a, struct json_lexer* jl , Rune* out ) {
+  const char* src = jl->src;
+  size_t i = jl->pos;
+  Rune c;
+
+  while(1) {
+    chartorune(&c,src+i);
+    switch(c) {
+      case ' ':case '\t':case '\n':
+      case '\r':case '\f':case '\v':
+        ++i;
+        continue;
+      case 0: /* EOF */
+        json_report_error(a,jl,"Unexpected EOF!");
+        goto fail;
+      case Runeerror:
+        json_report_error(a,jl,"UTF decode error!");
+        goto fail;
+      default:
+        *out = c;
+        jl->pos = i;
+        return 0;
+    }
+  }
+
+fail:
+  jl->pos = i;
+  return -1;
+}
+
+static
+int json_parse_value( struct ajj* a ,
+    struct gc_scope* scp,
+    struct json_lexer* jl,
+    int rec ,
+    struct ajj_value* out) {
+
+  size_t i = jl->pos;
+  const char* src = jl->src;
+  int ret;
+  int off;
+  Rune c;
+
+  assert( rec < JSON_MAX_NESTED_SIZE );
+
+  while(1) {
+    off = chartorune(&c,src+i);
+
     if(c == Runeerror) {
-      json_report_error(a,beg,src,"UTF decode error!");
+      json_report_error(a,jl,"UTF decode error!");
+      goto fail;
+    } else if(!c) {
+      json_report_error(a,jl,"Unexpected EOF!");
       goto fail;
     }
 
     switch(c) {
       case '[':
-        if ( JS_IS(VALUE) ) {
-          JS_PUSH();
-          JS_SET_ARRAY(JS_CUR());
-          JS_SET(VALUEE);
-          val[cur] = ajj_value_assign(
-              ajj_object_create_list(a,scp));
-        } else {
-          json_report_error(a,beg,src,
-              "Unexpected array here!");
-          goto fail;
-        }
-        break;
+        JSON_CHECK_NEST();
+        i += off; jl->pos = i;
+        TRY_PARSE(json_parse_array(a,scp,jl,rec+1,out),JSON_ARRAY);
       case '{':
-        if( JS_IS(VALUE) ) {
-          JS_PUSH();
-          JS_SET_OBJECT(JS_CUR());
-          JS_SET(KEYE);
-          val[cur] = ajj_value_assign(
-              ajj_object_create_dict(a,scp));
-          key[cur] = NULL_STRING;
-        } else {
-          json_report_error(a,beg,src,
-              "Unexpected object here!");
+        JSON_CHECK_NEST();
+        i += off; jl->pos = i;
+        TRY_PARSE(json_parse_object(a,scp,jl,rec+1,out),JSON_OBJECT);
+      case '\"':
+        /* parsing the string literal */
+        JSON_CHECK_NEST();
+        i += off; jl->pos = i;
+        TRY_PARSE(json_parse_string(a,scp,jl,out),JSON_STRING);
+      case 't':
+        ret = json_ustr_equal(src+i+1,"rue");
+        if(ret) {
+          json_report_error(a,jl,"Unrecognize token here,maybe \"true\"?");
           goto fail;
-        }
-        break;
-      case ']':
-        if( (JS_IS(VALUEE) || JS_IS(COMMA)) && JS_IS_ARRAY(JS_CUR())) {
-          JS_POP();
-          if( JS_IS_ARRAY(JS_CUR()) ) {
-            CHECK(list_append(a,
-                  val+cur,
-                  val+cur+1,
-                  1,
-                  &ret) == AJJ_EXEC_OK );
-            JS_SET(COMMA);
-          } else if( JS_IS_OBJECT(JS_CUR()) ) {
-            MAP_INSERT(val+cur+1);
-            JS_SET(COMMA);
-          } else {
-            val[cur]=val[cur+1];
-            goto done;
-          }
         } else {
-          json_report_error(a,beg,src,
-              "Unexpected ] here!");
-          goto fail;
+          *out = AJJ_TRUE;
+          ret = JSON_TRUE;
+          jl->pos = i + 4;
+          goto done;
         }
-        break;
-      case '}':
-        if( (JS_IS(KEYE) || JS_IS(COMMA)) && JS_IS_OBJECT(JS_CUR())) {
-          JS_POP();
-          if( JS_IS_ARRAY(JS_CUR()) ) {
-            CHECK(list_append(a,
-                  val+cur,
-                  val+cur+1,
-                  1,
-                  &ret) == AJJ_EXEC_OK );
-            JS_SET(COMMA);
-          } else if( JS_IS_OBJECT(JS_CUR()) ) {
-            MAP_INSERT(val+cur+1);
-            JS_SET(COMMA);
-          } else {
-            val[cur]=val[cur+1];
-            goto done;
-          }
+      case 'f':
+        ret = json_ustr_equal(src+i+1,"alse");
+        if(ret) {
+          json_report_error(a,jl,"Unrecognize token here,maybe \"false\"?");
+          goto fail;
         } else {
-          json_report_error(a,beg,src,
-              "Unexpected } here!");
-          goto fail;
+          *out = AJJ_FALSE;
+          ret = JSON_FALSE;
+          jl->pos = i + 5;
+          goto done;
         }
-      break;
-      case '-':
+      case 'n':
+        ret = json_ustr_equal(src+i+1,"ull");
+        if(ret) {
+          json_report_error(a,jl,"Unrecognize token here,maybe \"null\"?");
+          goto fail;
+        } else {
+          *out = AJJ_NONE;
+          ret = JSON_NULL;
+          jl->pos = i + 4;
+          goto done;
+        }
+      case '-': case '+':
       case '0':case '1':case '2':case '3':case '4':
       case '5':case '6':case '7':case '8':case '9':
-        if( (JS_IS(VALUEE) || JS_IS(VALUE)) && !JS_IS_ROOT(JS_CUR()) ) {
-          double num;
-          char* end;
-          struct ajj_value dval;
-
-          /* this function is utf encoding safe since libc guarantee us to
-           * be so, but not on Windows :) */
-          errno = 0;
-          num = strtod(src,&end);
-          if(errno) {
-            json_report_error(a,beg,src,
-                "Cannot parse number for:%s!",
-                strerror(errno));
-            goto fail;
-          }
-          src = end-1; off = 1; /* Make outer loop bump correctly */
-          dval = ajj_value_number(num);
-          if( JS_IS_ARRAY(JS_CUR()) ) {
-            CHECK(list_append(a,
-                  val+cur,
-                  &dval,
-                  1,
-                  &ret) == AJJ_EXEC_OK );
-          } else {
-            MAP_INSERT(&dval);
-          }
-        } else {
-          json_report_error(a,beg,src,
-              "Unexpected number!");
+        /* parse the number */
+        jl->pos = i;
+        if(json_parse_number(a,jl,out))
           goto fail;
+        else {
+          ret = JSON_NUMBER;
+          goto done;
         }
-        JS_SET(COMMA); /* expect a comma */
-        break;
-      case '\"':
-        if( (( JS_IS(VALUE) || JS_IS(VALUEE))&& JS_IS_ARRAY(JS_CUR())) ||
-            (( JS_IS(VALUE) || JS_IS(KEY) || JS_IS(KEYE)) && JS_IS_OBJECT(JS_CUR()))) {
-          struct strbuf sbuf;
-          int s_off = 0;
-
-          strbuf_init_cap(&sbuf,256); /* default buffer */
-          /* fetch the string literal here. since we support UTF and string can
-           * contain valid UTF characters so we need to do a UTF decode on each
-           * character */
-          src += off;
-
-          for( ; 1 ; src += s_off ) {
-            s_off = chartorune(&c,src);
-            if(c == Runeerror) {
-              json_report_error(a,beg,src,"UTF decode error!");
-              goto fail;
-            } else if( c == 0 ) {
-              json_report_error(a,beg,src,"String not closed by \"!");
-              goto fail;
-            }
-            if( c == '\\' ) {
-              src += s_off;
-              s_off = chartorune(&c,src);
-              if(c == Runeerror) {
-                json_report_error(a,beg,src,"UTF decode error!");
-                goto fail;
-              }
-            } else if( c == '\"' ) {
-              off = 1; /* Make the outer loop skip the quote */
-              break;
-            }
-            strbuf_push_rune(&sbuf,c);
-          }
-
-          if(!c) {
-            json_report_error(a,beg,src,
-                "Unexpected EOF!");
-            goto fail;
-          } else {
-            if( JS_IS_OBJECT(JS_CUR())) {
-              if( JS_IS(KEY) || JS_IS(KEYE) ) {
-                key[cur] = strbuf_tostring(&sbuf);
-              } else {
-                struct ajj_value str_val;
-                struct string str = strbuf_tostring(&sbuf);
-                assert( !string_null(key+cur) );
-                str_val = ajj_value_assign(ajj_object_create_string(
-                      a,scp,str.str,str.len,1));
-                MAP_INSERT(&str_val);
-              }
-            } else {
-              struct ajj_value str_val;
-              struct string str = strbuf_tostring(&sbuf);
-              assert( JS_IS_ARRAY(JS_CUR()) );
-              str_val = ajj_value_assign(
-                  ajj_object_create_string(a,
-                    scp,
-                    str.str,
-                    str.len,
-                    1));
-              CHECK(list_append(a,
-                    val+cur,
-                    &str_val,
-                    1,
-                    &ret) == AJJ_EXEC_OK);
-            }
-          }
-        } else {
-          json_report_error(a,beg,src,
-              "Unexpected string!");
-          goto fail;
-        }
-        if( JS_IS_ARRAY(JS_CUR()) ) {
-          JS_SET(COMMA);
-        } else {
-          if( JS_IS_OBJECT(JS_CUR()) ) {
-            if( JS_IS(VALUE) || JS_IS(VALUEE) ) {
-              JS_SET(COMMA);
-            } else {
-              JS_SET(COLON);
-            }
-          }
-        }
-        break;
-      case ':':
-        if( JS_IS_OBJECT(JS_CUR()) && JS_IS(COLON) ) {
-          JS_SET(VALUE);
-        } else {
-          json_report_error(a,beg,src,
-              "Unexpected \":\"!");
-          goto fail;
-        }
-        break;
-      case ',':
-        if( JS_IS(COMMA) ) {
-          if(JS_IS_ARRAY(JS_CUR()))
-            JS_SET(VALUE);
-          else
-            JS_SET(KEY);
-        }
-        break;
-        /* skip whitespaces */
-      case ' ':case '\n':case '\r':
-      case '\b':case '\t':
-        break;
-      case 't': {
-        int err = json_ustr_equal(src+off,"rue");
-        if(err == 1) {
-          json_report_error(a,beg,src,"UTF decode error!");
-          goto fail;
-        } else if(!err) {
-          if( (JS_IS(VALUE) || JS_IS(VALUEE)) && !JS_IS_ROOT(JS_CUR()) ) {
-            src += 3; off = 1;
-            if( JS_IS_ARRAY(JS_CUR()) ) {
-              CHECK(list_append(a,
-                    val+cur,
-                    &AJJ_TRUE,
-                    1,
-                    &ret) == AJJ_EXEC_OK );
-            } else {
-              MAP_INSERT(&AJJ_TRUE);
-            }
-          } else {
-            json_report_error(a,beg,src,
-                "Unexpected token 't'!");
-            goto fail;
-          }
-          JS_SET(COMMA); /* expect a comma */
-        }
-        break;
-      }
-      case 'f': {
-        int err = json_ustr_equal(src+off,"alse");
-        if(err == 1) {
-          json_report_error(a,beg,src,"UTF decode error!");
-          goto fail;
-        } else if(!err) {
-          if( (JS_IS(VALUE) || JS_IS(VALUEE)) && !JS_IS_ROOT(JS_CUR()) ) {
-            src += 4; off = 1;
-            if( JS_IS_ARRAY(JS_CUR()) ) {
-              CHECK(list_append(a,
-                    val+cur,
-                    &AJJ_FALSE,
-                    1,
-                    &ret) == AJJ_EXEC_OK );
-            } else {
-              MAP_INSERT(&AJJ_FALSE);
-            }
-          } else {
-            json_report_error(a,beg,src,
-                "Unexpected token 'f'!");
-            goto fail;
-          }
-          JS_SET(COMMA); /* expect a comma */
-        }
-        break;
-      }
-      case 'n': {
-        int err = json_ustr_equal(src+off,"ull");
-        if(err == 1) {
-          json_report_error(a,beg,src,"UTF decode error!");
-          goto fail;
-        } else {
-          if( (JS_IS(VALUE) || JS_IS(VALUEE)) && !JS_IS_ROOT(JS_CUR()) ) {
-            src += 3; off = 1;
-            if( JS_IS_ARRAY(JS_CUR()) ) {
-              CHECK(list_append(a,
-                    val+cur,
-                    &AJJ_NONE,
-                    1,
-                    &ret) == AJJ_EXEC_OK );
-            } else {
-              MAP_INSERT(&AJJ_NONE);
-            }
-          } else {
-            json_report_error(a,beg,src,
-                "Unexpected token 'n'!");
-            goto fail;
-          }
-          JS_SET(COMMA); /* expect a comma */
-        }
-        break;
-      }
+      case ' ':case '\t':case '\n':
+      case '\r':case '\f':case '\v':
+        i += off;
+        continue;
       default:
-        if(!c) {
-          json_report_error(a,beg,src,
-              "Unexpected EOF!");
-        } else {
-          json_report_error(a,beg,src,
-              "Unexpected token!");
-        }
+        json_report_error(a,jl,"Unrecognize token!");
         goto fail;
     }
   }
 
 done:
-  assert( cur == 0 );
-  assert( IS_A(val,LIST_TYPE) || IS_A(val,DICT_TYPE) );
-  return val->value.object;
+
+  return ret;
 
 fail:
-  /* do clean up here */
-  for( i = 0; i < cur ; ++i ) {
-    if(!string_null(cur+key))
-      string_destroy(cur+key);
-  }
-  return NULL;
+  return JSON_ERROR;
 }
 
-#undef JS_ARRAY_MASK
-#undef JS_ROOT_MASK
-#undef JS_OBJECT_MASK
-#undef JS_IS_ARRAY
-#undef JS_IS_OBJECT
-#undef JS_IS_ROOT
-#undef JS_SET_OBJECT
-#undef JS_SET_ARRAY
-#undef JS_CUR
-#undef SET
-#undef IS
-#undef PUSH
-#undef POP
+#undef TRY_PARSE
+#undef JSON_CHECK_NEST
+
+/* Try parse an object */
+static int
+json_parse_object( struct ajj* a, struct gc_scope* scp,
+    struct json_lexer* jl,int rec, struct ajj_value* out ) {
+  struct ajj_object* obj = ajj_object_create_dict(a,scp);
+  struct ajj_value key;
+  struct ajj_value val;
+  Rune c;
+
+  assert( rec < JSON_MAX_NESTED_SIZE );
+
+  /* Check if it is an empty object */
+  if( json_next_char(a,jl,&c) )
+    goto fail;
+  else {
+    if( c == '}' ) {
+      ++jl->pos;
+      goto done;
+    }
+  }
+
+  while(1) {
+    /* Get the key out */
+    int ret;
+
+    ret = json_parse_value(a,scp,jl,rec,&key);
+
+    if(ret != JSON_STRING) {
+      if(ret != JSON_ERROR)
+        json_report_error(a,jl,"Expect a string as key!");
+      goto fail;
+    }
+
+    /* Expect a colon here */
+    ret = json_next_char(a,jl,&c);
+    if(ret) goto fail;
+    if(c == ':') ++jl->pos; /* Bump one character */
+    else {
+      json_report_error(a,jl,"Expect \":\" here!");
+      goto fail;
+    }
+
+    /* Parse the value */
+    ret = json_parse_value(a,scp,jl,rec,&val);
+    if(ret == JSON_ERROR)
+      goto fail;
+    else {
+      builtin_dict_insert(a,obj,&key,&val);
+    }
+
+    /* Check if we need to go away or continue */
+    ret = json_next_char(a,jl,&c);
+    if(ret) goto fail;
+
+    if(c == '}') {
+      ++jl->pos;
+      break;
+    } else {
+      if(c != ',') {
+        json_report_error(a,jl,"Object expect \",\" or \"}\" here!");
+        goto fail;
+      }
+      ++jl->pos; /* When we have a , */
+    }
+  }
+
+done:
+
+  out->type = AJJ_VALUE_OBJECT;
+  out->value.object = obj;
+  return 0;
+
+fail:
+  return -1;
+}
+
+static int
+json_parse_array( struct ajj* a, struct gc_scope* scp,
+    struct json_lexer* jl, int rec , struct ajj_value* out) {
+  struct ajj_object* ls = ajj_object_create_list(a,scp);
+  struct ajj_value val;
+  Rune c;
+
+  assert( rec < JSON_MAX_NESTED_SIZE );
+
+  if(json_next_char(a,jl,&c))
+    goto fail;
+  else {
+    if(c == ']') {
+      ++jl->pos;
+      goto done;
+    }
+  }
+
+  while(1) {
+    int ret = json_parse_value(a,scp,jl,rec,&val);
+    if(ret == JSON_ERROR)
+      goto fail;
+
+    builtin_list_push(a,ls,&val);
+
+    ret = json_next_char(a,jl,&c);
+    if(ret) goto fail;
+
+    if(c == ']') {
+      ++jl->pos;
+      break;
+    } else {
+      if(c != ',') {
+        json_report_error(a,jl,"Array expect \",\" or \"]\" here!");
+        goto fail;
+      }
+      ++jl->pos; /* When we have a , */
+    }
+  }
+
+done:
+
+  out->type = AJJ_VALUE_OBJECT;
+  out->value.object = ls;
+  return 0;
+
+fail:
+  return -1;
+}
+
+static int
+json_parse_string( struct ajj* a, struct gc_scope* scp,
+    struct json_lexer* jl, struct ajj_value* out) {
+  struct strbuf sbuf;
+  struct string str;
+  size_t i = jl->pos;
+  const char* src = jl->src;
+  strbuf_init_cap(&sbuf,128);
+
+  while(1) {
+    Rune c;
+    int off;
+
+    off = chartorune(&c,src+i);
+    if(c == Runeerror) {
+      json_report_error(a,jl,"UTF decode error!");
+      goto fail;
+    }
+
+    switch(c) {
+      case '\\':
+        i += off;
+        off = chartorune(&c,src+i);
+        switch(c) {
+          case Runeerror:
+            json_report_error(a,jl,"UTF decode error!");
+            goto fail;
+          case '\n':
+            json_report_error(a,jl,"Escape character in string followed"
+                " by line break!");
+            goto fail;
+          case 'U': case 'u':
+            /* TODO:: Add support for unicode
+             * Currently just push the origin string into buffer */
+            strbuf_push_rune(&sbuf,'\\');
+            break;
+          case 'n':
+            c = '\n';
+            break;
+          case 't':
+            c = '\t';
+            break;
+          case 'r':
+            c = '\r';
+            break;
+          case '"':
+            c = '"';
+            break;
+          case '\\':
+            c = '\\';
+            break;
+          case 'f':
+            c = '\f';
+            break;
+          case 'v':
+            c = '\v';
+            break;
+          case 'b':
+            c = '\b';
+            break;
+          case '/':
+            c = '/';
+            break;
+          default:
+            if(c < 128)
+              json_report_error(a,jl,"Unrecognized escape character:%c\n",(char)c);
+            else
+              json_report_error(a,jl,"Unrecognized escape character as Rune:%d\n",c);
+            goto fail;
+        }
+        break;
+      case '\"':
+        i += off;
+        goto done;
+      case 0:
+        json_report_error(a,jl,"Unexpected EOF!");
+        goto fail;
+      case '\n':
+        json_report_error(a,jl,"Linebreak is not allowed in string literal!");
+        goto fail;
+      case '\t':
+        json_report_error(a,jl,"Tab is not allowed in string literal!");
+        goto fail;
+      default:
+        break;
+    }
+    strbuf_push_rune(&sbuf,c);
+    i += off;
+  }
+
+done:
+  jl->pos = i;
+  /* Although this may COPY the string but it will prevent
+   * waste too much memory which is safe */
+  strbuf_move(&sbuf,&str);
+
+  out->value.object = ajj_object_create_string(a,scp,
+      str.str,str.len,1);
+  out->type = AJJ_VALUE_STRING;
+
+  strbuf_destroy(&sbuf);
+  return 0;
+
+fail:
+  jl->pos = i;
+  strbuf_destroy(&sbuf);
+  return -1;
+}
+
+static int
+json_parse_number( struct ajj* a, struct json_lexer* jl,
+    struct ajj_value* out ) {
+  char* endp;
+  double val;
+
+  errno = 0;
+  val = strtod(jl->src+jl->pos,&endp);
+  if(val == 0.0) {
+    if(endp == jl->pos+jl->src) {
+      /* not a valid number */
+      json_report_error(a,jl,"Cannot parse number!");
+      goto fail;
+    } else {
+      if(errno) {
+        json_report_error(a,jl,"Cannot parse number,because %s!",
+            strerror(errno));
+        goto fail;
+      }
+    }
+  }
+  jl->pos = (endp-jl->src);
+  *out = ajj_value_number(val);
+  return 0;
+
+fail:
+  return -1;
+}
+
+#ifndef DISABLE_JSON_FILE_TAIL_CHECK
+/* After parsing done, we need to check whether
+ * the file still contains significant characters
+ * which is not empty */
+static int json_check_tail( struct ajj* a , struct json_lexer* jl ) {
+  Rune c;
+  int off;
+  const char* src = jl->src;
+  size_t i = jl->pos;
+
+  while(1) {
+    off = chartorune(&c,src+i);
+    switch(c) {
+      case ' ':case '\r':case '\n':
+      case '\v':case '\f':case '\t':
+        i += off;
+        continue;
+      case 0: goto done;
+      default:
+        return -1;
+    }
+  }
+done:
+  return 0;
+}
+#endif /* DISABLE_JSON_FILE_TAIL_CHECK */
+
+/* This is the function and entry for parsing a json file in a safe
+ * manner. This function will clear all memory allocated if the parsing
+ * failed.*/
+struct ajj_object*
+json_parsec( struct ajj* a , struct gc_scope* scp,
+    const char* str ) {
+  struct json_lexer jl;
+  int ret;
+  struct ajj_value root;
+  struct gc_scope temp_scp; /* Temporary gc scope , if we encounter errro,
+                               just relcaim this gc scope; otherwise merge
+                               it back to the correct gc scope */
+  gc_init_temp(&temp_scp,scp);
+
+  jl.src = str; jl.pos = 0;
+
+  /* Start parsing the json document */
+  ret = json_parse_value(a,&temp_scp,&jl,0,&root);
+  if(ret == JSON_ERROR) {
+    goto fail;
+  } else {
+    if(ret == JSON_ARRAY ||
+       ret == JSON_OBJECT ) {
+#ifndef DISABLE_JSON_FILE_TAIL_CHECK
+      if(json_check_tail(a,&jl))
+        goto fail;
+#endif /* DISABLE_JSON_FILE_TAIL_CHECK */
+      gc_scope_merge(scp,&temp_scp);
+      return root.value.object;
+    } else {
+      json_report_error(a,&jl,"Parsing json error:Root "
+          "must be array or object!");
+      goto fail;
+    }
+  }
+fail:
+  gc_scope_exit(a,&temp_scp);
+  return NULL;
+}
 
 struct ajj_object*
 json_parse( struct ajj* a, struct gc_scope* scp,
