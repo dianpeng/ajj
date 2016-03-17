@@ -930,6 +930,8 @@ void test_json() {
       int valid;
 
       if(dir->d_type == DT_REG) {
+        if(strcmp(dir->d_name,"LICENSE") ==0)
+          continue;
         sprintf(filename,"json-test/%s",dir->d_name);
 
         json = json_parse(a,&(a->gc_root),filename,"test");
