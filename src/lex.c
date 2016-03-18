@@ -852,10 +852,10 @@ token_id tk_lex_jinja( struct tokenizer* tk ) {
   } while(1);
 
 done:
-  CHECK_TEXT()
-  else {
+  if( tk->lexeme.len > 0 )
+    RETURN(TK_TEXT,i-tk->pos);
+  else
     RETURN(TK_EOF,0);
-  }
 
 utf_fail:
   /* handle utf failaure */

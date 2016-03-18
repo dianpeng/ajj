@@ -9,7 +9,8 @@ void test_basic() {
     struct tokenizer tk;
     const char* source= \
       "ThisIsAText \\{{\\{{\\{ AlsoThisIsAText!" \
-      "{{ new.object }} " \
+      "{{ new.object }}\n" \
+      "ASD asd sad" \
       "{% for endfor variable else elif endif macro endmacro macroX %}" \
       "{% call endcall filter endfilter do set endset with endwith "\
       "move block endblock extends import endimport include endinclude in as " \
@@ -78,7 +79,7 @@ void test_basic() {
     struct tokenizer tk;
     struct string lexeme;
     const char* source = \
-      "TextAHahaha{{ a.b }}YouAreCorrect!";
+      "TextAHahaha{{ a.b }}\nYouAreCorrect asd!";
     token_id token[] = {
       TK_TEXT,
       TK_LEXP,
@@ -108,7 +109,7 @@ void test_basic() {
     assert(tk.tk == TK_REXP);
     tk_move(&tk);
     lexeme = strbuf_tostring(&(tk.lexeme));
-    assert(string_cmpc(&lexeme,"YouAreCorrect!")==0);
+    assert(string_cmpc(&lexeme,"\nYouAreCorrect asd!")==0);
     tk_move(&tk);
     assert(tk.tk == TK_EOF);
     tk_destroy(&tk);
