@@ -117,6 +117,82 @@ void test_basic() {
 
   {
     struct tokenizer tk;
+    struct string lexeme;
+    const char* source = \
+      "{{ a }}a b c d{{ a }}";
+    token_id token[] = {
+      TK_LEXP,
+      TK_VARIABLE,
+      TK_REXP,
+      TK_TEXT,
+      TK_LEXP,
+      TK_VARIABLE,
+      TK_REXP
+    };
+    tk_init(&tk,source);
+    assert(tk.tk == TK_LEXP);
+    tk_move(&tk);
+    assert(tk.tk == TK_VARIABLE);
+    lexeme = strbuf_tostring(&(tk.lexeme));
+    assert(string_cmpc(&lexeme,"a")==0);
+    tk_move(&tk);
+    assert(tk.tk == TK_REXP);
+    tk_move(&tk);
+    lexeme = strbuf_tostring(&(tk.lexeme));
+    assert(string_cmpc(&lexeme,"a b c d")==0);
+    tk_move(&tk);
+    assert(tk.tk == TK_LEXP);
+    tk_move(&tk);
+    assert(tk.tk == TK_VARIABLE);
+    lexeme = strbuf_tostring(&(tk.lexeme));
+    assert(string_cmpc(&lexeme,"a")==0);
+    tk_move(&tk);
+    assert(tk.tk == TK_REXP);
+    tk_move(&tk);
+    assert(tk.tk == TK_EOF);
+    tk_destroy(&tk);
+  }
+
+  {
+    struct tokenizer tk;
+    struct string lexeme;
+    const char* source = \
+      "{{ a }}\na b c d{{ a }}";
+    token_id token[] = {
+      TK_LEXP,
+      TK_VARIABLE,
+      TK_REXP,
+      TK_TEXT,
+      TK_LEXP,
+      TK_VARIABLE,
+      TK_REXP
+    };
+    tk_init(&tk,source);
+    assert(tk.tk == TK_LEXP);
+    tk_move(&tk);
+    assert(tk.tk == TK_VARIABLE);
+    lexeme = strbuf_tostring(&(tk.lexeme));
+    assert(string_cmpc(&lexeme,"a")==0);
+    tk_move(&tk);
+    assert(tk.tk == TK_REXP);
+    tk_move(&tk);
+    lexeme = strbuf_tostring(&(tk.lexeme));
+    assert(string_cmpc(&lexeme,"\na b c d")==0);
+    tk_move(&tk);
+    assert(tk.tk == TK_LEXP);
+    tk_move(&tk);
+    assert(tk.tk == TK_VARIABLE);
+    lexeme = strbuf_tostring(&(tk.lexeme));
+    assert(string_cmpc(&lexeme,"a")==0);
+    tk_move(&tk);
+    assert(tk.tk == TK_REXP);
+    tk_move(&tk);
+    assert(tk.tk == TK_EOF);
+    tk_destroy(&tk);
+  }
+
+  {
+    struct tokenizer tk;
     const char* source = \
       "{% raw %} Hi {% HelloWorld %} {% endraw %}" \
       "{% +-*/ // /// % true false 1234.56 \'helloworld\' %}";
@@ -266,6 +342,47 @@ void test_basic() {
   }
 }
 
+static void test_ws() {
+  {
+    struct tokenizer tk;
+    struct string lexeme;
+    const char* source =  "{% if %}   \n\na b c d{% endif %}";
+    token_id token[] = {
+      TK_LSTMT,
+      TK_IF,
+      TK_RSTMT,
+      TK_TEXT,
+      TK_LSTMT,
+      TK_ENDIF,
+      TK_RSTMT
+    };
+    tk_init(&tk,source);
+    assert(tk.tk == TK_LSTMT);
+    tk_move(&tk);
+    assert(tk.tk == TK_IF);
+    tk_move(&tk);
+    assert(tk.tk == TK_RSTMT);
+    tk_move(&tk);
+    lexeme = strbuf_tostring(&(tk.lexeme));
+    printf("%s\n",tk.lexeme.str);
+    assert(string_cmpc(&lexeme,"\na b c d")==0);
+    tk_move(&tk);
+    assert(tk.tk == TK_LSTMT);
+    tk_move(&tk);
+    assert(tk.tk == TK_ENDIF);
+    tk_move(&tk);
+    assert(tk.tk == TK_RSTMT);
+    tk_move(&tk);
+    assert(tk.tk == TK_EOF);
+    tk_destroy(&tk);
+  }
+
+}
+
 int main() {
+#if 0
     test_basic();
+#else
+    test_ws();
+#endif
 }

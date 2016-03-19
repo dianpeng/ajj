@@ -964,7 +964,7 @@ void test_include_with_json() {
     struct ajj_object* jinja;
     struct ajj_io* output = ajj_io_create_file(a,stdout);
 
-    load_template(a,"Inc1","{{ Hello_World }}\n");
+    load_template(a,"Inc1","{{ Hello_World }}\nasd asd asd");
 
     jinja = load_template(a,"Main","{% include 'Inc1' json 'hello_world.json' %}{% endinclude %}");
     if( vm_run_jinja(a,jinja,output) ) {

@@ -163,6 +163,10 @@ int tk_lex_rmtrail( struct tokenizer* tk , size_t len ) {
     if(!tk_is_ispace(c)) {
       if(c == '\n')
         last = -1;
+      else
+        last = -2; /* if we see something none space character
+                    * it means we cannot remove the rest , so
+                    * just set it to -1 */
     } else {
       /* only when last is negative one we set to
        * the correct index. But initially this value
@@ -194,6 +198,7 @@ int tk_lex_rmlead( struct tokenizer* tk , int pos ) {
   while(1) {
     Rune c;
     int o = chartorune(&c,tk->src+i);
+    assert( c != Runeerror );
     if( !tk_is_ispace(c) ) {
       if(c == '\n') {
         i += o;
