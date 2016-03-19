@@ -76,21 +76,24 @@ int tk_string_reescape_char( Rune c ) {
     if(C3 == Runeerror) goto utf_fail; \
   } while(0)
 
+/* return negative value represent failed; otherwise
+ * the length of comments should be skipped will be
+ * returned */
 static
-int tk_next_skip_cmt( struct tokenizer* tk , size_t pos ) {
-  size_t i;
+int tk_skip_cmt( struct tokenizer* tk , size_t pos ) {
+  size_t i = pos + 2; /* skip the first {# */
   Rune c1,c2;
   int o1,o2;
-  i =  pos;
   while(1) {
     GET_C1(c1,i,o1); if(!c1) break;
     if( c1 == '#' ) {
       GET_C2(c2,i,o1,o2);
       if( c2 == '}' ) {
-        tk->pos = i + o1+o2 +
-          tk_lex_rmlead(tk,i+o1+o2); /* remove leading
-                                      * space or new line */
-        return 0;
+        /* return the offset.
+         * i+o1+o2+tk_lex_rmlead represnet the position
+         * that the new scanning should happen */
+        return (i+o1+o2)+
+          tk_lex_rmlead(tk,i+o1+o2) - pos;
       }
     }
     i += o1;
@@ -153,6 +156,8 @@ int tk_lex_rmtrail( struct tokenizer* tk , size_t len ) {
 
   size_t i = 0;
   int last = -2;
+  int last_ln =  -1;
+
   assert( tk->lexeme.len );
 
   while(i<tk->lexeme.len) {
@@ -161,12 +166,14 @@ int tk_lex_rmtrail( struct tokenizer* tk , size_t len ) {
     assert( o != Runeerror );
     assert( o );
     if(!tk_is_ispace(c)) {
-      if(c == '\n')
+      if(c == '\n') {
         last = -1;
-      else
-        last = -2; /* if we see something none space character
+        last_ln = i;
+      } else {
+        last = -2; /* if we see something like none space character
                     * it means we cannot remove the rest , so
                     * just set it to -1 */
+      }
     } else {
       /* only when last is negative one we set to
        * the correct index. But initially this value
@@ -186,7 +193,14 @@ int tk_lex_rmtrail( struct tokenizer* tk , size_t len ) {
       tk->pos += len;
       return -1;
     } else {
-      strbuf_resize(&(tk->lexeme),last);
+      assert(last_ln >=0);
+      if(last_ln + 1 == last) {
+        /* the linebreak follows the first whitespace .
+         * omit the linebreak as well */
+        strbuf_resize(&(tk->lexeme),last_ln);
+      } else {
+        strbuf_resize(&(tk->lexeme),last);
+      }
       return 0;
     }
   }
@@ -202,6 +216,10 @@ int tk_lex_rmlead( struct tokenizer* tk , int pos ) {
     if( !tk_is_ispace(c) ) {
       if(c == '\n') {
         i += o;
+      } else {
+        i = pos; /* We haven't seen line break, but see
+                  * a non whitespace character, so we don't
+                  * remove any leading whitespaces */
       }
       break;
     }
@@ -786,6 +804,7 @@ utf_fail:
 
 static
 token_id tk_lex_jinja( struct tokenizer* tk ) {
+  int ret;
   int i = tk->pos;
 
   Rune c1,c2; /* c1 is the current character,
@@ -812,9 +831,12 @@ token_id tk_lex_jinja( struct tokenizer* tk ) {
         GET_C2(c2,i,o1,o2);
         switch(c2) {
           case '#':
-            if(tk_next_skip_cmt(tk,i+2))
+            if(tk->lexeme.len >0) {
+              tk_lex_rmtrail(tk,i-tk->pos);
+            }
+            if((ret=tk_skip_cmt(tk,i))<0)
               return tk->tk; /* failed */
-            i = tk->pos;
+            i += ret;
             continue;
           case '%':
             CHECK_TEXT()

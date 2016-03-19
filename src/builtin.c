@@ -2448,8 +2448,11 @@ json_parsec( struct ajj* a , struct gc_scope* scp,
     if(ret == JSON_ARRAY ||
        ret == JSON_OBJECT ) {
 #ifndef DISABLE_JSON_FILE_TAIL_CHECK
-      if(json_check_tail(a,&jl))
+      if(json_check_tail(a,&jl)) {
+        json_report_error(a,&jl,"Unexpected token here " \
+            "after finishing parsing json object!");
         goto fail;
+      }
 #endif /* DISABLE_JSON_FILE_TAIL_CHECK */
       gc_scope_merge(scp,&temp_scp);
       return root.value.object;
