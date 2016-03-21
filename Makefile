@@ -33,8 +33,11 @@ util-test: libajj test/util-test.c
 bc-test: libajj test/bc-test.c
 	cd test; $(CC) $(TFLAGS) bc-test.c $(LINK) -o bc-test; cd -
 
-test: lex-test parser-test vm-test opt-test util-test bc-test
-	cd test; ./lex-test ; ./parser-test ; ./vm-test ; ./opt-test ; ./util-test ; ./bc-test ; cd -
+jinja-test: libajj test/jinja-test.c
+	cd test; $(CC) $(TFLAGS) jinja-test.c $(LINK) -o jinja-test; cd -
+
+test: lex-test parser-test vm-test opt-test util-test bc-test jinja-test
+	cd test; ./lex-test ; ./parser-test ; ./vm-test ; ./opt-test ; ./util-test ; ./bc-test ; ./jinja-test; cd -
 
 clean:
 	rm *.o
