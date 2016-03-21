@@ -1,7 +1,8 @@
 CC?=gcc
 OPT := -g
-FLAGS := $(OPT) -Wpedantic -Wall -I$(PWD)/src -DDISABLE_OPTIMIZATION
-TFLAGS:= $(OPT) -I$(PWD)/src -DDISABLE_OPTIMIZATION
+JJOPT:=
+FLAGS := $(OPT) -Wpedantic -Wall -I$(PWD)/src $(JJOPT)
+TFLAGS:= $(OPT) -I$(PWD)/src
 PROFILE_FLAGS := -fprofile-arcs -ftest-coverage
 LINK := -L$(PWD)/. -lajj -lm
 SRC := $(wildcard src/*.c)
@@ -23,8 +24,8 @@ parser-test: libajj test/parser-test.c
 vm-test: libajj test/vm-test.c
 	cd test; $(CC) $(TFLAGS) vm-test.c $(LINK) -o vm-test; cd -
 
-opt-test: libajj test/opt-test.c
-	cd test; $(CC) $(TFLAGS) opt-test.c $(LINK) -o opt-test; cd -
+opt-test: test/opt-test.c $(SRC)
+	cd test; $(CC) $(TFLAGS) -DDISABLE_OPTIMIZATION ../src/all-in-one.c opt-test.c -lm -o opt-test; cd -
 
 util-test: libajj test/util-test.c
 	cd test; $(CC) $(TFLAGS) util-test.c $(LINK) -o util-test; cd -
