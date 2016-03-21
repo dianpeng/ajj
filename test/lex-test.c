@@ -343,7 +343,7 @@ void test_basic() {
 }
 
 /* Test the whitespace control for AJJ :
- * 
+ *
  * The script instruction has 3 type , ie :
  * 1) {% %} statement
  * 2) {{ }} expression
@@ -352,22 +352,11 @@ void test_basic() {
  * These 3 types are not the normal type of text. In AJJ,
  * for simplicity, the whitespace control are applied automatically.
  *
- * For 2) Expression , no whitespace is removed . So what user write is
- * what user get, including all the whitespace and newlines .
- *
- * Eg: abc\n{{ 'Hello' }}\ncde will generate output like this:
- *
- * abc
- * Hello
- * cde
- * The reason is because this make user easy to embed some expression
- * or output in pure text like :
- *
- * Hello {{ Word }} :)
+ * These 3 types of instruction are have *SAME* whitespace remove
+ * rules
  *
  * ===========================================================
  *
- * For 1) statement, the whitespace control is applied.
  * The rules are as follow:
  * 1. Any leading whitespace that resides at the same line of the
  * statement will be removed , if no text resides at the same line.
@@ -386,7 +375,7 @@ void test_basic() {
  * will not be removed.
  *
  * Some example:
- * 
+ *
  * 1) Text resides at the same line of statement
  *
  * Text {% some_statement %}  ( Suppose statement will not output
@@ -397,14 +386,14 @@ void test_basic() {
  * at the same line. So the extra space before "Text" won't be removed.
  *
  * 2) Text not resides at the same line of statement.
- * 
+ *
  * Text\n
  *  {% some_statement %}
  *
  * In this case, since Text is not resides at the same line of the
  * statement, so the leading whitespace of {% some_statement %} will
  * be removed.
- * 
+ *
  * Same here : {% some_statement %}   \n
  *             Text
  *
@@ -412,112 +401,55 @@ void test_basic() {
  * removed.
  *
  * ============================================================
- *
- * For 3) comments, it will have the same rule as the statement.
- *
  */
 
+
+static void test_ws_case( const char* L , const char* R ,
+    const char* Text , const char* Exp ,
+    token_id LT , token_id RT ) {
+  struct tokenizer tk;
+  struct string lexeme;
+  char source[1024];
+  sprintf(source,"%s %s%s%s %s",L,R,Text,L,R);
+  tk_init(&tk,source);
+  assert(tk.tk == LT);
+  tk_move(&tk);
+  assert(tk.tk == RT);
+  tk_move(&tk);
+  assert(tk.tk == TK_TEXT);
+  lexeme = strbuf_tostring(&(tk.lexeme));
+  assert(string_cmpc(&lexeme,Exp)==0);
+  tk_move(&tk);
+  assert(tk.tk == LT);
+  tk_move(&tk);
+  assert(tk.tk == RT);
+  tk_move(&tk);
+  assert(tk.tk == TK_EOF);
+  tk_destroy(&tk);
+}
+
+
 static void test_ws() {
-  { /* text on the same line */
-    struct tokenizer tk;
-    struct string lexeme;
-    const char* source =  "{% if %} This Text {% endif %}";
-    token_id token[] = {
-      TK_LSTMT,
-      TK_IF,
-      TK_RSTMT,
-      TK_TEXT,
-      TK_LSTMT,
-      TK_ENDIF,
-      TK_RSTMT
-    };
-    tk_init(&tk,source);
-    assert(tk.tk == TK_LSTMT);
-    tk_move(&tk);
-    assert(tk.tk == TK_IF);
-    tk_move(&tk);
-    assert(tk.tk == TK_RSTMT);
-    tk_move(&tk);
-    lexeme = strbuf_tostring(&(tk.lexeme));
-    printf("%s\n",tk.lexeme.str);
-    assert(string_cmpc(&lexeme," This Text ")==0);
-    tk_move(&tk);
-    assert(tk.tk == TK_LSTMT);
-    tk_move(&tk);
-    assert(tk.tk == TK_ENDIF);
-    tk_move(&tk);
-    assert(tk.tk == TK_RSTMT);
-    tk_move(&tk);
-    assert(tk.tk == TK_EOF);
-    tk_destroy(&tk);
-  }
-  { /* text on different line */
-    struct tokenizer tk;
-    struct string lexeme;
-    const char* source =  "{% if %}  \n This Text \n {% endif %}";
-    token_id token[] = {
-      TK_LSTMT,
-      TK_IF,
-      TK_RSTMT,
-      TK_TEXT,
-      TK_LSTMT,
-      TK_ENDIF,
-      TK_RSTMT
-    };
-    tk_init(&tk,source);
-    assert(tk.tk == TK_LSTMT);
-    tk_move(&tk);
-    assert(tk.tk == TK_IF);
-    tk_move(&tk);
-    assert(tk.tk == TK_RSTMT);
-    tk_move(&tk);
-    lexeme = strbuf_tostring(&(tk.lexeme));
-    printf("%s\n",tk.lexeme.str);
-    assert(string_cmpc(&lexeme," This Text ")==0);
-    tk_move(&tk);
-    assert(tk.tk == TK_LSTMT);
-    tk_move(&tk);
-    assert(tk.tk == TK_ENDIF);
-    tk_move(&tk);
-    assert(tk.tk == TK_RSTMT);
-    tk_move(&tk);
-    assert(tk.tk == TK_EOF);
-    tk_destroy(&tk);
-  }
-  { /* Some what complicated */
-    struct tokenizer tk;
-    struct string lexeme;
-    const char* source =  "{% if %}  \n This Text \n used  {% endif %}";
-    token_id token[] = {
-      TK_LSTMT,
-      TK_IF,
-      TK_RSTMT,
-      TK_TEXT,
-      TK_LSTMT,
-      TK_ENDIF,
-      TK_RSTMT
-    };
-    tk_init(&tk,source);
-    assert(tk.tk == TK_LSTMT);
-    tk_move(&tk);
-    assert(tk.tk == TK_IF);
-    tk_move(&tk);
-    assert(tk.tk == TK_RSTMT);
-    tk_move(&tk);
-    lexeme = strbuf_tostring(&(tk.lexeme));
-    printf("%s\n",tk.lexeme.str);
-    assert(string_cmpc(&lexeme," This Text \n used  ")==0);
-    tk_move(&tk);
-    assert(tk.tk == TK_LSTMT);
-    tk_move(&tk);
-    assert(tk.tk == TK_ENDIF);
-    tk_move(&tk);
-    assert(tk.tk == TK_RSTMT);
-    tk_move(&tk);
-    assert(tk.tk == TK_EOF);
-    tk_destroy(&tk);
-  }
-    
+  test_ws_case("{%","%}"," A Test "," A Test ",
+      TK_LSTMT,TK_RSTMT);
+  test_ws_case("{%","%}","  \n A Test \n "," A Test ",
+      TK_LSTMT,TK_RSTMT);
+  test_ws_case("{%","%}"," \n A Test \n Here "," A Test \n Here ",
+      TK_LSTMT,TK_RSTMT);
+  test_ws_case("{%","%}"," Here \n A Test \n "," Here \n A Test ",
+      TK_LSTMT,TK_RSTMT);
+
+
+  test_ws_case("{{","}}"," A Test "," A Test ",
+      TK_LEXP,TK_REXP);
+  test_ws_case("{{","}}"," \n A Test \n "," A Test ",
+      TK_LEXP,TK_REXP);
+  test_ws_case("{{","}}"," \n A Test \n Here "," A Test \n Here ",
+      TK_LEXP,TK_REXP);
+  test_ws_case("{{","}}"," Here \n A Test \n "," Here \n A Test ",
+      TK_LEXP,TK_REXP);
+
+
   { /* text on different line */
     struct tokenizer tk;
     struct string lexeme;
@@ -525,7 +457,42 @@ static void test_ws() {
     tk_init(&tk,source);
     assert(tk.tk == TK_TEXT);
     lexeme = strbuf_tostring(&(tk.lexeme));
-    printf("%s\n",tk.lexeme.str);
+    assert(string_cmpc(&lexeme,"This Text  Another Text")==0);
+    tk_move(&tk);
+    assert(tk.tk == TK_EOF);
+  }
+
+  { /* text on different line */
+    struct tokenizer tk;
+    struct string lexeme;
+    const char* source =  "This Text \n  {# comment #}   \n Another Text";
+    tk_init(&tk,source);
+    assert(tk.tk == TK_TEXT);
+    lexeme = strbuf_tostring(&(tk.lexeme));
+    assert(string_cmpc(&lexeme,"This Text  Another Text")==0);
+    tk_move(&tk);
+    assert(tk.tk == TK_EOF);
+  }
+
+  { /* text on different line */
+    struct tokenizer tk;
+    struct string lexeme;
+    const char* source =  "This Text {# comment #}   \n Another Text";
+    tk_init(&tk,source);
+    assert(tk.tk == TK_TEXT);
+    lexeme = strbuf_tostring(&(tk.lexeme));
+    assert(string_cmpc(&lexeme,"This Text  Another Text")==0);
+    tk_move(&tk);
+    assert(tk.tk == TK_EOF);
+  }
+
+  { /* text on different line */
+    struct tokenizer tk;
+    struct string lexeme;
+    const char* source =  "This Text \n   {# comment #} Another Text";
+    tk_init(&tk,source);
+    assert(tk.tk == TK_TEXT);
+    lexeme = strbuf_tostring(&(tk.lexeme));
     assert(string_cmpc(&lexeme,"This Text  Another Text")==0);
     tk_move(&tk);
     assert(tk.tk == TK_EOF);

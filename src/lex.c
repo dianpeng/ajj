@@ -663,7 +663,7 @@ int tk_lex_script( struct tokenizer* tk ) {
       case '}':
         GET_C2(c2,i,o1,o2);
         if( c2 == '}' ) {
-          RETURN(TK_REXP,2);
+          RETURN(TK_REXP,2+tk_lex_rmlead(tk,i+2));
         } else {
           RETURN(TK_RBRA,1);
         }
@@ -817,12 +817,6 @@ token_id tk_lex_jinja( struct tokenizer* tk ) {
   /* reset lexeme buffer */
   strbuf_reset( &(tk->lexeme) );
 
-#define CHECK_TEXT() \
-  if( tk->lexeme.len > 0 && \
-      !tk_lex_rmtrail(tk,i-tk->pos) ) { \
-    RETURN(TK_TEXT,i-tk->pos); \
-  }
-
   do {
     GET_C1(c1,i,o1);
 
@@ -839,8 +833,9 @@ token_id tk_lex_jinja( struct tokenizer* tk ) {
             i += ret;
             continue;
           case '%':
-            CHECK_TEXT()
-            else {
+            if( tk->lexeme.len > 0 && !tk_lex_rmtrail(tk,i-tk->pos) ) {
+              RETURN(TK_TEXT,i-tk->pos);
+            } else {
               int offset;
               if( (offset = tk_check_raw(tk,i+o1+o2)) == 0 ) {
                 RETURN(TK_LSTMT,o1+o2);
@@ -854,7 +849,7 @@ token_id tk_lex_jinja( struct tokenizer* tk ) {
               }
             }
           case '{':
-            if( tk->lexeme.len > 0 ) {
+            if( tk->lexeme.len > 0 && !tk_lex_rmtrail(tk,i-tk->pos) ) {
               RETURN(TK_TEXT,(i-tk->pos));
             } else {
               RETURN(TK_LEXP,o1+o2);
