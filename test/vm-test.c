@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <sys/time.h>
 #include <inttypes.h>
+#include <builtin.h>
 
 #include <dirent.h>
 

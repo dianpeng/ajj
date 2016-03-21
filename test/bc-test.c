@@ -43,7 +43,6 @@ void test1() {
     program_init(&prg);
     emitter_init(&em,&prg);
 
-    assert(em.cd_cap == 1);
     assert(prg.len==0);
 
     EMIT0(VM_ADD);
@@ -55,30 +54,29 @@ void test1() {
     EMIT2(VM_CALL,1,2);
 
     instr = bc_next(&prg,&i);
-    assert(instr == VM_ADD);
+    assert(bc_instr(instr) == VM_ADD);
 
     instr = bc_next(&prg,&i);
-    assert(instr == VM_MUL);
+    assert(bc_instr(instr) == VM_MUL);
 
     instr = bc_next(&prg,&i);
-    assert(instr == VM_SUB);
+    assert(bc_instr(instr) == VM_SUB);
 
     instr = bc_next(&prg,&i);
-    assert(instr == VM_DIV);
+    assert(bc_instr(instr) == VM_DIV);
 
     instr = bc_next(&prg,&i);
-    assert(instr == VM_TPUSH);
-    assert(bc_next_arg(&prg,&i) == 1);
+    assert(bc_instr(instr) == VM_TPUSH);
+    assert(bc_1st_arg(instr) == 1);
 
     instr = bc_next(&prg,&i);
-    assert(instr == VM_BPUSH);
-    assert(bc_next_arg(&prg,&i) == 2);
+    assert(bc_instr(instr) == VM_BPUSH);
+    assert(bc_1st_arg(instr) == 2);
 
     instr = bc_next(&prg,&i);
-    assert(instr == VM_CALL);
-    assert(bc_next_arg(&prg,&i)==1);
-    assert(bc_next_arg(&prg,&i)==2);
-    assert(bc_next(&prg,&i)==VM_HALT);
+    assert(bc_instr(instr) == VM_CALL);
+    assert(bc_1st_arg(instr)==1);
+    assert(bc_2nd_arg(&prg,&i)==2);
   }
 }
 

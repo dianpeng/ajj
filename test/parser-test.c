@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#define CHECK(X) \
+#define TEST_CHECK(X) \
   do { \
     if(pos) { \
       if(!(X)) { \
@@ -28,9 +28,9 @@ void do_test( const char* src , int pos , int dump ) {
 
   (void)dump;
 
-  CHECK(obj);
+  TEST_CHECK(obj);
   prg = ajj_object_jinja_main(obj);
-  CHECK(prg);
+  TEST_CHECK(prg);
 }
 
 
