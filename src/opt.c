@@ -735,7 +735,7 @@ int fold_bin( struct opt* o , instructions instr ) {
 
     /* SUB */
     case VM_SUB:
-#define SUB(V) (V) = (lv) + (rv)
+#define SUB(V) (V) = (lv) - (rv)
       DO(SUB);
 #undef SUB
 

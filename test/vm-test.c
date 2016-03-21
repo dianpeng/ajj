@@ -1066,7 +1066,6 @@ void bench() {
 #endif
 
 int main() {
-#if 0
   test_expr();
   test_loop();
   test_move();
@@ -1077,7 +1076,6 @@ int main() {
   test_import();
   test_extends();
   test_json();
-#endif
   test_include_with_json();
   return 0;
 }

@@ -2667,6 +2667,7 @@ int assert_expr( struct ajj* a,
           "string!");
     }
     if( vm_is_true(arg) ) {
+      *ret = AJJ_TRUE;
       return AJJ_EXEC_OK;
     } else {
       if( arg_len == 1 ) {

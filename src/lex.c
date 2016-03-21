@@ -838,7 +838,7 @@ token_id tk_lex_jinja( struct tokenizer* tk ) {
             } else {
               int offset;
               if( (offset = tk_check_raw(tk,i+o1+o2)) == 0 ) {
-                RETURN(TK_LSTMT,o1+o2);
+                RETURN(TK_LSTMT,i+o1+o2-tk->pos);
               } else {
                 if( offset < 0 )
                   RETURN(TK_UNKNOWN,0);
@@ -852,7 +852,7 @@ token_id tk_lex_jinja( struct tokenizer* tk ) {
             if( tk->lexeme.len > 0 && !tk_lex_rmtrail(tk,i-tk->pos) ) {
               RETURN(TK_TEXT,(i-tk->pos));
             } else {
-              RETURN(TK_LEXP,o1+o2);
+              RETURN(TK_LEXP,i+o1+o2-tk->pos);
             }
           default:
             break;

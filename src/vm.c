@@ -1852,7 +1852,7 @@ int vm_main( struct ajj* a ) {
           vm_rpt_err(a,"Cannot find function:%s!",fn->str);
           goto fail;
         } else {
-          struct ajj_value ret;
+          struct ajj_value ret = AJJ_NONE;
           int r;
           enter_function(a,f,an,0,obj,RCHECK);
           r = vm_call(a,obj,&ret);
@@ -1886,7 +1886,7 @@ int vm_main( struct ajj* a ) {
               "chain!",fn->str);
           goto fail;
         } else {
-          struct ajj_value ret;
+          struct ajj_value ret = AJJ_NONE;
 #ifndef NDEBUG
           int r;
 #endif
@@ -1926,7 +1926,7 @@ int vm_main( struct ajj* a ) {
               o->val.obj.fn_tb->name.str);
           goto fail;
         } else {
-          struct ajj_value ret;
+          struct ajj_value ret = AJJ_NONE;
           int r;
           /* We have an object on stack, so set the method field
            * of function enter_function to 1 */
