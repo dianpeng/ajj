@@ -709,7 +709,7 @@ int call_ctor( struct ajj* a , struct func_table* ft,
     struct ajj_value* ret ) {
   size_t pc = cur_frame(a)->par_cnt;
   size_t i;
-  int tp;
+  int tp = -1; /* sanity check */
   void* udata;
   struct ajj_object* obj;
   struct ajj_value par[AJJ_FUNC_ARG_MAX_SIZE];
@@ -729,6 +729,9 @@ int call_ctor( struct ajj* a , struct func_table* ft,
       &tp) ) {
     return AJJ_EXEC_FAIL;
   }
+
+  assert(tp != -1); /* sanity check failed */
+
   obj = ajj_object_create_obj(
       a,a->rt->cur_gc,ft,udata,tp);
   *ret = ajj_value_assign(obj);

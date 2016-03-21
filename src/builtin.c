@@ -58,6 +58,7 @@ int list_ctor( struct ajj* a, void* udata /* NULL */,
     l->len = 0;
     l->entry = NULL;
     *ret = l;
+    *type = LIST_TYPE;
     return AJJ_EXEC_OK;
   }
 }
