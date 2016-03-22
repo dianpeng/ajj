@@ -1,11 +1,15 @@
 CC?=gcc
-OPT := -g
+PWD := $(shell pwd)
 JJOPT:=
+OPT := -g
 FLAGS := $(OPT) -Wpedantic -Wall -I$(PWD)/src $(JJOPT)
 TFLAGS:= $(OPT) -I$(PWD)/src
+COVFLAGS:= -DDO_COVERAGE -DDISABLE_OPTIMIZATION -I$(PWD)/src -g -fprofile-arcs -ftest-coverage
 PROFILE_FLAGS := -fprofile-arcs -ftest-coverage
 LINK := -L$(PWD)/. -lajj -lm
 SRC := $(wildcard src/*.c)
+TEST:= $(wildcard test/*.c)
+TESTF:= $(TEST:test/%=%)
 
 all: libajj
 
@@ -38,6 +42,9 @@ jinja-test: libajj test/jinja-test.c
 
 test: lex-test parser-test vm-test opt-test util-test bc-test jinja-test
 	cd test; ./lex-test ; ./parser-test ; ./vm-test ; ./opt-test ; ./util-test ; ./bc-test ; ./jinja-test; cd -
+
+test-coverage: test/lex-test.c test/parser-test.c test/vm-test.c test/util-test.c test/bc-test.c test/jinja-test.c test/opt-test.c $(SRC)
+	cd test; $(CC) $(COVFLAGS) ../src/all-in-one.c $(TESTF) $(LINK) -o cmain; cd -
 
 clean:
 	rm *.o

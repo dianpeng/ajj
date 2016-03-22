@@ -181,7 +181,7 @@ void parser_rpt_err( struct parser* p , const char* format, ... ) {
   /* output the prefix message */
   len = snprintf(p->a->err,ERROR_BUFFER_SIZE,
       "[Parser:(%s:" SIZEF "," SIZEF ")] at:(... %s ...)\nMessage:",
-      p->src_key,SIZEP(pos),SIZEP(ln),cs);
+      p->src_key,SIZEP(ln),SIZEP(pos),cs);
 
   assert( len >0 && len < ERROR_BUFFER_SIZE );
 

@@ -165,6 +165,8 @@ void program_init( struct program* prg ) {
 static
 int unwind_stack( struct ajj* a , char* buf ) {
   int i;
+  size_t ln;
+  size_t pos;
   char* start = buf;
   char* end = a->err + ERROR_BUFFER_SIZE -1 ;
   struct func_frame* fr = a->rt->call_stk;
@@ -175,15 +177,20 @@ int unwind_stack( struct ajj* a , char* buf ) {
   for( i = a->rt->cur_call_stk-1 ; i >= 0 ; --i ) {
     /* if this frame comes from jinja template, also
      * dump out the code segment in the jinja template */
-    char cbuf[48];
+    char cbuf[64];
     if( IS_JINJA(fr[i].entry) ) {
       const char* src = fr[i].obj->val.obj.src;
+      size_t ppc = fr[i].entry->f.jj_fn.spos[fr->ppc];
       assert(src);
       tk_get_code_snippet(
           src,
-          fr[i].entry->f.jj_fn.spos[fr->ppc],
+          ppc,
           cbuf,
           ARRAY_SIZE(cbuf));
+      tk_get_coordinate(src,
+          ppc,
+          &ln,
+          &pos);
     } else {
       strcpy(cbuf,"<no-source>");
     }
@@ -194,14 +201,25 @@ int unwind_stack( struct ajj* a , char* buf ) {
       obj_name = "free-func";
     }
 
-    buf += snprintf(buf,end-buf,
-        "%d:(... %s ...) <%s>:%s arg-num:%d\n",
-        i,
-        cbuf,
-        obj_name,
-        fr[i].name.str,
-        fr[i].par_cnt);
-    if(buf == end) break;
+    if(IS_JINJA(fr[i].entry)) {
+      buf += snprintf(buf,end-buf,
+          "%d:(... %s ...)@(" SIZEF ":" SIZEF ") <%s>:%s arg-num:%d\n",
+          i,
+          cbuf,
+          SIZEP(pos),
+          SIZEP(ln),
+          obj_name,
+          fr[i].name.str,
+          fr[i].par_cnt);
+    } else {
+      buf += snprintf(buf,end-buf,
+          "%d:(... <no-source> ...) <%s>:%s arg-num:%d\n",
+          i,
+          obj_name,
+          fr[i].name.str,
+          fr[i].par_cnt);
+    }
+    if(buf >= end) break;
   }
   return buf - start;
 }

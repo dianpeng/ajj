@@ -80,7 +80,11 @@ void test1() {
   }
 }
 
+#ifndef DO_COVERAGE
 int main() {
+#else
+int bc_test_main() {
+#endif
   test1();
   return 0;
 }

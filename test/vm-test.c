@@ -155,6 +155,7 @@ void test_expr() {
           "{% do assert_expr( False in [True, False] ) %}");
 }
 
+static
 void test_loop() {
   do_test("{% set cat1 = [] %}" \
           "{% set cat2 = [] %}" \
@@ -355,6 +356,7 @@ void test_loop() {
           "{% endfor %}");
 }
 
+static
 void test_branch() {
   do_test("{% if True is True %}" \
           "{% do assert_expr(1+3*4==13) %}" \
@@ -384,6 +386,7 @@ void test_branch() {
 }
 
 /* MOVE operations */
+static
 void test_move() {
   /* Move to outer scope with primitive , should nothing changed */
   do_test("{% set Outer = 0 %}" \
@@ -452,6 +455,7 @@ void test_move() {
 }
 
 /* WITH */
+static
 void test_with() {
   do_test("{% do assert_expr( local_variable == None ) %}" \
           "{% with local_variable = True %}" \
@@ -463,7 +467,7 @@ void test_with() {
 /* ============================
  * Function/Macro
  * ==========================*/
-
+static
 void test_macro() {
   /* arguments passing is correct or not */
   do_test("{% macro func(arg1,arg2,arg3,arg4,arg5,arg6,arg7) %}" \
@@ -1066,7 +1070,12 @@ void bench() {
 
 #endif
 
+#ifndef DO_COVERAGE
 int main() {
+#else
+int vm_test_main() {
+#endif
+
   test_expr();
   test_loop();
   test_move();

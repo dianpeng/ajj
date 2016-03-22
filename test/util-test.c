@@ -365,7 +365,12 @@ void test_slab() {
   }
 }
 
+#ifndef DO_COVERAGE
 int main() {
+#else
+int util_test_main() {
+#endif
+
   test_macro();
   test_string();
   test_strbuf();

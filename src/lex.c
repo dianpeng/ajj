@@ -155,8 +155,11 @@ int tk_lex_rmtrail( struct tokenizer* tk , size_t len ) {
    * drop */
 
   size_t i = 0;
-  int last = -2;
-  int last_ln =  -1;
+  int last_ws = -1; /* last whitespace */
+  int last_ln = -1; /* last linebreak. set to -1 enable us to
+                     * delete the empty line when the buffer
+                     * only contains a line of empty spaces */
+  int can_del = 1;  /* can delete it or not */
 
   assert( tk->lexeme.len );
 
@@ -167,12 +170,11 @@ int tk_lex_rmtrail( struct tokenizer* tk , size_t len ) {
     assert( o );
     if(!tk_is_ispace(c)) {
       if(c == '\n') {
-        last = -1;
         last_ln = i;
+        last_ws = -1;
+        can_del = 1;
       } else {
-        last = -2; /* if we see something like none space character
-                    * it means we cannot remove the rest , so
-                    * just set it to -1 */
+        can_del = 0;
       }
     } else {
       /* only when last is negative one we set to
@@ -180,27 +182,31 @@ int tk_lex_rmtrail( struct tokenizer* tk , size_t len ) {
        * is -2, which can only be set to -1 when a
        * new line is met. So we will start to remove
        * whitespace when we at least see one line break */
-      if(last==-1) last = i;
+      if(last_ws <0) last_ws = i;
     }
     i += o;
   }
-  if(last<0) {
+
+  if(!can_del) {
     /* we cannot remove anything */
     return 0;
   } else {
-    if(last == 0) {
+    if(last_ws == 0) {
       strbuf_reset(&(tk->lexeme));
       tk->pos += len;
       return -1;
     } else {
-      assert(last_ln >=0);
-      if(last_ln + 1 == last) {
-        /* the linebreak follows the first whitespace .
-         * omit the linebreak as well */
+      if(last_ws >0) {
+        assert(last_ln + 1 == last_ws);
         strbuf_resize(&(tk->lexeme),last_ln);
-      } else {
-        strbuf_resize(&(tk->lexeme),last);
       }
+      /* If last_ws is negative value which means
+       * that the last line is an empty line, so
+       * we really need not to delete it since you
+       * cannot have a empty line without space. If
+       * user have it, then it means user has an
+       * extra empty line which indeed should not be
+       * deleted */
       return 0;
     }
   }

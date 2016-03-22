@@ -185,7 +185,7 @@ void opt_rpt_err( struct opt* o ,const char* fmt , ... ) {
   len = snprintf(o->a->err,ERROR_BUFFER_SIZE,
       "[Optimizer:(%s:" SIZEF "," SIZEF ")] at:... %s ...!\nMessage:",
       obj->fn_tb->name.str,
-      SIZEP(ln),SIZEP(pos),
+      SIZEP(pos),SIZEP(ln),
       cs);
   assert( len >0 && len < ERROR_BUFFER_SIZE );
   /* output the rest messge even it is truncated */

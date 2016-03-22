@@ -3,8 +3,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-
+#ifndef DO_COVERAGE
 int main() {
+#else
+int jinja_test_main() {
+#endif
   DIR* d;
   struct dirent* dir;
   struct ajj* a;
@@ -13,7 +16,7 @@ int main() {
   int cnt = 0;
   assert(devnull);
   a = ajj_create();
-  output = ajj_io_create_file(a,devnull);
+  output = ajj_io_create_file(a,stdout);
   d = opendir("jinja-test-case/");
   if(d) {
     while((dir = readdir(d)) != NULL) {
@@ -31,4 +34,5 @@ int main() {
     }
   }
   printf("FINISH:%d\n",cnt);
+  return 0;
 }

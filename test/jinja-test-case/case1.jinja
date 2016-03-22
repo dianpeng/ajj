@@ -1,1 +1,122 @@
-{% do assert_expr( 1+2 == 3, '1+2==3') %}
+{# Literal test #}
+{% do assert_expr( 'Hello' == 'Hello' , 'Hello == Hello' ) %}
+{% do assert_expr( 123 == 123 , '123 == 123' ) %}
+{% with l = [1,2,3,4] %}
+   {% do assert_expr( l[0] == 1 , 'l[0] == 1' ) %}
+   {% do assert_expr( l[1] == 2 , 'l[1] == 2' ) %}
+   {% do assert_expr( l[2] == 3 , 'l[2] == 3' ) %}
+   {% do assert_expr( l[3] == 4 , 'l[3] == 4' ) %}
+{% endwith %}
+{% with l = (1,2,3,4) %}
+   {% do assert_expr( l[0] == 1 , 'l[0] == 1' ) %}
+   {% do assert_expr( l[1] == 2 , 'l[1] == 2' ) %}
+   {% do assert_expr( l[2] == 3 , 'l[2] == 3' ) %}
+   {% do assert_expr( l[3] == 4 , 'l[3] == 4' ) %}
+{% endwith %}
+{# Simple arithmatic #}
+{% do assert_expr( 1 + 1 == 2 , '1+1==2') %}
+{% do assert_expr( 1 / 2 == 0.5,'1/2 == 0.5') %}
+{% do assert_expr( 1 //2 == 0  ,'1//2== 0') %}
+{% do assert_expr( 11 % 7 == 4 ,'11%7 == 4') %}
+{% do assert_expr( 2*10 == 20 , '2*10 ==20') %}
+{% do assert_expr( 0*0.00004 == 0,'0*0.00004 ==0') %}
+{% do assert_expr( 1+2*3 == 7, '1+2*3 == 7') %}
+{% do assert_expr( 2**10 == 1024,'2**10 == 1024') %}
+{% do assert_expr( 1+2**3/2 == 5,'1+2**3/2 == 5') %}
+{% do assert_expr( 1-1 == 0 ,'1-1 == 0') %}
+{% do assert_expr( 1-2*3==-5,'1-2*3 == -5') %}
+{% do assert_expr( -1*15 == -15, '-1*15 == -15' ) %}
+{% do assert_expr( -100/2 == -50, '-100/2 == -50' ) %}
+{% do assert_expr( -100/-2 == 50, '-100/-2 == 50' ) %}
+{# String Operations #}
+{% with str = 'Hello' %}
+    {% do assert_expr( str[0] == 'H' , 'Hello[0] == H' ) %}
+    {% do assert_expr( str[1] == 'e' , 'Hello[1] == e' ) %}
+    {% do assert_expr( str[2] == 'l' , 'Hello[2] == l' ) %}
+    {% do assert_expr( str[3] == 'l' , 'Hello[3] == l' ) %}
+    {% do assert_expr( str[4] == 'o' , 'Hello[4] == o' ) %}
+    {% do assert_expr( str[5] == None, 'Hello[5] == None') %}
+{% endwith %}
+{% do assert_expr( 'Verify'*2 == 'VerifyVerify' , 'Verify*2 == VerifyVerify' ) %}
+{% do assert_expr( 'Hello' + 'World' == 'HelloWorld' , 'Hello+World==HelloWorld') %}
+{# Simple arithmatic with variable #}
+{% with %}
+    {% set var1 = 10 %}
+    {% set var2 = -50 %}
+    {% do assert_expr( var1 * var2 == -500 , 'var1*var2 == -500' ) %}
+    {% do assert_expr( var2 / var1 == -4-1 , 'var2/var1 == -4-1' ) %}
+    {% do assert_expr( var2 + var1 == -40  , 'var2+var1 == -40 ' ) %}
+    {% do assert_expr( var2 - var1 == -60  , 'var2-var1 == -60 ' ) %}
+{% endwith %}
+{% with var1 = 10*2*-1 %}
+    {% set var2 = 10/-2 %}
+    {% do assert_expr( var1 == -20 , 'var1 == -20' ) %}
+    {% do assert_expr( var2 == -5  , 'var2 == -5 ' ) %}
+    {% do assert_expr( var1/var2 == var2 + 9 , 'var+9 == var1/var2') %}
+{% endwith %}
+{% with var1 = 2*2 %}
+    {% set var2 = 2 %}
+    {% do assert_expr( var2 ** var1 == 16 ,'var2**var1 == 16' ) %}
+    {% with var3 = 10 %}
+        {% do assert_expr( var3 ** var2 == 100,'var3**var2 == 100') %}
+        {% do assert_expr( var3/var1 == 2.5 ,'var3/var1 == 2.5') %}
+        {% do assert_expr( var1**var2+var3-var3**var2 ==-74,'-74') %}
+    {% endwith %}
+{% endwith %}
+{# Comparison #}
+{% do assert_expr( 1 == 1 , ' 1==1 ') %}
+{% do assert_expr( True == True , ' True == True ' ) %}
+{% do assert_expr( False!= True , ' False!= True ' ) %}
+{% do assert_expr( False == False, ' False == False ' ) %}
+{% do assert_expr( 'String' == 'String' , 'String == String') %}
+{% do assert_expr( 'String' != 'string' , 'String != string') %}
+{% do assert_expr( 'B' > 'A' , 'B>A') %}
+{% do assert_expr( 'B' >='A' , 'B>=A') %}
+{% do assert_expr( 'A' < 'B' , 'A<B' ) %}
+{% do assert_expr( 'A'<= 'B' , 'A<=B') %}
+{% do assert_expr( 'A'<= 'A' , 'A<=A') %}
+{% do assert_expr( 'A'>= 'A' , 'A>=A') %}
+{% do assert_expr( 1*2+3/4 == 2.75 , '1*2+3/4 == 2.75') %}
+{% do assert_expr( -1*4 == -4 , '-1*4 == -4') %}
+{# Logic #}
+{% do assert_expr( True and True , 'True and True') %}
+{% do assert_expr( (False and True) == False, '(False and True) == False' ) %}
+{% do assert_expr( not (False and True == False),'(False and True == False) == False') %}
+{% do assert_expr( not False and True , 'not False and True' ) %}
+{% do assert_expr( False or True , 'False or True' ) %}
+{% do assert_expr( True or False, 'True or False' ) %}
+{% do assert_expr( not False , 'not False' ) %}
+{# Operators #}
+{% do assert_expr( #1 == 1 ,'#1 == 1') %}
+{% do assert_expr( #'True' == 4 , '#\'True\' == 4') %}
+{% do assert_expr( #True == 1, '#True ==1') %}
+{% do assert_expr( #False == 1,'#False == 1') %}
+{% do assert_expr( #None == 0, '#None == 0' ) %}
+{% with l = [1,2,3,4] %}
+    {% do assert_expr( #l == 4, '#l == 4') %}
+{% endwith %}
+{% with d = { 'a':1 , 'b':2 ,'c':3 } %}
+    {% do assert_expr( #d == 3, '#d == 3') %}
+{% endwith %}
+{% with l = [1,2,3,4] %}
+    {% do assert_expr( 1 in l, '1 in l' ) %}
+    {% do assert_expr( 2 in l, '2 in l' ) %}
+    {% do assert_expr( 3 in l, '3 in l' ) %}
+    {% do assert_expr( 4 in l, '4 in l' ) %}
+    {% do assert_expr( 5 not in l , '5 not in l' ) %}
+{% endwith %}
+{% with d = { 'a':1 , 'b':2 , 'c':3 } %}
+    {% do assert_expr( 'a' in d, 'a in d' ) %}
+    {% do assert_expr( 'b' in d, 'b in d' ) %}
+    {% do assert_expr( 'c' in d, 'c in d' ) %}
+    {% do assert_expr( 'e' not in d, 'e not in d' ) %}
+{% endwith %}
+{% do assert_expr( True is True , 'True is True' ) %}
+{% do assert_expr( False is False,'False is False') %}
+{% do assert_expr( None is None, 'None is None') %}
+{% do assert_expr( None is undefined, 'None is undefined') %}
+{% do assert_expr( None is not defined,'None is not defined') %}
+{% do assert_expr( 3 is odd, '3 is odd') %}
+{% do assert_expr( 4 is even,'4 is even') %}
+{% do assert_expr(5 is not even,'5 is not even') %}
+{% do assert_expr( True is True is not False is True is not None ,'shit') %}

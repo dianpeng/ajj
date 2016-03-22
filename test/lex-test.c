@@ -499,6 +499,10 @@ static void test_ws() {
   }
 }
 
+#ifndef DO_COVERAGE
 int main() {
+#else
+int lex_test_main() {
+#endif
   test_ws();
 }

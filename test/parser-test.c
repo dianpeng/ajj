@@ -21,6 +21,7 @@
     } \
   } while(0)
 
+static
 void do_test( const char* src , int pos , int dump ) {
   struct ajj* a = ajj_create();
   struct ajj_object* obj = parse(a,"HelloWorld",src,0);
@@ -560,7 +561,11 @@ void test_constexpr() {
   }
 }
 
+#ifndef DO_COVERAGE
 int main() {
+#else
+int parser_test_main() {
+#endif
   test0();
   test_set();
   test_for();
