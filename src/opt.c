@@ -287,9 +287,10 @@ int opt_to_number( struct opt* o , struct ajj_value* v,
   struct ajj_object obj;
 
   if(v->type == AJJ_VALUE_STRING) {
+    void* sptr = v->value.__private__;
     v->value.object = &obj;
     v->value.object->tp = AJJ_VALUE_STRING;
-    obj.val.str = *((struct string*)v->value.__private__);
+    obj.val.str = *((struct string*)sptr);
   }
 
   if(vm_to_number(v,val)) {
@@ -424,19 +425,10 @@ int pass1( struct opt* o ) {
     switch(instr) {
       case VM_HALT:
         goto done;
-      case VM_NOP0:
-      case VM_NOP1:
+      case VM_NOP:
         o->cur_shrink+=1; /* one more shrink */
         reserve_buf(o,off_buf,0,struct offset_buffer);
         o->off_buf[o->off_buf_len].pos = o->pc-1;
-        o->off_buf[o->off_buf_len].shrink = o->cur_shrink;
-        ++o->off_buf_len;
-        break;
-      case VM_NOP2:
-        (void)bc_2nd_arg(o->prg,&(o->pc));
-        o->cur_shrink+=2; /* one more shrink */
-        reserve_buf(o,off_buf,0,struct offset_buffer);
-        o->off_buf[o->off_buf_len].pos = o->pc-2;
         o->off_buf[o->off_buf_len].shrink = o->cur_shrink;
         ++o->off_buf_len;
         break;
@@ -644,7 +636,8 @@ int fold_bin( struct opt* o , instructions instr ) {
           r.type != AJJ_VALUE_STRING ) {
         /* convert to number and then do the processing */
         double lv, rv;
-        if( opt_to_number(o,&l,&lv) || opt_to_number(o,&r,&rv) )
+        if( opt_to_number(o,&l,&lv) ||
+            opt_to_number(o,&r,&rv) )
           return -1; /* failed, and also impossible to execute this
                       * code during the runtime as well */
         else {
@@ -660,7 +653,8 @@ int fold_bin( struct opt* o , instructions instr ) {
         struct string val;
         int i_val;
         int sref = old_sref(o);
-        if( opt_to_string(o,&l,&ls) || opt_to_string(o,&r,&rs) ) {
+        if( opt_to_string(o,&l,&ls) ||
+            opt_to_string(o,&r,&rs) ) {
           str_destroy(&ls);
           str_destroy(&rs);
           return -1;
@@ -671,42 +665,39 @@ int fold_bin( struct opt* o , instructions instr ) {
       }
       return 0;
     case VM_MUL:
-      if( r.type == AJJ_VALUE_STRING || l.type == AJJ_VALUE_STRING ) {
-        if( r.type == AJJ_VALUE_STRING && l.type == AJJ_VALUE_STRING ) {
-          opt_rpt_err(o,"Cannot multiply 2 string!");
-          return -1;
+      if( (r.type == AJJ_VALUE_STRING && l.type != AJJ_VALUE_STRING ) ||
+          (l.type == AJJ_VALUE_STRING && r.type != AJJ_VALUE_STRING)) {
+        int rv;
+        struct str lv = NULL_STR;
+        struct string val;
+        int i_val;
+        int sref = old_sref(o);
+        struct ajj_value* str_val;
+        struct ajj_value* num_val;
+
+        if( r.type == AJJ_VALUE_STRING ) {
+          str_val = &r;
+          num_val = &l;
         } else {
-          int rv;
-          struct str lv = NULL_STR;
-          struct string val;
-          int i_val;
-          int sref = old_sref(o);
-          struct ajj_value* str_val;
-          struct ajj_value* num_val;
-
-          if( r.type == AJJ_VALUE_STRING ) {
-            str_val = &r;
-            num_val = &l;
-          } else {
-            str_val = &l;
-            num_val = &r;
-          }
-
-          if( opt_to_integer(o,num_val,&rv ) )
-            return -1;
-
-          if( opt_to_string(o,str_val,&lv) )
-            return -1;
-
-          val = str_mul(&lv,rv);
-          str_destroy(&lv);
-
-          i_val = program_const_str(o->prg,&val,1);
-          bin_emit1(o,sref,VM_LSTR,i_val);
+          str_val = &l;
+          num_val = &r;
         }
+
+        if( opt_to_integer(o,num_val,&rv ) )
+          return -1;
+
+        if( opt_to_string(o,str_val,&lv) )
+          return -1;
+
+        val = str_mul(&lv,rv);
+        str_destroy(&lv);
+
+        i_val = program_const_str(o->prg,&val,1);
+        bin_emit1(o,sref,VM_LSTR,i_val);
       } else {
         double lv,rv;
-        if( opt_to_number(o,&l,&lv) || opt_to_number(o,&r,&rv) ) {
+        if( opt_to_number(o,&l,&lv) ||
+            opt_to_number(o,&r,&rv) ) {
           return -1;
         } else {
           double val = lv * rv;

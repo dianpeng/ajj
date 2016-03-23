@@ -120,3 +120,6 @@
 {% do assert_expr( 4 is even,'4 is even') %}
 {% do assert_expr(5 is not even,'5 is not even') %}
 {% do assert_expr( True is True is not False is True is not None ,'shit') %}
+{# Implicit cast #}
+{% do assert_expr( 1+'2' == '12' , '1+\'2\' == \'12\'' ) %}
+{% do assert_expr( '1'*'3'== 3   , '\'1\'*\'3\' == 3' ) %}

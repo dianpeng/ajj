@@ -444,7 +444,7 @@ int parse_tuple_or_subexpr( struct parser* p , struct emitter* em , int* tp ) {
   } else {
     CONSUME(TK_RPAR);
     /* Emit a NOP initially since we don't have a real tuple */
-    EMIT0_AT(em,instr,VM_NOP0);
+    EMIT0_AT(em,instr,VM_NOP);
     *tp = EXPR;
     return 0;
   }
@@ -1052,7 +1052,7 @@ int parse_expr( struct parser* p, struct emitter* em ) {
     EMIT1_AT(em,val1_jmp,VM_JMP,end_l);
   } else {
     /* nothing serious, just issue a NOP */
-    EMIT1_AT(em,fjmp,VM_NOP1,0);
+    EMIT0_AT(em,fjmp,VM_NOP);
   }
   return 0;
 }
@@ -1349,7 +1349,7 @@ done:
     EMIT1_AT(em,end_jmp[i],VM_JMP,emitter_label(em));
   }
   /* patch the last one as a NOP1 */
-  EMIT1_AT(em,end_jmp[jmp_sz-1],VM_NOP1,0);
+  EMIT0_AT(em,end_jmp[jmp_sz-1],VM_NOP);
   return 0;
 }
 #undef PUSH_JMP

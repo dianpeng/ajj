@@ -6,6 +6,8 @@
 #include "parse.h" /* for MAX_LOOP_CTRL_SIZE */
 #include <stdio.h>
 
+#define SMALL_STRING_THRESHOLD 128
+
 struct ajj;
 struct ajj_object;
 struct func_table;

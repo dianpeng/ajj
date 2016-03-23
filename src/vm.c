@@ -100,7 +100,7 @@ int program_add_par( struct program* prg , struct string* name ,
 
 int program_const_str( struct program* prg , struct string* str ,
     int own ) {
-  if( str->len > 128 ) {
+  if( str->len > SMALL_STRING_THRESHOLD ) {
 insert:
     if( prg->str_len == prg->str_cap ) {
       prg->str_tbl = mem_grow(prg->str_tbl,
@@ -629,8 +629,8 @@ DEFINE_BIN_HANDLER(gt)
 static
 struct ajj_value vm_mul( struct ajj* a , const struct ajj_value* l,
     const struct ajj_value* r , int* fail ) {
-  if( l->type == AJJ_VALUE_STRING ||
-      r->type == AJJ_VALUE_STRING ) {
+  if( (l->type == AJJ_VALUE_STRING && r->type != AJJ_VALUE_STRING) ||
+      (r->type == AJJ_VALUE_STRING && l->type != AJJ_VALUE_STRING) ) {
     int own;
     struct string s;
     struct string str;
@@ -2340,16 +2340,8 @@ int vm_main( struct ajj* a ) {
         stk_pop(a,1); /* stk_pop the filename */
       } vm_end(EXTENDS)
 
-      /* NOPS, should not exist after optimization */
-      vm_beg(NOP0) {
-      } vm_end(NOP0)
-
-      vm_beg(NOP1) {
-      } vm_end(NOP1)
-
-      vm_beg(NOP2) {
-        (void)instr_2nd_arg(a);
-      } vm_end(NOP2)
+      vm_beg(NOP) {
+      } vm_end(NOP)
 
       default:
         UNREACHABLE();

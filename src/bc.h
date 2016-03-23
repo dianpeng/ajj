@@ -138,9 +138,7 @@ extern struct string LOOP;
   X(VM_INCLUDE,2,"include") \
   X(VM_IMPORT,1,"import") \
   X(VM_EXTENDS,0,"extends") \
-  X(VM_NOP0,0,"nop0") \
-  X(VM_NOP1,1,"nop1") \
-  X(VM_NOP2,2,"nop2") \
+  X(VM_NOP,0,"nop") \
   X(VM_HALT,0,"halt") \
   X(VM_ERROR,0,"error")
 
