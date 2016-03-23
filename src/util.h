@@ -176,8 +176,6 @@ void strbuf_reserve( struct strbuf* buf , size_t cap );
 
 void strbuf_push_rune( struct strbuf* buf , Rune );
 
-void strbuf_push( struct strbuf* buf , char c );
-
 void strbuf_append( struct strbuf* buf , const char* str , size_t len );
 
 int strbuf_append_file( struct strbuf* buf , FILE* f );

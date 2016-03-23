@@ -541,9 +541,6 @@ int check_const( struct opt* o , int pos , struct ajj_value* val ) {
     case VM_LFALSE:
       *val = AJJ_FALSE;
       return 0;
-    case VM_LZERO:
-      *val = ajj_value_number(0);
-      return 0;
     case VM_LNONE:
       *val = AJJ_NONE;
       return 0;

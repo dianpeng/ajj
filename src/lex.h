@@ -45,7 +45,15 @@ enum {
   X(TK_ENDUPVALUE,"endupvalue") \
   X(TK_JSON,"json") \
   X(TK_OVERRIDE,"override") \
-  X(TK_OPTIONAL,"optional")
+  X(TK_OPTIONAL,"optional") \
+  X(TK_IS,"is") \
+  X(TK_ISN,"isnot") \
+  X(TK_IN,"in") \
+  X(TK_NIN,"notin") \
+  X(TK_AND,"and") \
+  X(TK_OR,"or") \
+  X(TK_NOT,"not") \
+  X(TK_RETURN,"return")
 
 #define TOKEN_LIST(X) \
   X(TK_TEXT,"<text>") \
@@ -82,14 +90,6 @@ enum {
   X(TK_SEMICOLON,";") \
   X(TK_COLON,":") \
   X(TK_QUESTION,"?") \
-  X(TK_IS,"is") \
-  X(TK_ISN,"isnot") \
-  X(TK_IN,"in") \
-  X(TK_NIN,"notin") \
-  X(TK_AND,"and") \
-  X(TK_OR,"or") \
-  X(TK_NOT,"not") \
-  X(TK_RETURN,"return") \
   X(TK_TRUE,"<true>") \
   X(TK_FALSE,"<false>") \
   X(TK_NONE,"<none>") \

@@ -365,15 +365,6 @@ void strbuf_init_cap( struct strbuf* buf , size_t cap ) {
   strbuf_reserve(buf,cap);
 }
 
-void strbuf_push( struct strbuf* buf , char c ) {
-  if( buf->cap == 0 || buf->cap == buf->len+1 ) {
-    buf->str = mem_grow(buf->str,sizeof(char),0,&(buf->cap));
-  }
-  buf->str[buf->len] = c;
-  ++(buf->len);
-  buf->str[buf->len]=0; /* always end with a null terminator */
-}
-
 void strbuf_push_rune( struct strbuf* buf , Rune c ) {
   int l;
   if( buf->cap == 0 || buf->cap < buf->len +1+ UTFmax ) {

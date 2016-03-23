@@ -39,7 +39,7 @@
     tk_move(&(p->tk)); \
   } while(0)
 
-#define CALLE(P) \
+#define TRY(P) \
   do { \
     if( (P) ) { \
       return -1; \
@@ -372,7 +372,7 @@ int parse_seq( struct parser* p , struct emitter* em , int rtk ) {
     return 0;
   }
   do {
-    CALLE(parse_expr(p,em));
+    TRY(parse_expr(p,em));
     EMIT0(em,VM_ATTR_PUSH);
     if( tk->tk == TK_COMMA ) {
       tk_move(tk);
@@ -431,7 +431,7 @@ int parse_tuple_or_subexpr( struct parser* p , struct emitter* em , int* tp ) {
   }
 
   /* Parsing the expression here at first */
-  CALLE(parse_expr(p,em));
+  TRY(parse_expr(p,em));
 
   /* Checking if we have pending comma or not */
   if( tk->tk == TK_COMMA ) {
@@ -467,11 +467,11 @@ int parse_dict( struct parser* p , struct emitter* em ) {
 
   do {
     /* get the key */
-    CALLE(parse_expr(p,em));
+    TRY(parse_expr(p,em));
     /* eat the colon */
     CONSUME(TK_COLON);
     /* get value */
-    CALLE(parse_expr(p,em));
+    TRY(parse_expr(p,em));
     /* generate code push them into the dict */
     EMIT0(em,VM_ATTR_SET);
 
@@ -556,7 +556,7 @@ int parse_invoke_par( struct parser* p , struct emitter* em ) {
   }
 
   do {
-    CALLE(parse_expr(p,em));
+    TRY(parse_expr(p,em));
     ++num;
     if( num > AJJ_FUNC_ARG_MAX_SIZE ) {
       /* do a check here ? */
@@ -591,14 +591,14 @@ int parse_attr_or_methodcall( struct parser* p, struct emitter* em ,
     /* We have a symbol name as prefix, we need to load the object
      * whose name is this prefix on to the stack first and then parse
      * the expression and then retrieve the attributes */
-    CALLE(parse_var_prefix(p,em,prefix));
+    TRY(parse_var_prefix(p,em,prefix));
   }
 
   /* Move tokenizer */
   tk_move(tk);
 
   if( comp_tk == TK_LSQR ) {
-    CALLE(parse_expr(p,em));
+    TRY(parse_expr(p,em));
     EMIT0(em,VM_ATTR_GET);
     CONSUME(TK_RSQR);
   } else {
@@ -606,7 +606,7 @@ int parse_attr_or_methodcall( struct parser* p, struct emitter* em ,
     int idx;
 
     EXPECT_VARIABLE();
-    CALLE(symbol(p,&comp));
+    TRY(symbol(p,&comp));
     idx=program_const_str(em->prg,&comp,1);
     tk_move(tk);
     /* Until now, we still don't know we are calling a member function or
@@ -614,7 +614,7 @@ int parse_attr_or_methodcall( struct parser* p, struct emitter* em ,
      * token to decide */
     if( tk->tk == TK_LPAR ) {
       int num;
-      CALLE((num = parse_invoke_par(p,em))<0);
+      TRY((num = parse_invoke_par(p,em))<0);
       EMIT2(em,VM_ATTR_CALL,idx,num);
     } else {
       EMIT1(em,VM_LSTR,idx);
@@ -643,7 +643,7 @@ int parse_funccall_or_pipe( struct parser* p , struct emitter* em ,
   assert(p->tk.tk == TK_LPAR);
 
   idx=program_const_str(em->prg,prefix,1);
-  CALLE((num=parse_invoke_par(p,em))<0); /* generate call parameter for function */
+  TRY((num=parse_invoke_par(p,em))<0); /* generate call parameter for function */
   num += pipe;
   EMIT2(em,VM_CALL,idx,num); /* call the function based on current object */
   return 0;
@@ -665,19 +665,19 @@ int parse_attr( struct parser* p, struct emitter* em ,
   struct tokenizer* tk = &(p->tk);
 
   if( tk->tk == TK_LPAR ) {
-    CALLE(parse_funccall_or_pipe(p,em,prefix,0));
+    TRY(parse_funccall_or_pipe(p,em,prefix,0));
   } else {
     if( tk->tk == TK_DOT || tk->tk == TK_LSQR ) {
-      CALLE(parse_attr_or_methodcall(p,em,prefix));
+      TRY(parse_attr_or_methodcall(p,em,prefix));
     } else {
       /* Just a variable name */
       if( !string_null(prefix) )
-        CALLE(parse_var_prefix(p,em,prefix));
+        TRY(parse_var_prefix(p,em,prefix));
     }
   }
   do {
     if( tk->tk == TK_DOT || tk->tk == TK_LSQR ) {
-      CALLE(parse_attr_or_methodcall(p,em,&NULL_STRING));
+      TRY(parse_attr_or_methodcall(p,em,&NULL_STRING));
     } else {
       break;
     }
@@ -730,7 +730,7 @@ int parse_is( struct parser* p , struct emitter* em ) {
     }
   } else {
     /* an oridinary variable name */
-    CALLE(symbol(p,&fn)); /* get the test name */
+    TRY(symbol(p,&fn)); /* get the test name */
   }
   fn_idx = program_const_str(em->prg,&fn,1);
   tk_move(tk);
@@ -743,12 +743,12 @@ int parse_is( struct parser* p , struct emitter* em ) {
 
 static
 int parse_test( struct parser* p , struct emitter* em ) {
-  CALLE(parse_is(p,em));
+  TRY(parse_is(p,em));
   do {
     switch(p->tk.tk) {
       case TK_IS:
       case TK_ISN:
-        CALLE(parse_is(p,em));
+        TRY(parse_is(p,em));
         break;
       default:
         return 0;
@@ -768,9 +768,9 @@ int parse_atomic( struct parser* p, struct emitter* em ) {
                      * keyword candidate */
   switch(tk->tk) {
     case TK_VARIABLE:
-      CALLE(symbol(p,&str)); /* get the symbol name */
+      TRY(symbol(p,&str)); /* get the symbol name */
       tk_move(tk); /* move the token */
-      CALLE(parse_attr(p,em,&str));
+      TRY(parse_attr(p,em,&str));
       break;
     case TK_STRING:
       strbuf_move(&(tk->lexeme),&str);
@@ -796,16 +796,16 @@ int parse_atomic( struct parser* p, struct emitter* em ) {
       tk_move(tk);
       break;
     case TK_LPAR:
-      CALLE(parse_tuple_or_subexpr(p,em,&tp));
+      TRY(parse_tuple_or_subexpr(p,em,&tp));
       if(tp == TUPLE)
-        CALLE(parse_attr(p,em,&NULL_STRING));
+        TRY(parse_attr(p,em,&NULL_STRING));
       break;
     case TK_LSQR:
-      CALLE(parse_list(p,em));
-      CALLE(parse_attr(p,em,&NULL_STRING));
+      TRY(parse_list(p,em));
+      TRY(parse_attr(p,em,&NULL_STRING));
       break;
     case TK_LBRA:
-      CALLE(parse_dict(p,em));
+      TRY(parse_dict(p,em));
       break;
     default:
       parser_rpt_err(p,"Unexpected token here:%s!",
@@ -813,7 +813,7 @@ int parse_atomic( struct parser* p, struct emitter* em ) {
       return -1;
   }
   if( tk->tk == TK_IS || tk->tk == TK_ISN )
-    CALLE(parse_test(p,em));
+    TRY(parse_test(p,em));
   return 0;
 }
 
@@ -847,7 +847,7 @@ int parse_unary( struct parser* p, struct emitter* em ) {
 
 done:
   /* start to parse the thing here */
-  CALLE(parse_atomic(p,em));
+  TRY(parse_atomic(p,em));
   for( i = 0 ; i < op_len ; ++i ) {
     EMIT0(em,op[i]);
   }
@@ -863,7 +863,7 @@ done:
 static
 int parse_factor( struct parser* p, struct emitter* em ) {
   struct tokenizer* tk = &(p->tk);
-  CALLE(parse_unary(p,em));
+  TRY(parse_unary(p,em));
   do {
     int op;
     switch(tk->tk) {
@@ -877,7 +877,7 @@ int parse_factor( struct parser* p, struct emitter* em ) {
         goto done;
     }
     tk_move(tk);
-    CALLE(parse_unary(p,em));
+    TRY(parse_unary(p,em));
     EMIT0(em,op);
   } while(1);
 
@@ -888,7 +888,7 @@ done: /* finish */
 static
 int parse_term( struct parser* p, struct emitter* em ) {
   struct tokenizer* tk = &(p->tk);
-  CALLE(parse_factor(p,em));
+  TRY(parse_factor(p,em));
   do {
     int op;
     switch(tk->tk) {
@@ -900,7 +900,7 @@ int parse_term( struct parser* p, struct emitter* em ) {
       default: goto done;
     }
     tk_move(tk);
-    CALLE(parse_factor(p,em));
+    TRY(parse_factor(p,em));
     EMIT0(em,op);
   } while(1);
 done:
@@ -910,7 +910,7 @@ done:
 static
 int parse_cmp( struct parser* p, struct emitter* em ) {
   struct tokenizer* tk = &(p->tk);
-  CALLE(parse_term(p,em));
+  TRY(parse_term(p,em));
   do {
     int op;
     switch(tk->tk) {
@@ -926,7 +926,7 @@ int parse_cmp( struct parser* p, struct emitter* em ) {
         goto done;
     }
     tk_move(tk);
-    CALLE(parse_term(p,em));
+    TRY(parse_term(p,em));
     EMIT0(em,op);
   } while(1);
 done:
@@ -953,7 +953,7 @@ int parse_logic( struct parser* p, struct emitter* em ) {
     ++sz; \
   } while(0)
 
-  CALLE(parse_cmp(p,em));
+  TRY(parse_cmp(p,em));
   do {
     switch(tk->tk) {
       case TK_AND: PUSH_JMP(VM_JLF); break;
@@ -967,7 +967,7 @@ int parse_logic( struct parser* p, struct emitter* em ) {
         goto done;
     }
     tk_move(tk);
-    CALLE(parse_cmp(p,em));
+    TRY(parse_cmp(p,em));
   } while(1);
 done:
   pos = emitter_label(em);
@@ -985,12 +985,12 @@ int parse_pipe( struct parser* p , struct emitter* em ) {
   assert( tk->tk == TK_PIPE );
   tk_move(tk);
   EXPECT_VARIABLE();
-  CALLE(symbol(p,&prefix));
+  TRY(symbol(p,&prefix));
   tk_move(tk);
   if( tk->tk == TK_LPAR ) {
-    CALLE(parse_funccall_or_pipe(p,em,&prefix,1));
+    TRY(parse_funccall_or_pipe(p,em,&prefix,1));
   } else if( tk->tk != TK_DOT && tk->tk != TK_LSQR ) {
-    CALLE(parse_pipecmd(p,em,&prefix));
+    TRY(parse_pipecmd(p,em,&prefix));
   } else {
     parser_rpt_err(p,"Cannot pipe to a method call or object call "
         "syntax. Pipe can only work with free function syntax!");
@@ -1001,9 +1001,9 @@ int parse_pipe( struct parser* p , struct emitter* em ) {
 
 static
 int parse_pipe_list( struct parser* p , struct emitter* em ) {
-  CALLE(parse_logic(p,em));
+  TRY(parse_logic(p,em));
   while(p->tk.tk == TK_PIPE)
-    CALLE(parse_pipe(p,em));
+    TRY(parse_pipe(p,em));
   return 0;
 }
 
@@ -1025,7 +1025,7 @@ int parse_expr( struct parser* p, struct emitter* em ) {
   int fjmp = EMIT_PUT(em,1);
   int val1_l = emitter_label(em);
   struct tokenizer* tk = &(p->tk);
-  CALLE(parse_pipe_list(p,em));
+  TRY(parse_pipe_list(p,em));
 
   /* Check if we have a pending if or not */
   if( tk->tk == TK_IF ) {
@@ -1038,13 +1038,13 @@ int parse_expr( struct parser* p, struct emitter* em ) {
 
     /* Parse the condition part */
     cond_l = emitter_label(em);
-    CALLE(parse_pipe_list(p,em));
+    TRY(parse_pipe_list(p,em));
     EMIT1(em,VM_JT,val1_l); /* jump to value1 when condition is true */
 
     CONSUME(TK_ELSE);
 
     /* Parse the alternative value */
-    CALLE(parse_pipe_list(p,em));
+    TRY(parse_pipe_list(p,em));
     end_l = emitter_label(em);
 
     /* Patch the jump */
@@ -1086,7 +1086,7 @@ parse_constseq( struct parser* p , int ltk , int rtk ,
 
   do {
     struct ajj_value val;
-    CALLE(parse_constexpr(p,&val));
+    TRY(parse_constexpr(p,&val));
     builtin_list_push(p->a,l,&val);
     if( tk->tk == TK_COMMA ) {
       tk_move(tk);
@@ -1126,7 +1126,7 @@ parse_constdict( struct parser* p , struct ajj_value* output ) {
 
   do {
     struct ajj_value key , val;
-    CALLE(parse_constexpr(p,&key));
+    TRY(parse_constexpr(p,&key));
 
     /* check if key is string */
     if( key.type != AJJ_VALUE_STRING ) {
@@ -1142,7 +1142,7 @@ parse_constdict( struct parser* p , struct ajj_value* output ) {
           tk_get_name(tk->tk));
       return -1;
     }
-    CALLE(parse_constexpr(p,&val));
+    TRY(parse_constexpr(p,&val));
 
     /* insert the key into the list */
     builtin_dict_insert(p->a,d,&key,&val);
@@ -1260,7 +1260,7 @@ int parse_print( struct parser* p, struct emitter* em ) {
   if( tk->tk == TK_REXP ) {
     tk_move(tk);
   } else {
-    CALLE(parse_expr(p,em));
+    TRY(parse_expr(p,em));
     EMIT0(em,VM_PRINT);
     CONSUME(TK_REXP);
   }
@@ -1287,13 +1287,13 @@ int parse_branch ( struct parser* p, struct emitter* em ) {
 
   assert( tk->tk == TK_IF );
   tk_move(tk);
-  CALLE(parse_expr(p,em));
+  TRY(parse_expr(p,em));
   /* condition failed jump */
   cond_jmp = EMIT_PUT(em,1);
 
   CONSUME(TK_RSTMT);
 
-  CALLE(parse_scope(p,em,1,1,0));
+  TRY(parse_scope(p,em,1,1,0));
   /* jump out of the scope */
   PUSH_JMP(EMIT_PUT(em,1));
   do {
@@ -1316,7 +1316,7 @@ int parse_branch ( struct parser* p, struct emitter* em ) {
           assert(cond_jmp > 0 );
           /* modify the previous conditional jmp */
           EMIT1_AT(em,cond_jmp,VM_JF,emitter_label(em));
-          CALLE(parse_expr(p,em));
+          TRY(parse_expr(p,em));
 
           cond_jmp = EMIT_PUT(em,1);
           CONSUME(TK_RSTMT);
@@ -1337,7 +1337,7 @@ int parse_branch ( struct parser* p, struct emitter* em ) {
             tk_get_name(tk->tk));
         return -1;
     }
-    CALLE(parse_scope(p,em,1,1,0));
+    TRY(parse_scope(p,em,1,1,0));
     PUSH_JMP(EMIT_PUT(em,1));
   } while(1);
 done:
@@ -1384,7 +1384,7 @@ int parse_func_prolog( struct parser* p , struct emitter* em ) {
   size_t i;
   for( i = 0 ; i < em->prg->par_size ; ++i ) {
     /* Generate rest of named parameters */
-    CALLE(lex_scope_set(p,&(em->prg->par_list[i].name))==-2);
+    TRY(lex_scope_set(p,&(em->prg->par_list[i].name))==-2);
   }
   return 0;
 }
@@ -1401,11 +1401,11 @@ int parse_func_prolog( struct parser* p , struct emitter* em ) {
 
 static
 int alloc_func_builtin_var( struct parser* p ) {
-  CALLE(lex_scope_set(p,&ARGNUM)==-2);
-  CALLE(lex_scope_set(p,&FUNC)==-2);
-  CALLE(lex_scope_set(p,&VARGS)==-2);
-  CALLE(lex_scope_set(p,&CALLER)==-2);
-  CALLE(lex_scope_set(p,&SELF)==-2);
+  TRY(lex_scope_set(p,&ARGNUM)==-2);
+  TRY(lex_scope_set(p,&FUNC)==-2);
+  TRY(lex_scope_set(p,&VARGS)==-2);
+  TRY(lex_scope_set(p,&CALLER)==-2);
+  TRY(lex_scope_set(p,&SELF)==-2);
   return 0;
 }
 
@@ -1415,17 +1415,17 @@ parse_func_body( struct parser* p , struct emitter* em ) {
   struct lex_scope* scp = lex_scope_top(p);
 #endif
 
-  CALLE(lex_scope_jump(p) == NULL);
+  TRY(lex_scope_jump(p) == NULL);
   assert( lex_scope_top(p)->parent == NULL );
   assert( lex_scope_top(p)->len == 0 );
   assert( lex_scope_top(p)->end == 0 );
 
-  CALLE(parse_func_prolog(p,em)); /* Parsing the prolog */
-  CALLE(alloc_func_builtin_var(p)); /* builtin vars */
+  TRY(parse_func_prolog(p,em)); /* Parsing the prolog */
+  TRY(alloc_func_builtin_var(p)); /* builtin vars */
 
   /* start to parse the function body ,which is just
    * another small code scope */
-  CALLE(parse_scope(p,em,1,1,0));
+  TRY(parse_scope(p,em,1,1,0));
 
   /* Generate return instructions */
   EMIT0(em,VM_RET);
@@ -1455,7 +1455,7 @@ parse_func_prototype( struct parser* p , struct program* prg ) {
       struct ajj_value def_val = AJJ_NONE;
       /* Building prototype of function */
       EXPECT_VARIABLE();
-      CALLE(symbol(p,&par_name));
+      TRY(symbol(p,&par_name));
       tk_move(tk);
 
       /* If we have already seen def , all the value after the first
@@ -1475,10 +1475,10 @@ parse_func_prototype( struct parser* p , struct program* prg ) {
         /* Eat the assignment */
         tk_move(tk);
         /* We have a default value , parse it through constexpr */
-        CALLE(parse_constexpr(p,&def_val));
+        TRY(parse_constexpr(p,&def_val));
       }
       /* Add it into the function prototype */
-      CALLE(program_add_par(prg,&par_name,1,&def_val));
+      TRY(program_add_par(prg,&par_name,1,&def_val));
       /* Check if we can exit or continue */
       if( tk->tk == TK_COMMA ) {
         tk_move(tk);
@@ -1506,7 +1506,7 @@ parse_macro( struct parser* p , struct emitter* em ) {
   /* We need the name of the macro then we can get a new
    * program objects */
   EXPECT_VARIABLE();
-  CALLE(symbol(p,&name));
+  TRY(symbol(p,&name));
   assert(p->tpl->val.obj.fn_tb);
   /* Add a new function into the table */
   new_prg = func_table_add_jj_macro(
@@ -1515,11 +1515,11 @@ parse_macro( struct parser* p , struct emitter* em ) {
   emitter_init(&new_em,new_prg);
 
   /* Parsing the prototype */
-  CALLE(parse_func_prototype(p,new_prg));
+  TRY(parse_func_prototype(p,new_prg));
   CONSUME(TK_RSTMT);
 
   /* Parsing the rest of the body */
-  CALLE(parse_func_body(p,&new_em));
+  TRY(parse_func_body(p,&new_em));
   CONSUME(TK_ENDMACRO);
   CONSUME(TK_RSTMT);
   return 0;
@@ -1539,7 +1539,7 @@ parse_block( struct parser* p , struct emitter* em ) {
   assert(tk->tk == TK_BLOCK);
   tk_move(tk);
   EXPECT_VARIABLE();
-  CALLE(symbol(p,&name));
+  TRY(symbol(p,&name));
   tk_move(tk);
 
   if( tk->tk != TK_RSTMT && !(p->extends) ) {
@@ -1560,7 +1560,7 @@ parse_block( struct parser* p , struct emitter* em ) {
   emitter_init(&new_em,new_prg);
 
   /* Parsing the functions */
-  CALLE(parse_func_body(p,&new_em));
+  TRY(parse_func_body(p,&new_em));
   /* Parsing the rest of the body */
   CONSUME(TK_ENDBLOCK);
   CONSUME(TK_RSTMT);
@@ -1590,7 +1590,7 @@ parse_call( struct parser* p , struct emitter* em ) {
       p->tpl->val.obj.fn_tb,&name,1);
   emitter_init(&new_em,new_prg);
   if( tk->tk == TK_LPAR ) {
-    CALLE(parse_func_prototype(p,new_prg)); /* parse the prototype */
+    TRY(parse_func_prototype(p,new_prg)); /* parse the prototype */
   }
 
   /* now generate the code for setting it up as a upvalue */
@@ -1604,13 +1604,13 @@ parse_call( struct parser* p , struct emitter* em ) {
   strbuf_move(&(tk->lexeme),&macro_name);
   tk_move(tk);
   EXPECT(TK_LPAR); /* must be a function call */
-  CALLE(parse_funccall_or_pipe(p,em,&macro_name,0)); /* generate call */
+  TRY(parse_funccall_or_pipe(p,em,&macro_name,0)); /* generate call */
   CONSUME(TK_RSTMT); /* eat the %} */
   /* generate pop to pop out the return value */
   EMIT1(em,VM_POP,1);
 
   /* now parse the function body */
-  CALLE(parse_func_body(p,&new_em));
+  TRY(parse_func_body(p,&new_em));
   CONSUME(TK_ENDCALL);
   CONSUME(TK_RSTMT);
 
@@ -1670,32 +1670,32 @@ static int parse_for_body( struct parser* p ,
    * here on the stack named loop for the VM to initialize the
    * loop objects */
   EMIT0(em,VM_LNONE); /* loop object */
-  CALLE(parse_loop_cond(p,em)); /* map/list object */
+  TRY(parse_loop_cond(p,em)); /* map/list object */
 
-  CALLE((scp=lex_scope_enter(p,1))==NULL);
+  TRY((scp=lex_scope_enter(p,1))==NULL);
 
   /* for loop object */
 #ifndef NDEBUG
-  CALLE((local_idx = lex_scope_set(p,&LOOP)) == -2);
+  TRY((local_idx = lex_scope_set(p,&LOOP)) == -2);
   assert(local_idx == -1);
 #else
-  CALLE(lex_scope_set(p,&LOOP) == -2);
+  TRY(lex_scope_set(p,&LOOP) == -2);
 #endif
 
   /* for object itself */
 #ifndef NDEBUG
-  CALLE((local_idx=lex_scope_set(p,&obj_name))==-2);
+  TRY((local_idx=lex_scope_set(p,&obj_name))==-2);
   assert(local_idx == -1);
 #else
-  CALLE(lex_scope_set(p,&obj_name) == -2);
+  TRY(lex_scope_set(p,&obj_name) == -2);
 #endif
 
   /* for iterator */
 #ifndef NDEBUG
-  CALLE((local_idx=lex_scope_set(p,&itr_name))==-2);
+  TRY((local_idx=lex_scope_set(p,&itr_name))==-2);
   assert(local_idx == -1);
 #else
-  CALLE(lex_scope_set(p,&itr_name) == -2);
+  TRY(lex_scope_set(p,&itr_name) == -2);
 #endif
 
   string_destroy(&obj_name); /* object name */
@@ -1770,7 +1770,7 @@ static int parse_for_body( struct parser* p ,
     /* got a filter */
     tk_move(&(p->tk));
     /* parse the filter onto the stack */
-    CALLE(parse_expr(p,em));
+    TRY(parse_expr(p,em));
     /* now check whether filter is correct or not */
     filter_jmp = EMIT_PUT(em,1);
   }
@@ -1779,7 +1779,7 @@ static int parse_for_body( struct parser* p ,
   /* change stack pointer which is used for break/continue */
   scp->lctrl->stk_pos = scp->end;
   /* parse the scope */
-  CALLE(parse_scope(p,em,0,0,0));
+  TRY(parse_scope(p,em,0,0,0));
 
   assert( lex_scope_top(p)->is_loop && lex_scope_top(p)->in_loop );
 
@@ -1864,7 +1864,7 @@ static int parse_for_body( struct parser* p ,
     tk_move(&(p->tk));
     CONSUME(TK_RSTMT);
     /* Parse the else scope */
-    CALLE(parse_scope(p,em,1,1,0));
+    TRY(parse_scope(p,em,1,1,0));
   } else {
     /* Patch the else_jmp */
     EMIT1_AT(em,else_jmp,VM_JEPT,emitter_label(em));
@@ -1939,21 +1939,21 @@ parse_filter( struct parser* p , struct emitter* em ) {
 
   assert(tk->tk == TK_FILTER);
   tk_move(tk);
-  CALLE(symbol(p,&name));
+  TRY(symbol(p,&name));
   tk_move(tk);
   vm_lstr = EMIT_PUT(em,1);
 
   if( tk->tk == TK_LPAR ) {
-    CALLE(parse_funccall_or_pipe(p,em,&name,1));
+    TRY(parse_funccall_or_pipe(p,em,&name,1));
   } else {
-    CALLE(parse_pipecmd(p,em,&name));
+    TRY(parse_pipecmd(p,em,&name));
   }
   CONSUME(TK_RSTMT);
   strbuf_move(&(tk->lexeme),&text);
   text_idx=program_const_str(em->prg,&text,1);
   EMIT1_AT(em,vm_lstr,VM_LSTR,text_idx);
   tk_move(tk);
-  CALLE(finish_scope_tag(p,TK_ENDFILTER));
+  TRY(finish_scope_tag(p,TK_ENDFILTER));
   return 0;
 }
 
@@ -1964,7 +1964,7 @@ int parse_assign( struct parser* p , struct emitter* em ,
   struct tokenizer* tk = &(p->tk);
   assert(tk->tk == TK_ASSIGN);
   tk_move(tk);
-  CALLE(parse_expr(p,em));
+  TRY(parse_expr(p,em));
   if( idx >= 0 ) {
     EMIT1(em,VM_STORE,idx);
   }
@@ -1982,7 +1982,7 @@ int parse_set( struct parser* p, struct emitter* em ) {
 
   EXPECT_VARIABLE();
   sym = strbuf_tostring(&(tk->lexeme));
-  CALLE((var_idx=lex_scope_set(p,&sym))==-2);
+  TRY((var_idx=lex_scope_set(p,&sym))==-2);
 
   tk_move(tk); /* Move forward */
 
@@ -2004,10 +2004,10 @@ int parse_set( struct parser* p, struct emitter* em ) {
       EMIT1(em,VM_STORE,var_idx);
     }
     /* set up the var based on the stack */
-    CALLE(finish_scope_tag(p,TK_ENDSET));
+    TRY(finish_scope_tag(p,TK_ENDSET));
     return 0;
   } else if( tk->tk == TK_ASSIGN ) {
-    CALLE(parse_assign(p,em,var_idx));
+    TRY(parse_assign(p,em,var_idx));
     CONSUME(TK_RSTMT);
     return 0;
   } else {
@@ -2024,7 +2024,7 @@ parse_do( struct parser* p , struct emitter* em ) {
     struct tokenizer* tk = &(p->tk);
   assert( tk->tk == TK_DO );
   tk_move(tk);
-  CALLE(parse_expr(p,em));
+  TRY(parse_expr(p,em));
   EMIT1(em,VM_POP,1);
   CONSUME(TK_RSTMT);
   return 0;
@@ -2155,15 +2155,15 @@ parse_with( struct parser* p , struct emitter* em ) {
     /* We have shortcut writing, so we need to generate a new lexical
      * scope */
     sym = strbuf_tostring(&(tk->lexeme));
-    CALLE(lex_scope_enter(p,0) == NULL);
-    CALLE((idx=lex_scope_set(p,&sym))==-2);
+    TRY(lex_scope_enter(p,0) == NULL);
+    TRY((idx=lex_scope_set(p,&sym))==-2);
     tk_move(tk);
     ENTER_SCOPE(); /* enter the scope */
     EXPECT(TK_ASSIGN); /* check wether we have an assignment operator */
-    CALLE(parse_assign(p,em,idx));
+    TRY(parse_assign(p,em,idx));
     CONSUME(TK_RSTMT);
     /* Now parsing the whole scope body */
-    CALLE(parse_scope(p,em,0,0,1));
+    TRY(parse_scope(p,em,0,0,1));
     EMIT0(em,VM_EXIT); /* exit the scope */
     CONSUME(TK_ENDWITH);
     CONSUME(TK_RSTMT);
@@ -2171,7 +2171,7 @@ parse_with( struct parser* p , struct emitter* em ) {
     lex_scope_exit(p);
   } else {
     CONSUME(TK_RSTMT);
-    CALLE(parse_scope(p,em,1,1,0));
+    TRY(parse_scope(p,em,1,1,0));
     CONSUME(TK_ENDWITH);
     CONSUME(TK_RSTMT);
   }
@@ -2194,7 +2194,7 @@ int parse_return( struct parser* p ,struct emitter* em ) {
     EMIT0(em,VM_RET); /* return */
   } else {
     /* evaluate the expression */
-    CALLE(parse_expr(p,em));
+    TRY(parse_expr(p,em));
     EMIT0(em,VM_RET);
   }
   CONSUME(TK_RSTMT);
@@ -2240,7 +2240,7 @@ parse_context_body( struct parser* p , struct emitter* em ) {
        * 3. attributes for this value. */
 
       EMIT1(em,VM_LIMM,var_idx); /* symbol name index */
-      CALLE(parse_expr(p,em));   /* value */
+      TRY(parse_expr(p,em));   /* value */
       if( tk->tk == TK_OPTIONAL ) {
         opt = UPVALUE_OPTIONAL;
         tk_move(tk);
@@ -2289,7 +2289,7 @@ parse_include( struct parser* p , struct emitter* em ) {
 
   assert(tk->tk == TK_INCLUDE);
   tk_move(tk);
-  CALLE(parse_expr(p,em));
+  TRY(parse_expr(p,em));
 
   if( tk->tk == TK_RSTMT ) {
     /* line inclusion */
@@ -2304,7 +2304,7 @@ parse_include( struct parser* p , struct emitter* em ) {
   } else if( tk->tk == TK_JSON ) {
     tk_move(tk);
     /* json template name */
-    CALLE(parse_expr(p,em));
+    TRY(parse_expr(p,em));
     CONSUME(TK_RSTMT);
     cnt = parse_context_body(p,em);
     CONSUME(TK_ENDINCLUDE);
@@ -2347,11 +2347,11 @@ parse_import( struct parser* p , struct emitter* em ) {
   tk_move(tk);
 
   /* Get the filepath as an expression */
-  CALLE(parse_expr(p,em));
+  TRY(parse_expr(p,em));
   CONSUME(TK_AS);
 
   /* Get the symbol name onto stack as a string literal */
-  CALLE(symbol(p,&name));
+  TRY(symbol(p,&name));
   tk_move(tk);
 
   /* Get the index */
@@ -2369,7 +2369,7 @@ parse_extends( struct parser * p , struct emitter* em ) {
   struct tokenizer* tk = &(p->tk);
   assert(tk->tk == TK_EXTENDS);
   tk_move(tk);
-  CALLE(parse_expr(p,em));
+  TRY(parse_expr(p,em));
   EMIT0(em,VM_EXTENDS);
   CONSUME(TK_RSTMT);
   ++(p->extends);
@@ -2395,7 +2395,7 @@ parse_scope( struct parser* p , struct emitter* em ,
   int only_extends = is_in_main(p) && (p->extends > 0);
 
   if( enter_scope )
-    CALLE(lex_scope_enter(p,0) == NULL);
+    TRY(lex_scope_enter(p,0) == NULL);
 
   stk_start = lex_scope_top(p)->end;
 
@@ -2404,7 +2404,7 @@ parse_scope( struct parser* p , struct emitter* em ,
 
 #define HANDLE_CASE(T,t) \
     case TK_##T: \
-      CALLE(parse_##t(p,em)); \
+      TRY(parse_##t(p,em)); \
       break; \
     case TK_END##T: \
       goto done;
@@ -2430,7 +2430,7 @@ parse_scope( struct parser* p , struct emitter* em ,
       if( only_extends ) {
         /* We only allow block instructions in here */
         if( tk->tk == TK_BLOCK )
-          CALLE(parse_block(p,em));
+          TRY(parse_block(p,em));
         else if( tk->tk == TK_ENDBLOCK )
           goto done;
         else
@@ -2447,19 +2447,19 @@ parse_scope( struct parser* p , struct emitter* em ,
           HANDLE_CASE(WITH,with)
           case TK_INCLUDE:
             if( is_in_main(p) )
-              CALLE(parse_include(p,em));
+              TRY(parse_include(p,em));
             else
               goto fail;
             break;
           case TK_IMPORT:
             if( is_in_main(p) )
-              CALLE(parse_import(p,em));
+              TRY(parse_import(p,em));
             else
               goto fail;
             break;
           case TK_EXTENDS:
             if( is_in_main(p) )
-              CALLE(parse_extends(p,em));
+              TRY(parse_extends(p,em));
             else
               goto fail;
             break;
@@ -2467,34 +2467,34 @@ parse_scope( struct parser* p , struct emitter* em ,
           case TK_ELSE:
             goto done;
           case TK_DO:
-            CALLE(parse_do(p,em));
+            TRY(parse_do(p,em));
             break;
           case TK_MOVE:
-            CALLE(parse_move(p,em));
+            TRY(parse_move(p,em));
             break;
           case TK_BREAK:
             if( lex_scope_top(p)->in_loop ) {
-              CALLE(parse_break(p,em));
+              TRY(parse_break(p,em));
             } else {
               goto fail;
             }
             break;
           case TK_CONTINUE:
             if( lex_scope_top(p)->in_loop ) {
-              CALLE(parse_continue(p,em));
+              TRY(parse_continue(p,em));
             } else {
               goto fail;
             }
             break;
           case TK_RETURN:
-            CALLE(parse_return(p,em));
+            TRY(parse_return(p,em));
             break;
           default:
             goto fail;
         }
       }
     } else if( tk->tk == TK_LEXP ) {
-      CALLE(parse_print(p,em));
+      TRY(parse_print(p,em));
     } else {
       if( tk->tk != TK_EOF )
         goto fail;

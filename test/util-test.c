@@ -117,7 +117,7 @@ void test_strbuf() {
     strbuf_init(&b1); /* initialize the buffer */
     assert( b1.len == 0 );
     for( i = 0 ; i < 8; ++i ) {
-      strbuf_push(&b1,'c');
+      strbuf_push_rune(&b1,'c');
     }
     assert( b1.len == 8 );
     assert( b1.cap > 8 );
@@ -136,7 +136,7 @@ void test_strbuf() {
     int i;
     strbuf_init(&b1);
     for( i = 0 ; i < 256; ++i )
-      strbuf_push(&b1,'c');
+      strbuf_push_rune(&b1,'c');
     assert(b1.len == 256);
     assert(b1.cap > 256);
     for( i = 0 ; i < 256; ++i )
@@ -160,7 +160,7 @@ void test_strbuf() {
     string_destroy(&str);
 
     for( i = 0 ; i < STRBUF_INIT_SIZE/2+1; ++i ) {
-      strbuf_push(&b1,'d');
+      strbuf_push_rune(&b1,'d');
     }
     assert(b1.len == STRBUF_INIT_SIZE/2+1);
     assert(b1.cap == STRBUF_INIT_SIZE);
@@ -177,7 +177,7 @@ void test_strbuf() {
 
     /* Adding a large string larger than the threshold */
     for( i = 0 ; i < STRBUF_MOVE_THRESHOLD*2 ; ++i ) {
-      strbuf_push(&b1,'c');
+      strbuf_push_rune(&b1,'c');
     }
     assert(b1.cap > STRBUF_MOVE_THRESHOLD);
     assert(b1.len == STRBUF_MOVE_THRESHOLD*2);

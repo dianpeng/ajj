@@ -2055,11 +2055,6 @@ int vm_main( struct ajj* a ) {
         stk_push(a,AJJ_FALSE);
       } vm_end(LFALSE)
 
-      vm_beg(LZERO) {
-        struct ajj_value val = ajj_value_number(0);
-        stk_push(a,val);
-      } vm_end(LZERO)
-
       vm_beg(LNONE) {
         stk_push(a,AJJ_NONE);
       } vm_end(LNONE)

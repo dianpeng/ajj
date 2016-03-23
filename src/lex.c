@@ -797,7 +797,7 @@ token_id tk_lex_raw( struct tokenizer* tk ) {
         }
       }
     }
-    strbuf_push(&(tk->lexeme),c1);
+    strbuf_push_rune(&(tk->lexeme),c1);
     i += o1; /* advance the i */
   }
 

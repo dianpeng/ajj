@@ -110,7 +110,6 @@ extern struct string LOOP;
   X(VM_LTRUE,0,"ltrue") \
   X(VM_LFALSE,0,"lfalse") \
   X(VM_LNUM,1,"lnum") \
-  X(VM_LZERO,0,"lzero") \
   X(VM_LNONE,0,"lnone") \
   X(VM_LIMM,1,"limm") \
   X(VM_LLIST,0,"llist") \
