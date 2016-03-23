@@ -1,8 +1,10 @@
-#include "ajj-priv.h"
-#include "parse.h"
-#include "object.h"
-#include "bc.h"
-#include "opt.h"
+#include <ajj-priv.h>
+#include <parse.h>
+#include <object.h>
+#include <bc.h>
+#include <opt.h>
+
+#include "test-check.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -51,12 +53,16 @@ void do_test( const char* src ) {
     struct ajj_object* jinja;
     struct ajj_io* nopt_io;
     struct ajj_io* opt_io;
+    const struct program* prg;
+    struct ajj_io* output;
 
     a = ajj_create();
     nopt_io = ajj_io_create_mem(a,1024);
     opt_io = ajj_io_create_mem(a,1024);
+    output = ajj_io_create_file(a,stdout);
 
     jinja = parse(a,"<test>",src,0);
+    prg = ajj_object_jinja_main(jinja);
     FATAL(jinja,"%s",a->err);
 
     FATAL(!vm_run_jinja(a,jinja,nopt_io),"%s",a->err);

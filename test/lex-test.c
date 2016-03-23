@@ -2,6 +2,8 @@
 #include <lex.h>
 #include <ajj-priv.h>
 
+#include "test-check.h"
+
 
 static
 void test_basic() {

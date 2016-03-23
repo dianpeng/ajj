@@ -1687,7 +1687,7 @@ static int parse_for_body( struct parser* p ,
   CALLE((local_idx=lex_scope_set(p,&obj_name))==-2);
   assert(local_idx == -1);
 #else
-  CALLE(lex_scope_set(p,&LOOP) == -2);
+  CALLE(lex_scope_set(p,&obj_name) == -2);
 #endif
 
   /* for iterator */
@@ -1695,7 +1695,7 @@ static int parse_for_body( struct parser* p ,
   CALLE((local_idx=lex_scope_set(p,&itr_name))==-2);
   assert(local_idx == -1);
 #else
-  CALLE(lex_scope_set(p,&LOOP) == -2);
+  CALLE(lex_scope_set(p,&itr_name) == -2);
 #endif
 
   string_destroy(&obj_name); /* object name */

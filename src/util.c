@@ -625,17 +625,17 @@ struct map_entry* map_insert_entry_c( struct map* d ,
 
 #define MAP_VALUE(D,E) (((char*)((D)->value)) + ((E)-((D)->entry))*(D)->obj_sz)
 
-static inline
-void map_value_store( struct map* d, struct map_entry* e , const void* val ) {
-  void* pos = MAP_VALUE(d,e);
-  memcpy(pos,val,d->obj_sz);
-}
+#define map_value_store(D,E,V) \
+  do { \
+    void* pos = MAP_VALUE(D,E); \
+    memcpy(pos,V,(D)->obj_sz); \
+  } while(0)
 
-static inline
-void map_value_load( struct map* d , struct map_entry* e , void* val ) {
-  void* pos = MAP_VALUE(d,e);
-  memcpy(val,pos,d->obj_sz);
-}
+#define map_value_load(D,E,V) \
+  do { \
+    void* pos = MAP_VALUE(D,E); \
+    memcpy(V,pos,(D)->obj_sz); \
+  } while(0)
 
 static
 struct map_entry* map_insert_entry(struct map* d,

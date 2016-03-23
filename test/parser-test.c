@@ -2,9 +2,10 @@
 #include <bc.h>
 #include <object.h>
 #include <ajj.h>
-#include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
+
+#include "test-check.h"
 
 #define TEST_CHECK(X) \
   do { \

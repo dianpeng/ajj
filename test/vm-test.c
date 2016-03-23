@@ -12,6 +12,8 @@
 
 #include <dirent.h>
 
+#include "test-check.h"
+
 static void do_test( const char* src ) {
   struct ajj* a = ajj_create();
   struct ajj_object* jinja;

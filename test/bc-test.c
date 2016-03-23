@@ -1,6 +1,8 @@
 #define MINIMUM_CODE_PAGE_SIZE 1
-#include "../src/bc.h"
-#include "../src/vm.h"
+#include <bc.h>
+#include <vm.h>
+
+#include "test-check.h"
 
 #define EMIT0(I) \
   do { \

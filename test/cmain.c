@@ -8,7 +8,6 @@ extern int vm_test_main();
 
 int main() {
   bc_test_main();
-  util_test_main();
   lex_test_main();
   opt_test_main();
   parser_test_main();

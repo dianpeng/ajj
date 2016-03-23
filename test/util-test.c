@@ -1,5 +1,7 @@
-#include "../src/util.h"
 #include <stdio.h>
+#include <util.h>
+
+#include "test-check.h"
 
 
 struct list_node {
@@ -335,7 +337,7 @@ void test_slab() {
 
     for( i = 0 ; i < 512 ; ++i ) {
       char name[1024];
-      int* ptr;
+      int* ptr = NULL;
       sprintf(name,"HelloWorld:%d",i);
       assert(!map_remove_c(&m,name,&ptr));
       slab_free(&slb,ptr);
