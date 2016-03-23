@@ -1,0 +1,121 @@
+{# Branch #}
+{% with var1 = True %}
+    {% if var1 %}
+        {% do assert_expr(var1,'var1') %}
+    {% else %}
+        {% do assert_expr(False,'Never show up!') %}
+    {% endif %}
+{% endwith %}
+{# For each if-elif-else chain, elif will try if the if failed #}
+{% with var1 = 10 %}
+    {% if var1 % 2 == 1 %}
+        {% do assert_expr(False,'Not here') %}
+    {% elif var1 % 8 == 1 %}
+        {% do assert_expr(False,'Not here') %}
+    {% elif var1 % 4 == 1 %}
+        {% do assert_expr(False,'Not here') %}
+    {% elif var1 == 10 %}
+        {% do assert_expr(var1 == 10,'var1 == 10') %}
+    {% else %}
+        {% do assert_expr(False,'Not here') %}
+    {% endif %}
+{% endwith %}
+{# Multiple If #}
+{% with var1 = 10 %}
+    {% set cnt = 0 %}
+    {% if var1 == 10 %}
+        {% set var = cnt + 1 %}
+        {% move cnt = var %}
+    {% endif %}
+    {% if var1 % 2 == 0 %}
+        {% set var = cnt + 1 %}
+        {% move cnt = var %}
+    {% endif %}
+    {% if var1 % 5 == 0 %}
+        {% set var = cnt + 1 %}
+        {% move cnt = var %}
+    {% endif %}
+    {% if var1 % 4 == 1 %}
+        {% set var = cnt + 1 %}
+        {% move cnt = var %}
+    {% endif %}
+    {% do assert_expr( cnt == 3 , 'Cnt == 3') %}
+{% endwith %}
+{# Loop #}
+{% with cnt = 0 %}
+    {% for i in xrange(1000) %}
+        {% set var = cnt + 1 %}
+        {% do assert_expr( i == var-1 , 'i == var-1') %}
+        {% move cnt = var %}
+    {% endfor %}
+{% endwith %}
+{% for k,v in {'U':1,'V':2} %}
+    {% if k == 'U' %}
+        {% do assert_expr( v == 1 , 'v == 1') %}
+    {% elif k == 'V' %}
+        {% do assert_expr( v == 2 , 'v == 2') %}
+    {% endif %}
+{% endfor %}
+{% for k,v in [1,2,3] %}
+    {% do assert_expr( k == v-1 , 'k == v-1' ) %}
+{% endfor %}
+{% for k,v in 'abcd' %}
+    {% if k == 0 %}
+        {% do assert_expr( v == 'a' , 'v == a') %}
+    {% elif k == 1 %}
+        {% do assert_expr( v == 'b' , 'v == b') %}
+    {% elif k == 2 %}
+        {% do assert_expr( v == 'c' , 'v == c') %}
+    {% elif k == 3 %}
+        {% do assert_expr( v == 'd' , 'v == d') %}
+    {% endif %}
+{% endfor %}
+{# Nested loop #}
+{% with cnt = 0 %}
+    {% for outer in xrange(4) %}
+        {% for inner in xrange(5) %}
+            {% set v = cnt + 1 %}
+            {% move cnt = v %}
+        {% endfor %}
+    {% endfor %}
+    {% do assert_expr( cnt == 4*5 , 'cnt == 4*5' ) %}
+{% endwith %}
+{% with cnt = 0 %}
+    {% for outer in xrange(4) %}
+        {% set var1 = 1 %}
+        {% for inner in xrange(5) %}
+            {% set var1 = 0 %}
+            {% set v = cnt + 1 %}
+            {% move cnt = v %}
+            {% do assert_expr( var1 == 0 ,'var1 == 0') %}
+        {% endfor %}
+        {% do assert_expr( var1 == 1, 'var1 == 1') %}
+    {% endfor %}
+    {% do assert_expr( cnt == 4*5 , 'cnt == 4*5' ) %}
+{% endwith %}
+{# Loop with condition and controls #}
+{% with cnt = 0 %}
+    {% for outer in xrange(4) %}
+        {% for inner in xrange(5) %}
+            {% if inner >= 2 %}
+                {% break %}
+            {% endif %}
+            {% set v = cnt + 1 %}
+            {% move cnt = v %}
+        {% endfor %}
+    {% endfor %}
+    {% do assert_expr( cnt == 4*2, 'cnt == 4*2' ) %}
+{% endwith %}
+{% with cnt = 0 %}
+    {% for outer in xrange(4) %}
+        {% for inner in xrange(5) %}
+            {% if inner >= 2 %}
+                {% break %}
+            {% endif %}
+            {% set v = cnt + 1 %}
+            {% move cnt = v %}
+            {% do assert_expr( inner < 2 , 'inner < 2') %}
+        {% endfor %}
+    {% endfor %}
+    {% do assert_expr( cnt == 4*2, 'cnt == 4*2' ) %}
+{% endwith %}

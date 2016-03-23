@@ -832,7 +832,7 @@ void test_extends() {
 
     load_template(a,"Base",
         "{% block b1 %}" \
-        "Won't show up\n" \
+        "Won't show up through extends\n" \
         "{% endblock %}" \
         "{% block b2 %}" \
         "{% do self.b1() %}" \
@@ -859,7 +859,7 @@ void test_extends() {
 
     load_template(a,"Base",
         "{% block b1 %}" \
-        "Won't show up\n" \
+        "Won't show up through extends\n" \
         "{% endblock %}" \
         "{% block b2 %}" \
         "{% do self.b1() %}" \
@@ -971,7 +971,7 @@ void test_include_with_json() {
     struct ajj_object* jinja;
     struct ajj_io* output = ajj_io_create_file(a,stdout);
 
-    load_template(a,"Inc1","{{ Hello_World }}\nasd asd asd");
+    load_template(a,"Inc1","{{ Hello_World }}");
 
     jinja = load_template(a,"Main","{% include 'Inc1' json 'hello_world.json' %}{% endinclude %}");
     if( vm_run_jinja(a,jinja,output) ) {

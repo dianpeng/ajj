@@ -623,15 +623,16 @@ struct map_entry* map_insert_entry_c( struct map* d ,
   }
 }
 
-#define MAP_VALUE(D,E) (((char*)((D)->value)) + ((E)-((D)->entry))*(D)->obj_sz)
+#define MAP_VALUE(D,E) \
+    (((char*)((D)->value)) + ((E)-((D)->entry))*(D)->obj_sz)
 
-#define map_value_store(D,E,V) \
+#define MAP_VALUE_STORE(D,E,V) \
   do { \
     void* pos = MAP_VALUE(D,E); \
     memcpy(pos,V,(D)->obj_sz); \
   } while(0)
 
-#define map_value_load(D,E,V) \
+#define MAP_VALUE_LOAD(D,E,V) \
   do { \
     void* pos = MAP_VALUE(D,E); \
     memcpy(V,pos,(D)->obj_sz); \
@@ -669,7 +670,7 @@ void map_rehash( struct map* d ) {
     e = map_insert_entry(&temp_d,&(o->key),o->hash,1);
     e->key = o->key;
     e->hash = o->hash;
-    map_value_store(&temp_d,e,MAP_VALUE(d,o));
+    MAP_VALUE_STORE(&temp_d,e,MAP_VALUE(d,o));
     if(e->del) e->del = 0;
     if(!(e->used)) {
       e->used = 1;
@@ -707,7 +708,7 @@ int map_insert( struct map* d, const struct string* key , int own ,
   ++d->len;
   ++d->use;
   e->hash = fh;
-  map_value_store(d,e,val);
+  MAP_VALUE_STORE(d,e,val);
   return 0;
 }
 
@@ -736,7 +737,7 @@ int map_insert_c( struct map* d, const char* key ,
   ++d->len;
   ++d->use;
   e->hash = fh;
-  map_value_store(d,e,val);
+  MAP_VALUE_STORE(d,e,val);
   return 0;
 }
 
@@ -751,7 +752,7 @@ int map_remove( struct map* d , const struct string* key , void* output ) {
     /* destroy the key */
     string_destroy(&(e->key));
     if( output )
-      map_value_load(d,e,output);
+      MAP_VALUE_LOAD(d,e,output);
     e->del = 1;
     --d->use;
     return 0;
@@ -773,7 +774,7 @@ int map_remove_c( struct map* d , const char* key , void* output ) {
     /* destroy string */
     string_destroy(&(e->key));
     if( output )
-      map_value_load(d,e,output);
+      MAP_VALUE_LOAD(d,e,output);
     e->del = 1;
     --d->use;
     return 0;

@@ -206,8 +206,8 @@ int unwind_stack( struct ajj* a , char* buf ) {
           "%d:(... %s ...)@(" SIZEF ":" SIZEF ") <%s>:%s arg-num:%d\n",
           i,
           cbuf,
-          SIZEP(pos),
           SIZEP(ln),
+          SIZEP(pos),
           obj_name,
           fr[i].name.str,
           fr[i].par_cnt);
@@ -951,7 +951,7 @@ struct ajj_value vm_lstr( struct ajj* a, int idx ) {
   struct ajj_object* obj;
   assert(IS_JINJA(fr->entry));
   assert(prg->str_len > (size_t)idx);
-  obj = ajj_object_create_const_string(\
+  obj = ajj_object_create_const_string(
       a,a->rt->cur_gc,cstr);
   return ajj_value_assign(obj);
 }
@@ -1577,8 +1577,8 @@ int vm_caller( struct ajj* a,
       &CALLER_STUB,NULL);
 
   if(!uv) {
-    ajj_error(a,"The upvalue variable:%s for internal usage is not " \
-        "set! This is caused by user try to call this macro as a " \
+    ajj_error(a,"The upvalue variable:%s for internal usage is not "
+        "set! This is caused by user try to call this macro as a "
         "free function but not invoke it inside of a call block !",
         CALLER_STUB.str);
     return AJJ_EXEC_FAIL;
