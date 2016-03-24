@@ -245,13 +245,13 @@ void rewrite_error( struct ajj* a ) {
 }
 
 /* stk_push/stk_pop to manipulate the value stack */
-static
-void stk_pop(struct ajj* a , int off ) {
-  int val = off;
-  struct func_frame* fr = cur_frame(a);
-  assert(fr->esp >= val);
-  fr->esp -= val;
-}
+#define stk_pop(a,off) \
+  do { \
+    int val = off; \
+    struct func_frame* fr = cur_frame(a); \
+    assert(fr->esp >= val); \
+    fr->esp -= val; \
+  } while(0)
 
 #define stk_push(a,v) \
   do { \
@@ -350,17 +350,18 @@ void program_destroy( struct program* prg ) {
 /* =============================
  * Decoding
  * ===========================*/
-static
-int next_instr( struct ajj* a ) {
-  struct func_frame* fr;
-  const struct program* prg;
-  assert( a->rt->cur_call_stk > 0 );
-  fr = cur_frame(a);
-  assert(IS_JINJA(fr->entry));
-  prg = GET_JINJAFUNC(fr->entry);
-  fr->ppc = fr->pc;
-  return bc_next(prg,&(fr->pc));
-}
+#define next_instr(NI,A) \
+  do { \
+    struct func_frame* fr; \
+    const struct program* prg; \
+    assert( a->rt->cur_call_stk > 0 ); \
+    fr = cur_frame(a); \
+    assert(IS_JINJA(fr->entry)); \
+    prg = GET_JINJAFUNC(fr->entry); \
+    fr->ppc = fr->pc; \
+    (NI) = bc_next(prg,&(fr->pc)); \
+  } while(0)
+
 
 #define instr_1st_arg(c) bc_1st_arg(c)
 
@@ -1667,15 +1668,16 @@ int vm_super( struct ajj* a,
  * switch cases. The reason is inline threading is *not* portable */
 static
 int vm_main( struct ajj* a ) {
-
+  int c;
   int fail;
 
 #define vm_beg(X) case VM_##X:
 #define vm_end(X) break;
 
   do {
-    int c = next_instr(a);
-    instructions instr = BC_INSTRUCTION(c);
+    instructions instr;
+    next_instr(c,a);
+    instr = BC_INSTRUCTION(c);
 
     switch(instr) {
       vm_beg(ADD) {

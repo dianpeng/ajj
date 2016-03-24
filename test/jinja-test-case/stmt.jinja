@@ -119,3 +119,26 @@
     {% endfor %}
     {% do assert_expr( cnt == 4*2, 'cnt == 4*2' ) %}
 {% endwith %}
+{# Test Continue/Break correct or not #}
+{% with %}
+    {% set cont_cnt = 0 %}
+    {% set break_cnt = 0 %}
+    {% for outer in xrange(4) %}
+        {% for inner in xrange(5) %}
+            {% if inner >= 2 %}
+                {% set i = break_cnt + 1 %}
+                {% move break_cnt = i %}
+                {% break %}
+                {% do assert_expr(False) %}
+            {% endif %}
+            {% if inner % 2 == 1 %}
+                {% set i = cont_cnt + 1 %}
+                {% move cont_cnt = i %}
+                {% continue %}
+                {% do assert_expr(False) %}
+            {% endif %}
+        {% endfor %}
+    {% endfor %}
+    {% do assert_expr(cont_cnt == 4) %}
+    {% do assert_expr(break_cnt== 4) %}
+{% endwith %}
