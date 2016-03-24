@@ -250,3 +250,10 @@
     {% endfor %}
     {% do assert_expr( A == 'V'*81 ) %}
 {% endwith %}
+{# 4. Do statment #}
+{% with alist = [1,2,3,4] %}
+    {% with V = 123 %}
+        {% do alist.append(5) %}
+    {% endwith %}
+    {% do assert_expr( alist[4] == 5 ) %}
+{% endwith %}
