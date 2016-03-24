@@ -659,6 +659,8 @@ int fold_bin( struct opt* o , instructions instr ) {
         val = str_concate(&ls,&rs);
         i_val = program_const_str(o->prg,&val,1);
         bin_emit1(o,sref,VM_LSTR,i_val);
+        str_destroy(&ls);
+        str_destroy(&rs);
       }
       return 0;
     case VM_MUL:

@@ -123,3 +123,10 @@
 {# Implicit cast #}
 {% do assert_expr( 1+'2' == '12' , '1+\'2\' == \'12\'' ) %}
 {% do assert_expr( '1'*'3'== 3   , '\'1\'*\'3\' == 3' ) %}
+{# Corner case #}
+{% do assert_expr( '' == ''  ) %}
+{% do assert_expr( '' == 'abc'*0 ) %}
+{% for x in '' %}
+    {% do assert_expr(False) %}
+{% endfor %}
+{% do assert_expr( 'abc'*0 == 'ssd'*0 ) %}

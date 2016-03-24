@@ -142,3 +142,111 @@
     {% do assert_expr(cont_cnt == 4) %}
     {% do assert_expr(break_cnt== 4) %}
 {% endwith %}
+{# Test With #}
+{% with A = 1 %}
+    {% with A = 2 %}
+        {% do assert_expr(A == 2,'A == 2') %}
+    {% endwith %}
+    {% do assert_expr( A == 1, 'A == 1') %}
+{% endwith %}
+{% with A = [1,2,3] %}
+    {% with A = {'A':1,'B':2,'C':3} %}
+        {% do assert_expr( A['A'] == 1 , 'A[\'A\'] == 1' ) %}
+    {% endwith %}
+    {% do assert_expr( A[0] == 1 and A[1] == 2,'A[0] == 1') %}
+{% endwith %}
+{# Test Move #}
+{# 1. Test Move none heap object #}
+{% with A = 0 %}
+    {% for i in xrange(5) %}
+        {% set tp = A + i %}
+        {% move A = tp %}
+    {% endfor %}
+    {% do assert_expr( A == 0+1+2+3+4, 'A == 0+1+2+3+4' ) %}
+{% endwith %}
+{# 2. Test Move with heap object #}
+{% with A = 0 %}
+    {% do assert_expr(A == 0) %}
+    {% with B = [1,2,3,4] %}
+        {% set C = [1,2,3,4] %}
+        {% do assert_expr(C[3] == 4) %}
+        {% do assert_expr(B[3] == 4) %}
+        {% do assert_expr(A == 0) %}
+        {% move A = B %}
+        {% do assert_expr(B[3] == 4) %}
+        {% do assert_expr(A[3] == 4) %}
+        {% do assert_expr(A == B) %}
+    {% endwith %}
+    {# C and B are out of scope, so they are dead #}
+    {% do assert_expr( C is None ) %}
+    {% do assert_expr( B is None ) %}
+    {% do assert_expr( A[0] == 1 and A[1] == 2 and A[2] == 3 and A[3] == 4 ) %}
+{% endwith %}
+{% with A = 0 %}
+    {% do assert_expr(A == 0) %}
+    {% with B = {'A':1,'B':2,'C':3} %}
+        {% set C =  {'A':1,'B':2,'C':3} %}
+        {% do assert_expr(C['C'] == 3) %}
+        {% do assert_expr(B.C == 3) %}
+        {% do assert_expr(A == 0) %}
+        {% move A = B %}
+        {% do assert_expr(B.C == 3) %}
+        {% do assert_expr(A.C == 3) %}
+        {% do assert_expr(A == B) %}
+    {% endwith %}
+    {# C and B are out of scope, so they are dead #}
+    {% do assert_expr( C is None ) %}
+    {% do assert_expr( B is None ) %}
+    {% do assert_expr( A.A == 1 and A.B == 2 and A.C == 3 ) %}
+{% endwith %}
+{% with A = 0 %}
+    {% do assert_expr(A == 0) %}
+    {% with B = 'Hello' %}
+        {% set C =  'Hello' %}
+        {% do assert_expr(C[4] == 'o') %}
+        {% do assert_expr(B[4] == 'o') %}
+        {% do assert_expr(A == 0) %}
+        {% move A = B %}
+        {% do assert_expr(B[4] == 'o') %}
+        {% do assert_expr(A[4] == 'o') %}
+        {% do assert_expr(A == B) %}
+    {% endwith %}
+    {# C and B are out of scope, so they are dead #}
+    {% do assert_expr( C is None ) %}
+    {% do assert_expr( B is None ) %}
+    {% do assert_expr( A == 'Hello' ) %}
+{% endwith %}
+{# 3. Test Move statment with for and break/continue which changes the scopes #}
+{% with A = 0 %}
+    {% set inner_cnt = 0 %}
+    {% for i in xrange(10) %}
+        {% move inner_cnt = i %}
+        {% if i % 2 == 0 %}
+            {# A new scope #}
+            {% set var1 = [1,2,3] %}
+            {% move A = var1 %}
+        {% else %}
+            {% set var2 = {'A':1,'B':2} %}
+            {% move A = var2 %}
+            {% break %}
+        {% endif %}
+        {% if i % 2 == 0 %}
+            {% do assert_expr( A[0] == 1 and A[1] == 2 and A[2] == 3 ) %}
+        {% endif %}
+    {% endfor %}
+    {% do assert_expr( inner_cnt == 1 ) %}
+    {% do assert_expr( A.A == 1 and A.B == 2 ) %}
+{% endwith %}
+{% with A = 0 %}
+    {% for i in xrange(10) %}
+        {% set B = 0 %}
+        {% for k in xrange(10) %}
+            {% set v = 'V'*k %}
+            {% move B = v %}
+        {% endfor %}
+        {% do assert_expr( B == 'V'*9 ) %}
+        {% set C = B*i %}
+        {% move A = C %}
+    {% endfor %}
+    {% do assert_expr( A == 'V'*81 ) %}
+{% endwith %}

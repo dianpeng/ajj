@@ -335,14 +335,14 @@ string_str(const struct string* l , const struct string* r) {
 }
 
 void string_destroy( struct string* str ) {
-  if(string_empty(str))
-    return;
   free((void*)str->str);
   *str = NULL_STRING;
 }
 
 void strbuf_reserve( struct strbuf* buf , size_t cap ) {
-  char* nbuf = malloc(cap);
+  char* nbuf;
+  if(cap < 16 ) cap = 16;
+  nbuf = malloc(cap);
   if( buf->str ) {
     memcpy(nbuf,buf->str,buf->len);
     buf->str[buf->len] = 0;

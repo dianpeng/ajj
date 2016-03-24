@@ -33,6 +33,10 @@ int jinja_test_main() {
       }
     }
   }
+  closedir(d);
   printf("FINISH:%d\n",cnt);
+  fclose(devnull);
+  ajj_io_destroy(output);
+  ajj_destroy(a);
   return 0;
 }

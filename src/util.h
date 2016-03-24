@@ -143,7 +143,7 @@ int string_runelen( const struct string* );
 
 /* string empty means string is not NULL but it just doesn't
  * contain any content */
-#define string_empty(S)(!string_null(S) && string_eq(S,&EMPTY_STRING))
+#define string_empty(S)(string_null(S) || string_eq(S,&EMPTY_STRING))
 
 /* string version's strstr */
 const char*
