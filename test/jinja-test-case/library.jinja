@@ -1,0 +1,21 @@
+{# This file contains some simple functions serves as library to be used by other jinja #}
+{# Function used to calculate the sum of the array #}
+{% macro sum_of_array(arr) %}
+  {% set sum = 0 %}
+  {% for x in arr %}
+    {% set temp = sum + x %}
+    {% move sum = temp %}
+  {% endfor %}
+  {% return sum %}
+{% endmacro %}
+{# Function used to calculate the sum of the odd array #}
+{% macro sum_of_odd_array(arr) %}
+  {% set sum = 0 %}
+  {% for x in arr %}
+    {% if x % 2 == 0 %}
+      {% set temp = sum + x %}
+      {% move sum = temp %}
+    {% endif %}
+  {% endfor %}
+  {% return sum %}
+{% endmacro %}

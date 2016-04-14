@@ -3,6 +3,7 @@
 #include "util.h"
 #include "vm.h"
 #include "upvalue.h"
+#include "object.h"
 #include "bc.h"
 #include <ctype.h>
 #include <stdlib.h>
@@ -2571,7 +2572,7 @@ int shell( struct ajj* a,
         pclose(p);
         *ret = ajj_value_assign(
             ajj_object_create_string(a,
-            a->rt->cur_gc,
+            ajj_cur_gc_scope(a),
             buf.str,buf.len,1));
         return AJJ_EXEC_OK;
       }
@@ -2613,7 +2614,7 @@ int rm_trail( struct ajj* a,
       strbuf_append(&sbuf,tar->str,i+1);
       *ret = ajj_value_assign(
           ajj_object_create_string(a,
-            a->rt->cur_gc,
+            ajj_cur_gc_scope(a),
             sbuf.str,sbuf.len,1));
       return AJJ_EXEC_OK;
     }
@@ -2681,6 +2682,33 @@ int assert_expr( struct ajj* a,
     }
   }
 }
+
+/* get the type string of a value */
+static
+int type_of( struct ajj* a ,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_len,
+    struct ajj_value* ret ) {
+  UNUSE_ARG(udata);
+  if(arg_len != 1) {
+    EXEC_FAIL1(a,"%s","Function::typeof can only accept 1 argument!");
+  } else {
+    const char* str = ajj_value_get_type_name(arg);
+    struct string s;
+    s.str = str;
+    s.len = strlen(str);
+
+    *ret = ajj_value_assign(
+        ajj_object_create_const_string(
+          a,
+          ajj_cur_gc_scope(a),
+          &s));
+
+    return AJJ_EXEC_OK;
+  }
+}
+
 
 static
 int filter_abs( struct ajj* a,
@@ -2786,6 +2814,11 @@ void ajj_builtin_load( struct ajj* a ) {
   ajj_add_function(a,&(a->builtins),
       "rm_trail",
       rm_trail,
+      NULL);
+
+  ajj_add_function(a,&(a->builtins),
+      "typeof",
+      type_of,
       NULL);
 
   ajj_add_function(a,&(a->builtins),

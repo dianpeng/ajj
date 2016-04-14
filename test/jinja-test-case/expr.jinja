@@ -130,3 +130,11 @@
     {% do assert_expr(False) %}
 {% endfor %}
 {% do assert_expr( 'abc'*0 == 'ssd'*0 ) %}
+{{ typeof('abc') }}
+{% do assert_expr( typeof('abc') == 'string' ) %}
+{% do assert_expr( typeof(1) == 'number' ) %}
+{% do assert_expr( typeof([]) == 'list' ) %}
+{% do assert_expr( typeof({}) == 'dict' ) %}
+{% do assert_expr( typeof(True) == 'boolean') %}
+{% do assert_expr( typeof(False) == 'boolean') %}
+{% do assert_expr( typeof(None) == 'none') %}

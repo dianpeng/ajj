@@ -111,13 +111,13 @@ const char*
 ajj_value_get_type_name( const struct ajj_value* val ) {
   switch(val->type) {
     case AJJ_VALUE_NONE:
-      return "<None>";
+      return "none";
     case AJJ_VALUE_BOOLEAN:
-      return "<Boolean>";
+      return "boolean";
     case AJJ_VALUE_NUMBER:
-      return "<Number>";
+      return "number";
     case AJJ_VALUE_STRING:
-      return "<String>";
+      return "string";
     case AJJ_VALUE_OBJECT:
       return GET_OBJECT_TYPE_NAME(
           val->value.object)->str;
