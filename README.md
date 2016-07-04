@@ -116,14 +116,14 @@ A constant value is :
 + A list that all elements are constant
 + A map that all elements are constant
 
-So following value like 
-
 ```
 {# Constant List #}
 [1,2,3,4, [5,6,7]]
 {# Constant Map #}
 { "A" : [1,2,3] }
 ```
+
+The above values are all constant.
 
 # Language Extension to Jinja2
 1. Flexible way to specify model file for template. User is allowed to specify model by 1) json file 2) template include statement.
