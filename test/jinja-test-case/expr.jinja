@@ -138,3 +138,5 @@
 {% do assert_expr( typeof(True) == 'boolean') %}
 {% do assert_expr( typeof(False) == 'boolean') %}
 {% do assert_expr( typeof(None) == 'none') %}
+{# Ternary expression #}
+{% do assert_expr( True if #'str' == 3 else False ) %}

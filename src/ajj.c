@@ -575,7 +575,8 @@ ajj_io_create_mem( struct ajj* a , size_t cap ) {
   return r;
 }
 
-void ajj_io_destroy( struct ajj_io* io ) {
+void ajj_io_destroy( struct ajj* a , struct ajj_io* io ) {
+  UNUSE_ARG(a);
   if(io->tp == AJJ_IO_MEM) {
     strbuf_destroy(&(io->out.m));
   }

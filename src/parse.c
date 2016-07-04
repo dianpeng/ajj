@@ -1428,6 +1428,7 @@ parse_func_body( struct parser* p , struct emitter* em ) {
   TRY(parse_scope(p,em,1,1,0));
 
   /* Generate return instructions */
+  EMIT0(em,VM_LNONE);
   EMIT0(em,VM_RET);
 
   /* Notes, after calling this function, the tokenizer should still
@@ -2568,6 +2569,7 @@ parse( struct ajj* a, const char* key,
     return NULL;
   }
   /* EMIT a return instruction */
+  emitter_emit0(&em,p.tk.pos,VM_LNONE);
   emitter_emit0(&em,p.tk.pos,VM_RET);
 
   /* merge memory in temporary gc to its corresponding

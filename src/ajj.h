@@ -522,7 +522,7 @@ struct ajj_io* ajj_io_create_mem ( struct ajj* a , size_t size );
 /* Destroy an IO object , this won't result in the FILE* handler been
  * closed, user needs to call fclose on the handler if the ajj_io object
  * is a file handler IO object */
-void ajj_io_destroy( struct ajj_io* );
+void ajj_io_destroy( struct ajj* , struct ajj_io* );
 /* Printf to an IO object */
 int ajj_io_printf( struct ajj_io* , const char* fmt , ... );
 /* va_list based printf to an IO object */

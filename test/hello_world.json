@@ -1,3 +1,13 @@
 {
-  "Hello_World":"Hello From Json File!"
+  "Hello_World":"Hello From Json File!",
+  "Arg1" : [1,2,3,4,5,6],
+  "Arg2" : {
+    "A": 1,
+    "B": "string",
+    "C": true,
+    "D": false,
+    "E": [1,2,3,4]
+  },
+  "Arg3" : 3.0 ,
+  "Arg4" : 7.0
 }

@@ -1966,10 +1966,9 @@ int vm_main( struct ajj* a ) {
       } vm_end(ATTR_CALL)
 
       vm_beg(RET) {
-        /* check if we have return value here or not !
-         * if not, put a dummy NONE on stk_top of the caller stack */
-        struct ajj_value ret = *stk_top(a,1); /* TOP of the stack contains our
-                                               * return value */
+        /* get the return value on the top of our stack */
+        struct ajj_value ret = *stk_top(a,1);
+
         /* do clean up things */
         exit_function(a,&ret);
         /* check the current function frame to see whether we previously

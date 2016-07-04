@@ -1,21 +1,19 @@
-
-An Almost Complete Jinja2 Port to C
+A Jinja2 Template Engine Port to C
 ===========================
-# This Library Is Still Under Heavy Testing
 
 # Features.
 1. Support nearly all Jinja2 syntax.
 2. Provide very flexible extension API. User could extend the engine by adding new runtime value, object and class.
 3. Multiple extensions to Jinja2, including multi-inheritance , multi-level inheritance , move value to outer scope and return statement.
-4. Automatic garbage collection through lexical scope.
+4. Automatic garbage collection via scope based strategy.
 5. Dynamic global variable value binding through Json file or template itself.
 6. Fully UTF encoding support.
 7. Small code base with less 12000 lines of C code. Design for embedding.
 
 # Not Supported Jinja2 Features
-1.Recursive loop is not supported.
+1.Loop recursive keyword is not supported.
 
-2.Tuple is not supported, tuple syntax is supported but it is automatically convert to list.
+2.Tuple is not supported.Tuple syntax is supported but it is automatically convert to list.
 ```
 {% set MyTuple = (1,2,3) %}
 ```
@@ -24,7 +22,7 @@ is essentially same as
 {% set MyTuple = [1,2,3] %}
 ```
 
-3.One argument test invoke without parenthesis is not supported.So you cannot write
+3.One argument test function invoke without parenthesis is not supported.So you cannot write
 ```
 {% if 2 is dividable 3 %}
 ```
@@ -32,7 +30,7 @@ but need to write as
 ```
 {% if 2 is dividable(3) %}
 ```
-4.Whitespace control is not optional. But the Jinja2 syntax is supported however takes no effect.
+4.Whitespace control is not optional. But the Jinja2 syntax is supported but takes no effect.
 ```
  {% do SomeThing %}
 ```
@@ -47,7 +45,7 @@ is same as
 {% include 'some' ignore missing with context %}
 {% include 'some' ignore missing without context %}
 ```
-is not supported. We also extended include instruction in some other way. Read more in later chapters.
+is not supported. The include statement has also been extended . More detail will be reviewed in later section.
 
 6.Line statements is not supported. The only supported 3 types of directives are :
 ```
@@ -56,15 +54,15 @@ is not supported. We also extended include instruction in some other way. Read m
 {% This is a Jinja2 statement %}
 ```
 
-7.Convert string is not operated by using ~ sign, but directly using +. ~ operator is not existed in AJJ.
+7.Convert string is not *ONLY* operated by using ~ sign but also can be performed by using + sign.
 ```
 {# Valid string concatenation #}
 {{ 'Hello' + 'World' }}
-{# Invalid string concatenation #}
+{# Same as the following line #}
 {{ 'Hello' ~ 'World' }}
 ```
 
-8.Macro object is not supported inside of macro block.
+8.The macro object is not supported inside of macro block.
 ```
 {% macro MyMacro() %}
 {# Invalid, macro is not supported in the macro scope #}
@@ -79,29 +77,31 @@ But list of builtin variables are available in template.
 + `caller`: name of the caller function
 + `self`: this Jinja2 object
 
-With these builtin variables, you don't need macro object indeed. I remove this object is basically because it is redundancy in AJJ.
-
 9.Scopped block is supported through different syntax but not by tag a "scoped" keyword.
 
 In old Jinja2, you can have such code:
 ```
 {% set outer_var = [] %}
-  {% block MyBlock scoped %}
+{% block MyBlock scoped %}
   {# Now you can use outer_var #}
-  {% endblock %}
+{% endblock %}
 ```
 But in AJJ, since each block is actually compiled into a function, you have to use the following syntax:
 
 ```
 {% set outer_var = [] %}
-  {% block MyBlock(outer_var) %}
-    {{ outer_var }}
-  {% endblock %}
+{% block MyBlock(outer_var) %}
+  {{ outer_var }}
+{% endblock %}
 ```
 
 As you can imagine, the outer scope variable is just passed to that block as normal function arguments.
 
-10.Keyword function argument is not supported. It is a python thing and I don't think it will hurt all the template writer. But omit it for me is that I could design a simpler virtual machine.
+10.Keyword function argument is not supported. It is a python thing and I don't think it will hurt all the template writer. But omit it for me is that I could design a simpler virtual machine. So you are not allowed to call a function like this:
+```
+{# NOTE: this is invalid should be like foo(1234,345) #}
+{{ foo( arg1=1234,arg2 = 345 ) }}
+```
 
 11.Default value for macro arguments _must_ be constant value or evaluated to constant.
 
@@ -109,18 +109,27 @@ As you can imagine, the outer scope variable is just passed to that block as nor
 {% macro MyMacro( default_value = -100 , default_list = [1,2,3,4] ) %}
 {% endmacro %}
 ```
-A constant value is means value that doesn't support any operations, like `1+2` is not supported. Similar strategy to list/map's element, they must also be constant. One thing to note, nested list/map is allowed.
-So
+A constant value is :
++ A constant number
++ A constant string
++ A constant boolean
++ A list that all elements are constant
++ A map that all elements are constant
 ```
-[1,{"H":"V"},[2,3,4]]
+
+So following value like 
 ```
-is still constant.
+{# Constant List #}
+[1,2,3,4, [5,6,7]]
+{# Constant Map #}
+{ "A" : [1,2,3] }
+```
 
-
-# Extension to Jinja2
-1.Model for rendering template could be specified in multiple script way. Now, you can specify the model file for this template by 1) Providing a JSON file or 2) Directly provide in an template file.
-
+# Language Extension to Jinja2
+1. Flexible way to specify model file for template. User is allowed to specify model by 1) json file 2) template include statement.
 To use json file to provide model , suppose you have prepared such json file: my_model.json
+
++ Json file
 
 ```
 { "MyVariable" : "HelloWorld" }
@@ -139,7 +148,9 @@ When you want to render this template in another template, you just need to have
 ```
 Which will render your template using given JSON file as model.
 
-Another way to use it is just provide/embed those model in the template that want to use the my_temp.html.
++ Template file
+
+User could use set statement nested inside of the include statement to set up the model for rendering the target template
 
 ```
 {% include 'my_temp.html' %}
@@ -171,7 +182,13 @@ Finally you have template c.html
 
 So basically b inherited from a and then c inherited from b. This is also supported.
 
-5.One subtle thing for AJJ is that it allows you to do inheritance dynamically.Actually the extends accept a variable instead of constant string. For AJJ , any inheritance chain is constructed during the runtime and not by the parsing/compile time. This enable extremely powerful inheritance functionality. Since for a specific template, although it has been compiled into bytecode , but you could still modify its base/extended base on the fly.
+5.One subtle thing for AJJ is that it allows you to do inheritance dynamically.Actually the extends statement accepts a variable instead of constant string. For AJJ , any inheritance chain is constructed during the runtime and not by the parsing/compile time. This enable extremely powerful inheritance functionality. Since for a specific template, although it has been compiled into bytecode , but you could still modify its base/extended base on the fly.
+
+```
+{% extends var %}
+```
+
+In this code, var is a variable. If the var's value changes the extends evaluated value will be modified accordingly.
 
 6.Move Value to outer scope. In Jinja2, we have no way to let the variable in outer scope to access value in inner scope because the scope rules. User may need to bypass it using array + do scope. Now in AJJ, a special block is provided to do this.
 
@@ -184,7 +201,7 @@ So basically b inherited from a and then c inherited from b. This is also suppor
 The above code will move the value of InnerVar to OuterVar.
 
 7.Return statements
-Although questionable, but having a return statements may be useful for some tasks. Using return statements your macro could be a real function that perform certain tasks.
+Although it is questionable, but have a return statements may be useful for some tasks.
 
 ```
 {% macro SumOfArray( arr ) %}
@@ -213,4 +230,5 @@ To compensate these situations, parser will actually generate byte code that tel
 
 This GC algorithm also make user who tries to write a extension have to cooperate with AJJ runtime. Any user defined objects will have a internal callback function which will be called when the corresponding gc-scope for this user defined object changes. Why user needs to care about this ? It is because if user defined objects internally have pointer pointed to any piece of memory in AJJ runtime, this pointer's pointed object's gc-scope may needs to be modified as well. Therefore, user needs to ensure each objects referenced internally in this object also has correct gc-scope. This will be covered more in the tutorial.
 
-###TODO:: Add more documentation
+# Version
+Alpha 0.0.1
