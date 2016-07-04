@@ -115,9 +115,9 @@ A constant value is :
 + A constant boolean
 + A list that all elements are constant
 + A map that all elements are constant
-```
 
 So following value like 
+
 ```
 {# Constant List #}
 [1,2,3,4, [5,6,7]]
