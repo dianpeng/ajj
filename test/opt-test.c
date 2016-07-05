@@ -65,11 +65,11 @@ void do_test( const char* src ) {
     prg = ajj_object_jinja_main(jinja);
     FATAL(jinja,"%s",a->err);
 
-    FATAL(!vm_run_jinja(a,jinja,nopt_io),"%s",a->err);
+    FATAL(!vm_run_jinja(a,jinja,nopt_io,NULL),"%s",a->err);
     /* optimize it */
     FATAL(!optimize(a,jinja),"%s",a->err);
     /* run again */
-    FATAL(!vm_run_jinja(a,jinja,opt_io),"%s",a->err);
+    FATAL(!vm_run_jinja(a,jinja,opt_io,NULL),"%s",a->err);
     /* check whether same */
     FATAL(check_same(nopt_io,opt_io),"%s","Optimization change the semantic!");
     print(COUNT,nopt_io);

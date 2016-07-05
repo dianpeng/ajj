@@ -44,6 +44,9 @@ struct ajj {
   struct func_table* list;
   struct func_table* dict;
   struct func_table* loop;
+
+  /* User data */
+  void* udata;
 };
 
 enum {

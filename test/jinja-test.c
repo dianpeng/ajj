@@ -24,7 +24,7 @@ int jinja_test_main() {
       int ret;
       if(dir->d_type == DT_REG) {
         sprintf(fn,"jinja-test-case/%s",dir->d_name);
-        ret = ajj_render_file(a,output,fn);
+        ret = ajj_render_file(a,output,fn,NULL);
         if(ret) {
           fprintf(stderr,"%s",ajj_last_error(a));
           abort();

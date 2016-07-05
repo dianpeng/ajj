@@ -100,6 +100,9 @@ struct runtime {
   struct upvalue_table* global; /* Per template based global value. This make
                                  * sure each template is executed in its own
                                  * global variable states */
+
+  /* User defined specific objects */
+  void* udata;
 };
 
 #define runtime_root_gc(rt) ((rt)->root_gc)
@@ -145,6 +148,6 @@ int vm_super( struct ajj* ,
  * ===========================================*/
 
 int vm_run_jinja( struct ajj* a, struct ajj_object* jj,
-    struct ajj_io* output );
+    struct ajj_io* output , void* udata );
 
 #endif /* _VM_H_ */

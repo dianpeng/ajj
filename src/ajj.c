@@ -40,6 +40,7 @@ struct ajj* ajj_create() {
   r->list = NULL;
   r->dict = NULL;
   r->loop = NULL;
+  r->udata = NULL;
 
   /* NOTE: */
   /* lastly load the builtins into the ajj things */
@@ -1197,6 +1198,19 @@ const char* ajj_last_error( struct ajj* a ) {
   return a->err;
 }
 
+void ajj_set_udata( struct ajj* a , void* udata ) {
+  a->udata = udata;
+}
+
+void* ajj_get_udata( struct ajj* a ) {
+  return a->udata;
+}
+
+void* ajj_runtime_get_udata( struct ajj* a ) {
+  if(a->rt) return a->rt->udata;
+  return NULL;
+}
+
 struct ajj_object*
 ajj_parse_template( struct ajj* a , const char* filename ) {
   size_t len;
@@ -1236,17 +1250,19 @@ ajj_parse_template( struct ajj* a , const char* filename ) {
 
 int ajj_render_file( struct ajj* a,
     struct ajj_io* output,
-    const char* file ) {
+    const char* file ,
+    void* udata) {
   struct ajj_object* jinja = ajj_parse_template(a,file);
   if(!jinja) return -1;
-  return vm_run_jinja(a,jinja,output);
+  return vm_run_jinja(a,jinja,output,udata);
 }
 
 int ajj_render_data( struct ajj* a,
     struct ajj_io* output,
     const char* src,
-    const char* key ) {
+    const char* key,
+    void* udata ) {
   struct ajj_object* jinja = parse(a,key,src,0);
   if(!jinja) return -1;
-  return vm_run_jinja(a,jinja,output);
+  return vm_run_jinja(a,jinja,output,udata);
 }

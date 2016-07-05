@@ -445,6 +445,10 @@ struct ajj* ajj_create();
 /* Destroy an ajj engine pointer */
 void ajj_destroy( struct ajj* );
 
+/* Set a user specified pointer to ajj */
+void ajj_set_udata( struct ajj* , void* );
+void*ajj_get_udata( struct ajj* );
+
 /* Dump an error information into the ajj engine and be consumed by the
  * user */
 void ajj_error ( struct ajj* , const char* format , ... );
@@ -512,6 +516,15 @@ int ajj_upvalue_has( struct ajj* a , const char* );
 void ajj_env_clear( struct ajj* a );
 
 /* =============================================================
+ * Runtime specified user object
+ * ============================================================*/
+
+/* This function will retrieve the opaque pointer user sets when calls
+ * the ajj_render_XXX function . So it is only available during the
+ * execution of the template scripts */
+void* ajj_runtime_get_udata( struct ajj* );
+
+/* =============================================================
  * IO object for holding the rendering output
  * ===========================================================*/
 
@@ -546,13 +559,15 @@ void* ajj_io_detach( struct ajj_io* , size_t* size );
  * be UTF encoded */
 int ajj_render_file( struct ajj* ,
     struct ajj_io*,
-    const char* file );
+    const char* file ,
+    void* udata );
 
 /* Render a in memory data into an IO object. The content must be UTF
  * encoded */
 int ajj_render_data( struct ajj* ,
     struct ajj_io*,
     const char* src,
-    const char* key);
+    const char* key,
+    void* udata);
 
 #endif /* _AJJ_H_ */

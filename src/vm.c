@@ -287,7 +287,8 @@ double const_num( struct ajj* a, int idx ) {
  * ==========================*/
 static
 void runtime_init( struct ajj* a , struct runtime* rt,
-    struct ajj_object* jinja, struct ajj_io* output , int cnt ) {
+    struct ajj_object* jinja, struct ajj_io* output ,
+    int cnt , void* udata ) {
   rt->inc_cnt = cnt;
   rt->next = NULL;
   rt->prev = NULL;
@@ -300,6 +301,7 @@ void runtime_init( struct ajj* a , struct runtime* rt,
       AJJ_INIT_VALUE_STACK_SIZE);
   rt->output = output;
   rt->global = upvalue_table_create(&(a->env));
+  rt->udata = udata;
 }
 
 static
@@ -1163,7 +1165,7 @@ void vm_include( struct ajj* a , int type,
   }
 
   /* create new runtime for vm_include */
-  runtime_init(a, &nrt,jinja,a->rt->output,ort->inc_cnt+1);
+  runtime_init(a, &nrt,jinja,a->rt->output,ort->inc_cnt+1,ort->udata);
 
   /* Before we do the rendering , we need to setup the
    * environment accordingly here. All the C side or
@@ -1284,7 +1286,7 @@ void vm_extends( struct ajj* a , int* fail ) {
     *fail = 1; return;
   }
 
-  runtime_init(a,&nrt,jinja,ort->output,ort->inc_cnt+1);
+  runtime_init(a,&nrt,jinja,ort->output,ort->inc_cnt+1,ort->udata);
   /* build the correct inheritance chain */
   nrt.next = ort;
   ort->prev = &nrt;
@@ -2088,7 +2090,7 @@ int vm_main( struct ajj* a ) {
         struct ajj_value val = *stk_top(a,1);
         vm_attrset(a,&obj,&key,&val,RCHECK);
         stk_pop(a,2);
-      } vm_end(ATTRSET)
+      } vm_end(ATTR_SET)
 
       vm_beg(ATTR_GET) {
         struct ajj_value obj = *stk_top(a,2);
@@ -2374,11 +2376,11 @@ int run_jinja( struct ajj* a ) {
 }
 
 int vm_run_jinja( struct ajj* a , struct ajj_object* jj,
-    struct ajj_io* output ) {
+    struct ajj_io* output , void* udata ) {
   struct runtime rt;
   struct runtime* o_rt = a->rt;
   int fail;
-  runtime_init(a,&rt,jj,output,0);
+  runtime_init(a,&rt,jj,output,0,udata);
   a->rt = &rt;
   fail = run_jinja(a);
   runtime_destroy(a,&rt);

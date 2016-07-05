@@ -23,7 +23,7 @@ static void do_test( const char* src ) {
     fprintf(stderr,"%s",a->err);
     abort();
   }
-  if(vm_run_jinja(a,jinja,output)) {
+  if(vm_run_jinja(a,jinja,output,NULL)) {
     fprintf(stderr,"%s",a->err);
     abort();
   }
@@ -703,7 +703,7 @@ static void do_import( const char* source , const char* lib ) {
     abort();
   }
   output = ajj_io_create_file(a,stdout);
-  if(vm_run_jinja(a,m,output)) {
+  if(vm_run_jinja(a,m,output,NULL)) {
     fprintf(stderr,"%s",a->err);
     abort();
   }
@@ -748,7 +748,7 @@ void test_extends() {
         "{% block head %}" \
         "This line should show up!\n"
         "{% endblock %}");
-    if( vm_run_jinja(a,jinja,output) ) {
+    if( vm_run_jinja(a,jinja,output,NULL) ) {
       fprintf(stderr,"%s",a->err);
       abort();
     }
@@ -785,7 +785,7 @@ void test_extends() {
         "This is from leaf~\n"\
         "{% endblock %}");
 
-    if( vm_run_jinja(a,jinja,output) ) {
+    if( vm_run_jinja(a,jinja,output,NULL) ) {
       fprintf(stderr,"%s",a->err);
       abort();
     }
@@ -817,7 +817,7 @@ void test_extends() {
         "{% block b2_head %}" \
         "Child for b2_head\n" \
         "{% endblock %}");
-    if( vm_run_jinja(a,jinja,output) ) {
+    if( vm_run_jinja(a,jinja,output,NULL) ) {
       fprintf(stderr,"%s",a->err);
       abort();
     }
@@ -844,7 +844,7 @@ void test_extends() {
         "Show me \n" \
         "{% endblock %}");
 
-    if( vm_run_jinja(a,jinja,output) ) {
+    if( vm_run_jinja(a,jinja,output,NULL) ) {
       fprintf(stderr,"%s",a->err);
       abort();
     }
@@ -872,7 +872,7 @@ void test_extends() {
         "Show me \n" \
         "{% endblock %}");
 
-    if( vm_run_jinja(a,jinja,output) ) {
+    if( vm_run_jinja(a,jinja,output,NULL) ) {
       fprintf(stderr,"%s",a->err);
       abort();
     }
@@ -892,7 +892,7 @@ void test_include() {
     load_template(a,"Inc1","{{ 'Hello World' }}\n");
     jinja = load_template(a,"Main","{% include 'Inc1' %}From Main\n");
 
-    if( vm_run_jinja(a,jinja,output) ) {
+    if( vm_run_jinja(a,jinja,output,NULL) ) {
       fprintf(stderr,"%s",a->err);
       abort();
     }
@@ -912,7 +912,7 @@ void test_include() {
         "{{ MyTestMacro1() }}");
 
     jinja = load_template(a,"Main","{% include 'Inc1' %}");
-    if( vm_run_jinja(a,jinja,output) ) {
+    if( vm_run_jinja(a,jinja,output,NULL) ) {
       fprintf(stderr,"%s",a->err);
       abort();
     }
@@ -977,7 +977,7 @@ void test_include_with_json() {
         "{% include 'Inc1' json 'hello_world.json' %}" \
         "{% endinclude %}");
 
-    if( vm_run_jinja(a,jinja,output) ) {
+    if( vm_run_jinja(a,jinja,output,NULL) ) {
       fprintf(stderr,"%s",a->err);
       abort();
     }
@@ -1006,7 +1006,7 @@ void test_include_with_json() {
         "{% include 'Inc1' json 'hello_world.json' %}" \
         "{% endinclude %}");
 
-    if( vm_run_jinja(a,jinja,output) ) {
+    if( vm_run_jinja(a,jinja,output,NULL) ) {
       fprintf(stderr,"%s",a->err);
       abort();
     }
@@ -1026,7 +1026,7 @@ void test_include_with_json() {
         "{% include 'Inc1' json 'hello_world.json' %}" \
         "{% endinclude %}");
 
-    if( vm_run_jinja(a,jinja,output) ) {
+    if( vm_run_jinja(a,jinja,output,NULL) ) {
       fprintf(stderr,"%s",a->err);
       abort();
     }
@@ -1049,7 +1049,7 @@ void test_include_with_json() {
         "{% include 'Inc1' json 'hello_world.json' %}" \
         "{% endinclude %}");
 
-    if( vm_run_jinja(a,jinja,output) ) {
+    if( vm_run_jinja(a,jinja,output,NULL) ) {
       fprintf(stderr,"%s",a->err);
       abort();
     }
