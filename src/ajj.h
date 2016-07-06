@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <stdarg.h>
+#include <time.h>
 
 struct ajj;
 struct ajj_value;
@@ -435,12 +436,40 @@ int ajj_value_empty( struct ajj* a,
     const struct ajj_value* obj ,
     int* result );
 
+/* ===============================================================
+ * AJJ file system abstraction layer
+ * ==============================================================*/
+
+/* Ajj itself doesn't take care of the file system but expecting the
+ * user to provide API to allow Ajj access underlying file system.
+ * This allow user to do various file path mapping and also caching. */
+struct ajj_vfs {
+  /* Function that perform loading of the file.
+   * The first argument is the name of the file in the request ;
+   * the second argument is for output of the size of the file ;
+   * the third argument is in and out argument, the caller will put
+   * a timestamp to its best knowledege when the file gets modified,
+   * and expect the latest timestamp gets updated in that area.
+   * The memory returned by this function is taken ownership by the
+   * library and will be *freed* by the library */
+  void* (*vfs_load)( struct ajj*, const char* , size_t* , time_t* , void* );
+
+  /* Function that perform retrieving timestame of the target path .
+   * returns -1 means failed , otherwise returns 0 */
+  int (*vfs_timestamp)( struct ajj* , const char* , time_t* , void* );
+
+  /* Function to check whether this timestamp is the latest one ,
+   * returns -1 means fail, returns 0 means false, otherwise returns 1*/
+  int (*vfs_timestamp_is_current)( struct ajj* , const char* , time_t , void* );
+};
+
+extern struct ajj_vfs AJJ_DEFAULT_VFS;
 
 /* Create an ajj engine. Before rendering any templates, a ajj
  * engine pointer must be created and it serves as the environment
  * and resource holder for all the template rendering happened inside
  * of it . User should never mix different ajj engine pointer togeteher */
-struct ajj* ajj_create();
+struct ajj* ajj_create( struct ajj_vfs* , void* );
 
 /* Destroy an ajj engine pointer */
 void ajj_destroy( struct ajj* );

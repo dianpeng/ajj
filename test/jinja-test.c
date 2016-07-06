@@ -15,7 +15,7 @@ int jinja_test_main() {
   FILE* devnull = fopen("/dev/null","w");
   int cnt = 0;
   assert(devnull);
-  a = ajj_create();
+  a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
   output = ajj_io_create_file(a,stdout);
   d = opendir("jinja-test-case/");
   if(d) {

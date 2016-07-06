@@ -12,6 +12,7 @@
 #define FUNCTION_SLAB_TABLE_SIZE 32
 #define OBJECT_SLAB_SIZE 128
 #define GC_SLAB_SIZE 32
+#define JJ_SLAB_SIZE 32
 
 struct runtime;
 
@@ -45,8 +46,17 @@ struct ajj {
   struct func_table* dict;
   struct func_table* loop;
 
+  /* Ajj file system layer */
+  struct ajj_vfs vfs;
+  void* vfs_udata;
+
   /* User data */
   void* udata;
+};
+
+struct jj_file {
+  struct ajj_object* tmpl;
+  time_t ts;
 };
 
 enum {
@@ -66,12 +76,12 @@ struct ajj_io {
 struct gc_scope*
 ajj_cur_gc_scope( struct ajj* a );
 
-struct ajj_object*
+struct jj_file*
 ajj_find_template( struct ajj* a , const char* name );
 
 struct ajj_object*
 ajj_new_template( struct ajj* a ,const char* name ,
-    const char* src , int own );
+    const char* src , int own , time_t ts );
 
 /* THIS FUNCTION IS NOT SAFE!
  * This function is used when we try to recover from the parsing
@@ -108,10 +118,6 @@ ajj_add_test( struct ajj* a, struct upvalue_table* ut,
     const char* name,
     ajj_function entry,
     void* );
-
-void* ajj_load_file( struct ajj* a,
-    const char* fname,
-    size_t* size );
 
 /* HIGH level API to help to manage the template */
 struct ajj_object*

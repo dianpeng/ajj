@@ -1,6 +1,7 @@
 #ifndef _PARSE_H_
 #define _PARSE_H_
 #include "conf.h"
+#include <time.h>
 
 #define MAX_LOOP_CTRL_SIZE 32
 
@@ -11,6 +12,6 @@ struct ajj_object;
 struct ajj;
 
 struct ajj_object*
-parse( struct ajj* , const char* key, const char* src, int own);
+parse( struct ajj* , const char* key, const char* src, int own , time_t ts );
 
 #endif /* _PARSE_H_ */

@@ -19,7 +19,8 @@ struct ajj_value AJJ_TRUE = { {1} , AJJ_VALUE_BOOLEAN };
 struct ajj_value AJJ_FALSE= { {0} , AJJ_VALUE_BOOLEAN };
 struct ajj_value AJJ_NONE = { {0} , AJJ_VALUE_NONE };
 
-struct ajj* ajj_create() {
+struct ajj* ajj_create( struct ajj_vfs* vfs , void* vfs_udata ) {
+
   struct ajj* r = malloc(sizeof(*r));
   r->err[0] = 0;
 
@@ -41,6 +42,10 @@ struct ajj* ajj_create() {
   r->dict = NULL;
   r->loop = NULL;
   r->udata = NULL;
+
+  assert(vfs);
+  r->vfs = *vfs;
+  r->vfs_udata = vfs_udata;
 
   /* NOTE: */
   /* lastly load the builtins into the ajj things */
@@ -77,21 +82,20 @@ ajj_cur_gc_scope( struct ajj* a ) {
 /* =============================
  * Template
  * ===========================*/
-struct ajj_object*
+struct jj_file*
 ajj_find_template( struct ajj* a , const char* name ) {
-  struct ajj_object** ret = map_find_c(&(a->tmpl_tbl),name);
+  struct jj_file** ret = map_find_c(&(a->tmpl_tbl),name);
   return ret == NULL ? NULL : *ret;
 }
 
 struct ajj_object*
 ajj_new_template( struct ajj* a ,const char* name ,
-    const char* src , int own ) {
-  struct ajj_object* obj;
-  if( ajj_find_template(a,name) != NULL )
-    return NULL; /* We already get one */
-  obj = ajj_object_create_jinja(a,name,src,own);
-  CHECK(!map_insert_c(&(a->tmpl_tbl),name,&obj));
-  return obj;
+    const char* src , int own , time_t ts ) {
+  struct jj_file f;
+  f.tmpl = ajj_object_create_jinja(a,name,src,own);
+  f.ts = ts;
+  CHECK(!map_insert_c(&(a->tmpl_tbl),name,&f));
+  return f.tmpl;
 }
 
 int ajj_delete_template( struct ajj* a, const char* name ) {
@@ -99,10 +103,10 @@ int ajj_delete_template( struct ajj* a, const char* name ) {
   if( map_remove_c(&(a->tmpl_tbl),name,&obj))
     return -1;
   LREMOVE(obj); /* remove it from gc scope */
-  ajj_object_destroy_jinja(a,obj);
+  ajj_object_destroy_jinja(a,obj); /* destroy internal gut */
+  slab_free(&(a->obj_slab),obj); /* free object back to slab */
   return 0;
 }
-
 
 /* =============================
  * VALUE
@@ -1155,39 +1159,6 @@ ajj_display( struct ajj* a, const struct ajj_value* val,
   }
 }
 
-void* ajj_load_file( struct ajj* a , const char* fname ,
-    size_t* size) {
-  FILE* f = fopen(fname,"r");
-  long int start;
-  long int end;
-  size_t len;
-  size_t rsz;
-  char* r;
-
-  if(!f) {
-    ajj_error(a,"Cannot load file:%s!",fname);
-    return NULL;
-  }
-  start = ftell(f);
-  fseek(f,0,SEEK_END); /* not portable for SEEK_END can be
-                        * meaningless */
-  end = ftell(f);
-  fseek(f,0,SEEK_SET);
-  len = (size_t)(end-start);
-  if(len >= MAX_FILE_SIZE) {
-    fclose(f); /* close the file */
-    ajj_error(a,"The file:%s is too large or it is not a file!",fname);
-    return NULL;
-  }
-  r = malloc(len+1);
-  rsz = fread(r,1,len,f);
-  assert( rsz <= len );
-  r[rsz] = 0;
-  *size = rsz;
-  fclose(f);
-  return r;
-}
-
 void ajj_error( struct ajj* a , const char* format , ... ) {
   va_list vl;
   va_start(vl,format);
@@ -1215,23 +1186,51 @@ struct ajj_object*
 ajj_parse_template( struct ajj* a , const char* filename ) {
   size_t len;
   const char* src;
-  struct ajj_object* ret;
+  time_t ts;
+  struct jj_file* f;
   /* try to load the template directly from existed one */
-  ret = ajj_find_template(a,filename);
-  if(ret) return ret;
+  f = ajj_find_template(a,filename);
+  if(f) {
+    int ret = a->vfs.vfs_timestamp_is_current(
+        a,filename,f->ts,a->vfs_udata);
+    if(ret <0) {
+      return NULL; /* failed */
+    } else if(ret) {
+      /* Hit the cache, so just return this template */
+      return f->tmpl;
+    } else {
+      ts = f->ts;
+    }
+  }
 
-  /* try load from file */
-  src = ajj_load_file(a,filename,&len);
+  /* Either we don't have such file parsed or the timestamp
+   * is outdated, so we need to load the whole file into the
+   * memory */
+  src = a->vfs.vfs_load(a,filename,&len, f ? &ts : NULL,a->vfs_udata);
+
+  if(!f) {
+    /* In this case , since we don't know the ts, we do
+     * an extra call to retreieve the timestamp */
+    int ret = a->vfs.vfs_timestamp(a,filename,&ts,a->vfs_udata);
+    if(ret) {
+      /* Failed here */
+      free((void*)src);
+      return NULL;
+    }
+  }
+
   if(!src) {
+    ajj_error(a,"Cannot load file with name:%s!",filename);
     return NULL;
   } else {
+
 #ifdef DISABLE_OPTIMIZATION
     /* During debugging phase we may not want to switch optimization
      * on for debugging purpose */
-    return parse(a,filename,src,1);
+    return parse(a,filename,src,1,ts);
 #else
     struct ajj_object* ret;
-    ret = parse(a,filename,src,1);
+    ret = parse(a,filename,src,1,ts);
     if(!ret) return NULL;
     if(optimize(a,ret)) return NULL;
     return ret;
@@ -1262,7 +1261,7 @@ int ajj_render_data( struct ajj* a,
     const char* src,
     const char* key,
     void* udata ) {
-  struct ajj_object* jinja = parse(a,key,src,0);
+  struct ajj_object* jinja = parse(a,key,src,0,0);
   if(!jinja) return -1;
   return vm_run_jinja(a,jinja,output,udata);
 }

@@ -15,10 +15,10 @@
 #include "test-check.h"
 
 static void do_test( const char* src ) {
-  struct ajj* a = ajj_create();
+  struct ajj* a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
   struct ajj_object* jinja;
   struct ajj_io* output = ajj_io_create_file(a,stdout);
-  jinja = parse(a,"vm-test-jinja",src,0);
+  jinja = parse(a,"vm-test-jinja",src,0,0);
   if(!jinja) {
     fprintf(stderr,"%s",a->err);
     abort();
@@ -691,13 +691,13 @@ static void do_import( const char* source , const char* lib ) {
   struct ajj_object* jinja;
   struct ajj_object* m;
   struct ajj_io* output;
-  a = ajj_create();
-  jinja = parse(a,"External",lib,0);
+  a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
+  jinja = parse(a,"External",lib,0,0);
   if(!jinja) {
     fprintf(stderr,"%s",a->err);
     abort();
   }
-  m = parse(a,"Main",source,0);
+  m = parse(a,"Main",source,0,0);
   if(!m) {
     fprintf(stderr,"%s",a->err);
     abort();
@@ -724,7 +724,7 @@ static
 struct ajj_object*
 load_template( struct ajj* a , const char* key , const char* src ) {
   struct ajj_object* jinja;
-  jinja = parse(a,key,src,0);
+  jinja = parse(a,key,src,0,0);
   if(!jinja) {
     fprintf(stderr,"%s",a->err);
     abort();
@@ -735,7 +735,7 @@ load_template( struct ajj* a , const char* key , const char* src ) {
 static
 void test_extends() {
   {
-    struct ajj* a = ajj_create();
+    struct ajj* a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
     struct ajj_object* jinja;
     struct ajj_io* output = ajj_io_create_file(a,stdout);
     load_template(a,"Base",
@@ -757,7 +757,7 @@ void test_extends() {
   }
 
   { /* Multi-level inheritance */
-    struct ajj* a = ajj_create();
+    struct ajj* a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
     struct ajj_object* jinja;
     struct ajj_io* output = ajj_io_create_file(a,stdout);
     load_template(a,"Base",
@@ -794,7 +794,7 @@ void test_extends() {
   }
 
   { /* Multiple inheritance */
-    struct ajj* a = ajj_create();
+    struct ajj* a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
     struct ajj_object* jinja;
     struct ajj_io* output = ajj_io_create_file(a,stdout);
 
@@ -826,7 +826,7 @@ void test_extends() {
   }
 
   { /* Calling blocks as normal function */
-    struct ajj* a = ajj_create();
+    struct ajj* a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
     struct ajj_object* jinja;
     struct ajj_io* output = ajj_io_create_file(a,stdout);
 
@@ -853,7 +853,7 @@ void test_extends() {
   }
 
   { /* Super */
-    struct ajj* a = ajj_create();
+    struct ajj* a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
     struct ajj_object* jinja;
     struct ajj_io* output = ajj_io_create_file(a,stdout);
 
@@ -885,7 +885,7 @@ static
 void test_include() {
   {
     /* Simple version */
-    struct ajj* a = ajj_create();
+    struct ajj* a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
     struct ajj_object* jinja;
     struct ajj_io* output = ajj_io_create_file(a,stdout);
 
@@ -900,7 +900,7 @@ void test_include() {
     ajj_destroy(a);
   }
   {
-    struct ajj* a = ajj_create();
+    struct ajj* a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
     struct ajj_object* jinja;
     struct ajj_io* output = ajj_io_create_file(a,stdout);
 
@@ -926,7 +926,7 @@ void test_json() {
   DIR *d;
   struct dirent* dir;
   struct ajj* a;
-  a = ajj_create();
+  a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
 
   d = opendir("json-test/");
   if(d) {
@@ -966,7 +966,7 @@ void test_json() {
 static
 void test_include_with_json() {
   {
-    struct ajj* a = ajj_create();
+    struct ajj* a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
     struct ajj_object* jinja;
     struct ajj_io* output = ajj_io_create_file(a,stdout);
 
@@ -986,7 +986,7 @@ void test_include_with_json() {
   }
 
   {
-    struct ajj* a = ajj_create();
+    struct ajj* a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
     struct ajj_object* jinja;
     struct ajj_io* output = ajj_io_create_file(a,stdout);
 
@@ -1015,7 +1015,7 @@ void test_include_with_json() {
   }
 
   {
-    struct ajj* a = ajj_create();
+    struct ajj* a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
     struct ajj_object* jinja;
     struct ajj_io* output = ajj_io_create_file(a,stdout);
 
@@ -1035,7 +1035,7 @@ void test_include_with_json() {
   }
 
   {
-    struct ajj* a = ajj_create();
+    struct ajj* a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
     struct ajj_object* jinja;
     struct ajj_io* output = ajj_io_create_file(a,stdout);
 

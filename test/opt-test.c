@@ -56,12 +56,12 @@ void do_test( const char* src ) {
     const struct program* prg;
     struct ajj_io* output;
 
-    a = ajj_create();
+    a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
     nopt_io = ajj_io_create_mem(a,1024);
     opt_io = ajj_io_create_mem(a,1024);
     output = ajj_io_create_file(a,stdout);
 
-    jinja = parse(a,"<test>",src,0);
+    jinja = parse(a,"<test>",src,0,0);
     prg = ajj_object_jinja_main(jinja);
     FATAL(jinja,"%s",a->err);
 

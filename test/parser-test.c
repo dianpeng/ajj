@@ -24,8 +24,8 @@
 
 static
 void do_test( const char* src , int pos , int dump ) {
-  struct ajj* a = ajj_create();
-  struct ajj_object* obj = parse(a,"HelloWorld",src,0);
+  struct ajj* a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
+  struct ajj_object* obj = parse(a,"HelloWorld",src,0,0);
   const struct program* prg;
 
   (void)dump;
@@ -34,7 +34,6 @@ void do_test( const char* src , int pos , int dump ) {
   prg = ajj_object_jinja_main(obj);
   TEST_CHECK(prg);
 }
-
 
 /* ALL these tests requires human interaction to look into the code
  * generated and verify they are correct or not. We may record the
@@ -288,8 +287,8 @@ void test_macro() {
                       "{% endmacro %}\n" \
                       "{{ input('UserName') }}\n" \
                       "{{ input('You','Val','TT',30) }}\n";
-    struct ajj* a = ajj_create();
-    struct ajj_object* obj = parse(a,"Hello World",src,0);
+    struct ajj* a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
+    struct ajj_object* obj = parse(a,"Hello World",src,0,0);
     const struct program* prg;
     struct string input = CONST_STRING("input");
     assert(obj);
@@ -307,8 +306,8 @@ void test_macro() {
                       "{% endmacro %}\n" \
                       "{{ input() }}\n" \
                       "{{ input(1)}}\n";
-    struct ajj* a = ajj_create();
-    struct ajj_object* obj = parse(a,"Hello World",src,0);
+    struct ajj* a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
+    struct ajj_object* obj = parse(a,"Hello World",src,0,0);
     const struct program* prg;
     struct string input = CONST_STRING("input");
     prg = ajj_object_jinja_main(obj);
@@ -325,8 +324,8 @@ void test_macro() {
                       "{% endfor %}\n" \
                       "{% endmacro %}\n" \
                       "{{ input(1)}}\n";
-    struct ajj* a = ajj_create();
-    struct ajj_object* obj = parse(a,"Hello World",src,0);
+    struct ajj* a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
+    struct ajj_object* obj = parse(a,"Hello World",src,0,0);
     const struct program* prg;
     struct string input = CONST_STRING("input");
     prg = ajj_object_jinja_main(obj);
@@ -346,8 +345,8 @@ void test_block() {
                       "<><><><><><><><><>\n" \
                       "{% endblock %}\n"\
                       "================\n";
-    struct ajj* a = ajj_create();
-    struct ajj_object* obj = parse(a,"Hello World",src,0);
+    struct ajj* a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
+    struct ajj_object* obj = parse(a,"Hello World",src,0,0);
     const struct program* prg;
     const struct string head = CONST_STRING("head");
     assert(obj);
@@ -365,8 +364,8 @@ void test_block() {
                       "{% endfor %}\n" \
                       "{% endblock %}\n" \
                       "{{ UUVV }} Hello World\n";
-    struct ajj* a = ajj_create();
-    struct ajj_object* obj = parse(a,"Hello World",src,0);
+    struct ajj* a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
+    struct ajj_object* obj = parse(a,"Hello World",src,0,0);
     const struct program* prg;
     const struct string head = CONST_STRING("head");
     assert(obj);
@@ -380,8 +379,8 @@ static
 void test_do() {
   {
     const char* src = "<><>><><>{{}}{% do my_list.append(1) %}\n";
-    struct ajj* a = ajj_create();
-    struct ajj_object* obj = parse(a,"Hello World",src,0);
+    struct ajj* a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
+    struct ajj_object* obj = parse(a,"Hello World",src,0,0);
     const struct program* prg;
     assert(obj);
     prg = ajj_object_jinja_main(obj);
@@ -439,8 +438,8 @@ void test_call() {
     const char* src  = "{% call(user) dump_users(list_of_user) %}\n" \
                        "<dl> {{ user }} </dl>\n" \
                        "{% endcall %}\n";
-    struct ajj* a = ajj_create();
-    struct ajj_object* obj = parse(a,"Hello World",src,0);
+    struct ajj* a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
+    struct ajj_object* obj = parse(a,"Hello World",src,0,0);
     const struct program* prg;
     struct string call_name = CONST_STRING("@c0");
     assert(obj);
@@ -454,8 +453,8 @@ void test_call() {
     const char* src  = "{% call dump_users() %}\n" \
                        "<dl> {{ user }} </dl>\n" \
                        "{% endcall %}\n";
-    struct ajj* a = ajj_create();
-    struct ajj_object* obj = parse(a,"Hello World",src,0);
+    struct ajj* a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
+    struct ajj_object* obj = parse(a,"Hello World",src,0,0);
     const struct program* prg;
     struct string call_name = CONST_STRING("@c0");
     assert(obj);

@@ -10,3 +10,9 @@
 #include "utf.c"
 #include "util.c"
 #include "builtin.c"
+
+#ifdef __linux__
+#include "unix-vfs.cc"
+#else
+#error "Doesn't support this platform ???"
+#endif /* __linux__ */

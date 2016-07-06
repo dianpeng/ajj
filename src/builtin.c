@@ -2473,10 +2473,8 @@ struct ajj_object*
 json_parse( struct ajj* a, struct gc_scope* scp,
     const char* filename , const char* func ) {
   size_t len;
-  const char* src = ajj_load_file(a,filename,&len);
+  const char* src = a->vfs.vfs_load(a,filename,&len,NULL,a->vfs_udata);
   if(src == NULL) {
-    ajj_error(a,"Function::%s cannot load file with name:%s!",
-        func,filename);
     return NULL;
   } else {
     struct ajj_object* ret = json_parsec(a,scp,src);

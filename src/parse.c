@@ -2533,7 +2533,7 @@ fail:
  * ======================================*/
 struct ajj_object*
 parse( struct ajj* a, const char* key,
-    const char* src, int own ) {
+    const char* src, int own , time_t ts ) {
   struct ajj_object* tmpl;
   struct parser p;
   struct emitter em;
@@ -2542,7 +2542,7 @@ parse( struct ajj* a, const char* key,
                              * to delete all the garbage if we parse
                              * failed */
 
-  tmpl = ajj_new_template(a,key,src,own);
+  tmpl = ajj_new_template(a,key,src,own,ts);
   assert(tmpl);
 
   /* init the temporary gc scope */
