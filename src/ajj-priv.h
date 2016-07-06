@@ -12,7 +12,6 @@
 #define FUNCTION_SLAB_TABLE_SIZE 32
 #define OBJECT_SLAB_SIZE 128
 #define GC_SLAB_SIZE 32
-#define JJ_SLAB_SIZE 32
 
 struct runtime;
 

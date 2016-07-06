@@ -530,6 +530,7 @@ void ajj_upvalue_add_class( struct ajj* a,
 void ajj_upvalue_add_function( struct ajj* a, const char*,
     ajj_function entry, void* );
 
+/* Add a filter function into the upvalue table */
 #define ajj_upvalue_add_filter ajj_upvalue_add_function
 
 /* Delete a name from the upvalue. The deletion operation is generally
@@ -559,22 +560,30 @@ void* ajj_runtime_get_udata( struct ajj* );
 
 /* Create an IO from an existed FILE* structure */
 struct ajj_io* ajj_io_create_file( struct ajj* a , FILE* );
+
 /* Create an IO from memory with size */
 struct ajj_io* ajj_io_create_mem ( struct ajj* a , size_t size );
+
 /* Destroy an IO object , this won't result in the FILE* handler been
  * closed, user needs to call fclose on the handler if the ajj_io object
  * is a file handler IO object */
 void ajj_io_destroy( struct ajj* , struct ajj_io* );
+
 /* Printf to an IO object */
 int ajj_io_printf( struct ajj_io* , const char* fmt , ... );
+
 /* va_list based printf to an IO object */
 int ajj_io_vprintf( struct ajj_io* , const char* fmt , va_list );
+
 /* write to IO object with memory */
 int ajj_io_write( struct ajj_io* , const void* mem , size_t len );
+
 /* flush IO object */
 void ajj_io_flush( struct ajj_io* );
+
 /* Get intenral content. Only works with memory based IO */
 void* ajj_io_get_content( struct ajj_io* , size_t* size );
+
 /* Get the internal content in a caller owned pointer. The pointer
  * returned must be freed after using it. Only works with memory based
  * IO */
@@ -597,6 +606,6 @@ int ajj_render_data( struct ajj* ,
     struct ajj_io*,
     const char* src,
     const char* key,
-    void* udata);
+    void* udata );
 
 #endif /* _AJJ_H_ */

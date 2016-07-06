@@ -32,7 +32,7 @@ struct ajj* ajj_create( struct ajj_vfs* vfs , void* vfs_udata ) {
       FUNCTION_SLAB_TABLE_SIZE,sizeof(struct func_table));
   slab_init(&(r->gc_slab),
       GC_SLAB_SIZE,sizeof(struct gc_scope));
-  map_create(&(r->tmpl_tbl),sizeof(struct ajj_object*),32);
+  map_create(&(r->tmpl_tbl),sizeof(struct jj_file),32);
   gc_root_init(&(r->gc_root),1);
   r->rt = NULL;
   /* initiliaze the upvalue table */
@@ -84,14 +84,18 @@ ajj_cur_gc_scope( struct ajj* a ) {
  * ===========================*/
 struct jj_file*
 ajj_find_template( struct ajj* a , const char* name ) {
-  struct jj_file** ret = map_find_c(&(a->tmpl_tbl),name);
-  return ret == NULL ? NULL : *ret;
+  struct jj_file* ret = map_find_c(&(a->tmpl_tbl),name);
+  return ret == NULL ? NULL : ret;
 }
 
 struct ajj_object*
 ajj_new_template( struct ajj* a ,const char* name ,
     const char* src , int own , time_t ts ) {
   struct jj_file f;
+  /* Try to delete if this template is already existed */
+  ajj_delete_template(a,name);
+
+  /* Create new oneand insert it into the map */
   f.tmpl = ajj_object_create_jinja(a,name,src,own);
   f.ts = ts;
   CHECK(!map_insert_c(&(a->tmpl_tbl),name,&f));
@@ -1191,15 +1195,19 @@ ajj_parse_template( struct ajj* a , const char* filename ) {
   /* try to load the template directly from existed one */
   f = ajj_find_template(a,filename);
   if(f) {
-    int ret = a->vfs.vfs_timestamp_is_current(
-        a,filename,f->ts,a->vfs_udata);
-    if(ret <0) {
-      return NULL; /* failed */
-    } else if(ret) {
-      /* Hit the cache, so just return this template */
-      return f->tmpl;
+    if(f->ts == 0) {
+      return f->tmpl; /* This is a in memory object */
     } else {
-      ts = f->ts;
+      int ret = a->vfs.vfs_timestamp_is_current(
+          a,filename,f->ts,a->vfs_udata);
+      if(ret <0) {
+        return NULL; /* failed */
+      } else if(ret) {
+        /* Hit the cache, so just return this template */
+        return f->tmpl;
+      } else {
+        ts = f->ts;
+      }
     }
   }
 

@@ -2,7 +2,6 @@
 #include <parse.h>
 #include <ajj-priv.h>
 #include <object.h>
-#include <ajj-priv.h>
 #include <bc.h>
 #include <opt.h>
 #include <stdlib.h>
@@ -691,6 +690,7 @@ static void do_import( const char* source , const char* lib ) {
   struct ajj_object* jinja;
   struct ajj_object* m;
   struct ajj_io* output;
+  struct jj_file* f1, *f2;
   a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
   jinja = parse(a,"External",lib,0,0);
   if(!jinja) {
@@ -702,6 +702,10 @@ static void do_import( const char* source , const char* lib ) {
     fprintf(stderr,"%s",a->err);
     abort();
   }
+
+  f1 = ajj_find_template(a,"External");
+  f2 = ajj_find_template(a,"Main");
+
   output = ajj_io_create_file(a,stdout);
   if(vm_run_jinja(a,m,output,NULL)) {
     fprintf(stderr,"%s",a->err);
@@ -1101,7 +1105,6 @@ void test_random_1() {
 int main() {
 #else
   int vm_test_main() {
-#endif
 
     test_expr();
     test_loop();
@@ -1114,5 +1117,7 @@ int main() {
     test_extends();
     test_json();
     test_include_with_json();
+#endif
+    test_import();
     return 0;
   }
