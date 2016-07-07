@@ -309,20 +309,10 @@ int opt_to_number( struct opt* o , struct ajj_value* v,
 static
 int opt_to_integer( struct opt* o , struct ajj_value* v,
     int* val ) {
-  struct ajj_object obj;
-  if(v->type == AJJ_VALUE_STRING) {
-    v->value.object = &obj;
-    v->value.object->tp = AJJ_VALUE_STRING;
-    obj.val.str = *((struct string*)v->value.__private__);
-  }
+  assert(v->type != AJJ_VALUE_STRING);
   if(vm_to_integer(v,val)) {
-    if(v->type == AJJ_VALUE_STRING) {
-      opt_rpt_err(o,"Cannot convert string:%s to integer!",
-          obj.val.str.str);
-    } else {
-      opt_rpt_err(o,"Cannot convert type:%s to integer!",
-          ajj_value_get_type_name(v));
-    }
+    opt_rpt_err(o,"Cannot convert type:%s to integer!",
+        ajj_value_get_type_name(v));
     return -1;
   }
   return 0;

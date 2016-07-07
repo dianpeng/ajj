@@ -222,6 +222,17 @@ void test_string() {
     assert( string_eq(&Dup1,&TRUE_STRING) );
     string_destroy(&Dup1);
   }
+  {
+    struct string Dup1 = string_dupu("True",4);
+    assert( string_eq(&Dup1,&TRUE_STRING) );
+  }
+  {
+    struct string str = CONST_STRING("strstr");
+    struct string needle = CONST_STRING("str");
+    const char* end = string_str(&str,&needle);
+    assert(end);
+    assert(end == str.str);
+  }
 }
 
 #define STRBUF_INIT_SIZE INITIAL_MEMORY_SIZE
@@ -235,6 +246,9 @@ void test_strbuf() {
     assert( b1.len == 0 );
     for( i = 0 ; i < 8; ++i ) {
       strbuf_push_rune(&b1,'c');
+    }
+    for( i = 0 ; i < 8 ; ++i ) {
+      assert(strbuf_index(&b1,i) == 'c');
     }
     assert( b1.len == 8 );
     assert( b1.cap > 8 );
@@ -308,6 +322,21 @@ void test_strbuf() {
     assert(str.str[i]==0);
     strbuf_destroy(&b1); /* should be dummy */
     string_destroy(&str);
+  }
+
+  /* Printf */
+  {
+    struct strbuf sbuf;
+    size_t i;
+    strbuf_init(&sbuf);
+    for( i = 0 ; i < 1000; ++i ) {
+      strbuf_printf(&sbuf,"%s","ccc");
+    }
+    for( i = 0 ; i < 3000; i+= 3 ) {
+      assert(strbuf_index(&sbuf,i)=='c');
+      assert(strbuf_index(&sbuf,i+1)=='c');
+      assert(strbuf_index(&sbuf,i+2)=='c');
+    }
   }
 }
 
@@ -2686,6 +2715,7 @@ int main() {
 #else
 void unit_test_main() {
 #endif
+  parser_test("{% do assert_expr(\"aa\" + \"aa\" == \"aaaa\") $}",1,0);
   bc_test_main();
   util_test_main();
   lex_test_main();

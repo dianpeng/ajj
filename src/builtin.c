@@ -2473,6 +2473,7 @@ struct ajj_object*
 json_parse( struct ajj* a, struct gc_scope* scp,
     const char* filename , const char* func ) {
   size_t len;
+  /* Use vfs api to load the file *DO NOT* use underlying C API */
   const char* src = a->vfs.vfs_load(a,filename,&len,NULL,a->vfs_udata);
   if(src == NULL) {
     return NULL;

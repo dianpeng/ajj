@@ -487,6 +487,8 @@ int strbuf_printf( struct strbuf* buf, const char* format, ... ) {
 }
 
 int strbuf_vprintf( struct strbuf* buf, const char* format, va_list vl ) {
+  va_list backup;
+  va_copy(backup,vl);
   if( buf->cap == buf->len+1 ) {
     /* resize the memory */
     buf->str = mem_grow(buf->str,sizeof(char),0,&(buf->cap));
@@ -503,6 +505,7 @@ int strbuf_vprintf( struct strbuf* buf, const char* format, va_list vl ) {
           sizeof(char),
           ret,
           &(buf->cap));
+      va_copy(vl,backup);
     } else {
       if(ret >0) buf->len += ret;
       return ret;

@@ -29,6 +29,9 @@
 {% do assert_expr( -100/2 == -50, '-100/2 == -50' ) %}
 {% do assert_expr( -100/-2 == 50, '-100/-2 == 50' ) %}
 {# String Operations #}
+{% do assert_expr( 'aa'+'bb' == 'aabb' ) %}
+{% do assert_expr( 'aa'~'bb' == 'aabb' ) %}
+{% do assert_expr( 'aa'+'bb' == 'aa' ~ 'bb') %}
 {% with str = 'Hello' %}
     {% do assert_expr( str[0] == 'H' , 'Hello[0] == H' ) %}
     {% do assert_expr( str[1] == 'e' , 'Hello[1] == e' ) %}

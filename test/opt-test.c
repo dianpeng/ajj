@@ -111,6 +111,12 @@ void test_expr() {
   do_test("{{ 2>=3 }}");
   do_test("{{ -5 }}");
   do_test("{{ not 5 }}");
+  do_test("{{ '3' + 3 }}");
+  do_test("{{ not True }}");
+  do_test("{{ not False }}");
+  do_test("{{ not None }}");
+  do_test("{{ not 3 }}");
+  do_test("{{ not 0 }}");
 
   /* string */
   do_test("{{ 'hello' + 'world' }}");
