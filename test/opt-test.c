@@ -4,10 +4,26 @@
 #include <bc.h>
 #include <opt.h>
 
-#include "test-check.h"
-
 #include <stdlib.h>
 #include <stdio.h>
+
+#ifdef NDEBUG
+#include <stdlib.h>
+#include <stdio.h>
+#undef assert
+#define assert(X) \
+  do { \
+    if(!(X)) { \
+      fprintf(stderr,"%s","Assertion:"#X); \
+      abort(); \
+    } \
+  } while(0)
+#else
+#include <assert.h>
+#endif /* NDEBUG */
+
+#define STRINGIFY(...) #__VA_ARGS__
+
 
 #define FATAL(X,MSG,...) \
     do { \
@@ -749,7 +765,7 @@ void test_call() {
 #ifndef DO_COVERAGE
 int main() {
 #else
-int opt_test_main() {
+void opt_test_main() {
 #endif
   test_expr();
   test_loop();
@@ -758,5 +774,7 @@ int opt_test_main() {
   test_with();
   test_macro();
   test_call();
+#ifndef DO_COVERAGE
   return 0;
+#endif
 }

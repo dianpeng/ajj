@@ -6,7 +6,7 @@
 #ifndef DO_COVERAGE
 int main() {
 #else
-int jinja_test_main() {
+void jinja_test_main() {
 #endif
   DIR* d;
   struct dirent* dir;
@@ -38,5 +38,7 @@ int jinja_test_main() {
   fclose(devnull);
   ajj_io_destroy(a,output);
   ajj_destroy(a);
+#ifndef DO_COVERAGE
   return 0;
+#endif
 }

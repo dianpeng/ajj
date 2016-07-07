@@ -451,7 +451,16 @@ struct ajj_vfs {
    * a timestamp to its best knowledege when the file gets modified,
    * and expect the latest timestamp gets updated in that area.
    * The memory returned by this function is taken ownership by the
-   * library and will be *freed* by the library */
+   * library and will be *freed* by the library .
+   *
+   * NOTES: The returned memory *MUST* be null terminated, even if
+   * it is UTF encoded, user needs to append an extra 0 at the end
+   * of the buffer. Also the size returned by the function *DO NOT*
+   * need to reflect this null terminator. It means user actually
+   * allocate one bytes more than the file size but the length it
+   * returns is same as the file size
+   *
+   */
   void* (*vfs_load)( struct ajj*, const char* , size_t* , time_t* , void* );
 
   /* Function that perform retrieving timestame of the target path .
