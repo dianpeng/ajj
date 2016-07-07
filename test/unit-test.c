@@ -2715,7 +2715,6 @@ int main() {
 #else
 void unit_test_main() {
 #endif
-  parser_test("{% do assert_expr(\"aa\" + \"aa\" == \"aaaa\") $}",1,0);
   bc_test_main();
   util_test_main();
   lex_test_main();
