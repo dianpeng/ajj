@@ -103,12 +103,12 @@ ajj_new_template( struct ajj* a ,const char* name ,
 }
 
 int ajj_delete_template( struct ajj* a, const char* name ) {
-  struct ajj_object* obj;
-  if( map_remove_c(&(a->tmpl_tbl),name,&obj))
+  struct jj_file f;
+  if( map_remove_c(&(a->tmpl_tbl),name,&f))
     return -1;
-  LREMOVE(obj); /* remove it from gc scope */
-  ajj_object_destroy_jinja(a,obj); /* destroy internal gut */
-  slab_free(&(a->obj_slab),obj); /* free object back to slab */
+  LREMOVE(f.tmpl); /* remove it from gc scope */
+  ajj_object_destroy_jinja(a,f.tmpl); /* destroy internal gut */
+  slab_free(&(a->obj_slab),f.tmpl); /* free object back to slab */
   return 0;
 }
 

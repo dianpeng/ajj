@@ -123,6 +123,9 @@ token_id tk_lex_str( struct tokenizer* tk ) {
       }
     } else if( c1 == '\'' ) {
       break;
+    } else if( c1 == 0 ) {
+      /* find an EOF character which is not needed */
+      RETURN(TK_STRING_ERROR,i-tk->pos);
     }
     strbuf_push_rune(&(tk->lexeme),c1);
     i += o1;

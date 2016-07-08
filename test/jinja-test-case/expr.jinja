@@ -28,10 +28,14 @@
 {% do assert_expr( -1*15 == -15, '-1*15 == -15' ) %}
 {% do assert_expr( -100/2 == -50, '-100/2 == -50' ) %}
 {% do assert_expr( -100/-2 == 50, '-100/-2 == 50' ) %}
+{% do assert_expr( True + 1 == False + 2 ) %}
 {# String Operations #}
 {% do assert_expr( 'aa'+'bb' == 'aabb' ) %}
 {% do assert_expr( 'aa'~'bb' == 'aabb' ) %}
 {% do assert_expr( 'aa'+'bb' == 'aa' ~ 'bb') %}
+{% do assert_expr( None + 'bb' == 'bb' ) %}
+{% do assert_expr( True + 'bb' == 'Truebb' ) %}
+{% do assert_expr( False+ 'bb' == 'Falsebb') %}
 {% with str = 'Hello' %}
     {% do assert_expr( str[0] == 'H' , 'Hello[0] == H' ) %}
     {% do assert_expr( str[1] == 'e' , 'Hello[1] == e' ) %}
@@ -41,6 +45,7 @@
     {% do assert_expr( str[5] == None, 'Hello[5] == None') %}
 {% endwith %}
 {% do assert_expr( 'Verify'*2 == 'VerifyVerify' , 'Verify*2 == VerifyVerify' ) %}
+{% do assert_expr( 2*'Verify' == 'VerifyVerify' , '2*Verify == VerifyVerify' ) %}
 {% do assert_expr( 'Hello' + 'World' == 'HelloWorld' , 'Hello+World==HelloWorld') %}
 {# Simple arithmatic with variable #}
 {% with %}
@@ -107,6 +112,7 @@
     {% do assert_expr( 3 in l, '3 in l' ) %}
     {% do assert_expr( 4 in l, '4 in l' ) %}
     {% do assert_expr( 5 not in l , '5 not in l' ) %}
+    {% do assert_expr( 5 in l == False , '5 in l is False' ) %}
 {% endwith %}
 {% with d = { 'a':1 , 'b':2 , 'c':3 } %}
     {% do assert_expr( 'a' in d, 'a in d' ) %}
@@ -143,3 +149,29 @@
 {% do assert_expr( typeof(None) == 'none') %}
 {# Ternary expression #}
 {% do assert_expr( True if #'str' == 3 else False ) %}
+{# Set with existed variable name #}
+{% with %}
+  {% set a = 9 %}
+  {% set a = 10 %}
+  {% with %}
+    {% set a = 20 %}
+    {% do assert_expr( a == 20 ) %}
+  {% endwith %}
+  {% do assert_expr( a == 10 ) %}
+{% endwith %}
+{# Set Scope #}
+{% with %}
+  {% set val %}
+  Hello World
+  {% endset %}
+  Val:{{val}}
+{% endwith %}
+{# Set Scope with existed variable #}
+{% with %}
+  {% set val %}
+    Hello World
+  {% endset %}
+  Val:{{val}}
+  {% set val %}A{% endset %}
+  {% do assert_expr( val == 'A' ) %}
+{% endwith %}

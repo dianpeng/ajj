@@ -9,5 +9,8 @@
     "E": [1,2,3,4]
   },
   "Arg3" : 3.0 ,
-  "Arg4" : 7.0
+  "Arg4" : 7.0,
+  "Str1":"This is from Json!",
+  "Str2":"This is from Json but cannot be overwrite!",
+  "Str3":"This is from json but won't show up!"
 }

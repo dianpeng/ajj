@@ -19,7 +19,7 @@
 #define assert(X) \
   do { \
     if(!(X)) { \
-      fprintf(stderr,"\n%s\n","Assertion:"#X); \
+      fprintf(stderr,"\n%s\n","Assertion:"#X"\n"); \
       abort(); \
     } \
   } while(0)
@@ -1220,17 +1220,23 @@ void parser_expr() {
     parser_test(src,1,0);
   }
 
-
-
   { /* simple expression 2 */
     const char* src = " {% do users.append( some_string + \'Hello\' ) // another.one ** 3 %}";
     parser_test(src,1,0);
   }
 
-
-
   { /* simple expression 3 */
     const char* src = "{% do users.append(some_thing+\'UUV\') >= -users.name %}\n";
+    parser_test(src,1,0);
+  }
+
+  { /* simple expression 4 */
+    const char* src = "{{ -3 + +4 }}";
+    parser_test(src,1,0);
+  }
+
+  { /* simple expression 5 */
+    const char* src = "{{ not 4 + 3 / -4 + +5 }}";
     parser_test(src,1,0);
   }
 
@@ -1238,8 +1244,6 @@ void parser_expr() {
     const char* src = "{% do append >= only and user >= shoot or user == None or not True %}";
     parser_test(src,1,0);
   }
-
-
 
   { /* logic */
     const char* src = "{% if append >= only and user >= more or not(user < 100) or None != False %}\n" \
@@ -1258,7 +1262,6 @@ void parser_expr() {
                       "{% endif %}";
     parser_test(src,1,0);
   }
-
 
   { /* tenary */
     const char* src = "{% do 1+3*2//5 if me is you and i in some_map else 3+5 %}";
@@ -1295,6 +1298,16 @@ void parser_expr() {
 
   { /* component */
     const char* src = "{% do a.p.u[\'v\'][myname+1+'string'].push(U) %}";
+    parser_test(src,1,0);
+  }
+
+  { /* test */
+    const char* src = "{% do assert_expr( True is True ) %}";
+    parser_test(src,1,0);
+  }
+
+  {
+    const char* src = "{% do assert_expr( True is True(abc,def) ) %}";
     parser_test(src,1,0);
   }
 }
@@ -2559,6 +2572,52 @@ void vm_json() {
   }
 }
 
+/* Test include with context as its MODEL */
+static
+void vm_include_with_context() {
+  {
+    struct ajj* a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
+    struct ajj_object* jinja;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+
+    load_template(a,"Inc1","This is:{{ Hello_World }}\n\n");
+    jinja = load_template(a,
+        "Main",
+        "{% include 'Inc1' upvalue %}"
+        "{% set Hello_World = 'Hello!!!World' %}"
+        "{% endinclude %}");
+    if( vm_run_jinja(a,jinja,output,NULL) ) {
+      fprintf(stderr,"%s",a->err);
+      abort();
+    }
+    ajj_io_destroy(a,output);
+    ajj_destroy(a);
+  }
+  {
+    struct ajj* a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
+    struct ajj_object* jinja;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+
+    load_template(a,"Inc1","This is:{{ Hello_World }}\n\n" \
+                           "This is:{{ Hello_World2}}\n\n" \
+                           "This is:{{ Hello_World3}}\n\n");
+    jinja = load_template(a,
+        "Main",
+        "{% include 'Inc1' upvalue %}" \
+        "{% set Hello_World = 'Hello!!!World' %}" \
+        "{% set Hello_World2= 'Hello222World' override %}" \
+        "{% set Hello_World = 'HelloXXXWorld' optional %}" \
+        "{% set Hello_World3= 'This is 3!\n' override %}" \
+        "{% endinclude %}");
+    if( vm_run_jinja(a,jinja,output,NULL) ) {
+      fprintf(stderr,"%s",a->err);
+      abort();
+    }
+    ajj_io_destroy(a,output);
+    ajj_destroy(a);
+  }
+}
+
 /* Test include with json as its MODEL */
 static
 void vm_include_with_json() {
@@ -2653,6 +2712,33 @@ void vm_include_with_json() {
     ajj_io_destroy(a,output);
     ajj_destroy(a);
   }
+
+  {
+    struct ajj* a = ajj_create(&AJJ_DEFAULT_VFS,NULL);
+    struct ajj_object* jinja;
+    struct ajj_io* output = ajj_io_create_file(a,stdout);
+
+    load_template(a,"Inc1",
+        "StringFromJson:{{ Str1 }}\n\n" \
+        "StringFromContext:{{ StrCtx1 }}\n\n" \
+        "StringFromJsonButOptionalOverwrite:{{ Str2 }}\n\n" \
+        "StringFromJsonButForceOverwrite:{{ Str3 }}\n\n");
+
+    jinja = load_template(a,
+        "Main",
+        "{% include 'Inc1' json 'hello_world.json' %}" \
+        "{% set Str3 = 'This is From Context but Overwrite whatever in json!' override %}"
+        "{% set Str2 = 'This wont show up' optional %}" \
+        "{% set StrCtx1 = 'From Context!' %}" \
+        "{% endinclude %}");
+
+    if( vm_run_jinja(a,jinja,output,NULL) ) {
+      fprintf(stderr,"%s",a->err);
+      abort();
+    }
+    ajj_io_destroy(a,output);
+    ajj_destroy(a);
+  }
 }
 
 static
@@ -2706,6 +2792,7 @@ void vm_test_main() {
   vm_include();
   vm_extends();
   vm_json();
+  vm_include_with_context();
   vm_include_with_json();
   vm_basic();
 }

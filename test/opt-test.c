@@ -14,7 +14,7 @@
 #define assert(X) \
   do { \
     if(!(X)) { \
-      fprintf(stderr,"%s","Assertion:"#X); \
+      fprintf(stderr,"%s","Assertion:"#X"\n"); \
       abort(); \
     } \
   } while(0)

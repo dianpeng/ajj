@@ -100,6 +100,7 @@ enum {
   X(TK_EOF,"<eof>") \
   X(TK_UNKNOWN_NUMBER,"number is too large,overflow!")\
   X(TK_UNKNOWN,"token is not recognized!") \
+  X(TK_STRING_ERROR,"string is not closed by quotes!") \
   X(TK_UNKNOWN_UTF,"utf encoding rune error!")
 
 #define X(A,B) A,

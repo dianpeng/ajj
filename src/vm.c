@@ -1049,10 +1049,10 @@ void vm_exit( struct ajj* a , int loops ) {
 static
 void setup_env( struct ajj* a , int cnt , struct runtime* nrt ) {
   int i;
-  for( i = 0 ; i < cnt ; --i ) {
-    struct ajj_value* name = stk_top(a,3*i+1);
+  for( i = 0 ; i < cnt ; ++i ) {
+    struct ajj_value* opt = stk_top(a,3*i+1);
     struct ajj_value* value= stk_top(a,3*i+2);
-    struct ajj_value* opt = stk_top(a,3*i+3);
+    struct ajj_value* name= stk_top(a,3*i+3);
     const struct string* symbol;
     int iopt;
     int isys;
@@ -1078,7 +1078,7 @@ void setup_env( struct ajj* a , int cnt , struct runtime* nrt ) {
     assert(uv);
 
     /* setup the upvalue as value */
-    uv->type = UPVALUE_FUNCTION;
+    uv->type = UPVALUE_VALUE;
     uv->gut.val = *value;
   }
 }
@@ -1472,49 +1472,6 @@ int exit_function( struct ajj* a , const struct ajj_value* ret ) {
     }
   }
   return 0;
-}
-
-/* BUILTIN variables */
-int vm_get_argnum( struct ajj* a ) {
-  return cur_frame(a)->par_cnt;
-}
-
-const struct string* vm_get_func( struct ajj* a ) {
-  return &(cur_frame(a)->name);
-}
-
-const struct ajj_value* vm_get_vargs( struct ajj* a ) {
-  struct func_frame* fr = cur_frame(a);
-  if( IS_C(fr->entry) || IS_OBJECTCTOR(fr->entry))
-    return NULL;
-  else {
-    const struct program* prg = GET_JINJAFUNC(fr->entry);
-    struct ajj_value* vargs;
-    assert( IS_JINJA(fr->entry) );
-
-    vargs = a->rt->val_stk + fr->ebp + prg->par_size
-      + VARGS_INDEX;
-
-    /* check the stack */
-    if( vargs->type == AJJ_VALUE_NONE )
-      return NULL;
-    else {
-      return vargs;
-    }
-  }
-}
-
-const struct string* vm_get_caller( struct ajj* a ) {
-  if( a->rt->cur_call_stk == 1 )
-    return NULL;
-  else {
-    return &(a->rt->call_stk[
-        a->rt->cur_call_stk-2].name);
-  }
-}
-
-const struct ajj_object* vm_get_self( struct ajj* a ) {
-  return cur_frame(a)->obj;
 }
 
 static
@@ -2345,7 +2302,7 @@ int vm_main( struct ajj* a ) {
         UNREACHABLE();
         break;
     }
-  }while(1);
+  } while(1);
 
 fail:
   return -1;

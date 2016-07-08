@@ -124,13 +124,6 @@ int vm_to_boolean( const struct ajj_value* );
 int vm_to_string( const struct ajj_value* val ,
         struct string* str , int* own );
 
-/* Get builtin variable from the current stack frame */
-int vm_get_argnum( struct ajj* a );
-const struct string* vm_get_func( struct ajj* a );
-const struct ajj_value* vm_get_vargs( struct ajj* a );
-const struct string* vm_get_caller( struct ajj* a );
-const struct ajj_object* vm_get_self( struct ajj* a );
-
 /* VM BUILTIN function */
 int vm_caller( struct ajj* ,
     void*,

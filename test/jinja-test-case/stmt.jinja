@@ -257,3 +257,12 @@
     {% endwith %}
     {% do assert_expr( alist[4] == 5 ) %}
 {% endwith %}
+{# 5. Return statement #}
+{% macro return_foo1() %}
+  {% return %}
+{% endmacro %}
+{% do assert_expr( return_foo1() is None ) %}
+{% macro return_foo2() %}
+  {% return 1 %}
+{% endmacro %}
+{% do assert_expr( return_foo2() == 1 ) %}

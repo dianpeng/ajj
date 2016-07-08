@@ -15,7 +15,7 @@
 #define EXPECT(TK) \
   do { \
     if( p->tk.tk != (TK) ) { \
-      parser_rpt_err(p,"Unexpected token :%s expect :%s", \
+      parser_rpt_err(p,"Unexpected token or lexer error :%s expect :%s!", \
           tk_get_name(p->tk.tk), \
           tk_get_name((TK))); \
       return -1; \
@@ -26,7 +26,7 @@
 #define EXPECT_VARIABLE() \
   do { \
     if( tk_expect_id(&(p->tk)) ) { \
-      parser_rpt_err(p,"Unexpected token :%s expect :%s", \
+      parser_rpt_err(p,"Unexpected token or lexer error :%s expect :%s!", \
           tk_get_name(p->tk.tk), \
           tk_get_name(TK_VARIABLE)); \
       return -1; \
@@ -723,7 +723,8 @@ int parse_is( struct parser* p , struct emitter* em ) {
         fn = string_dup(&NONE_STRING);
         break;
       default:
-        parser_rpt_err(p,"Unexpected token here:%s, expect:Variable/"
+        parser_rpt_err(p,"Unexpected token or lexer error "
+            "here:%s, expect:Variable/"
             "False/True/None!",
             tk_get_name(tk->tk));
         return -1;
@@ -808,7 +809,7 @@ int parse_atomic( struct parser* p, struct emitter* em ) {
       TRY(parse_dict(p,em));
       break;
     default:
-      parser_rpt_err(p,"Unexpected token here:%s!",
+      parser_rpt_err(p,"Unexpected token or lexer error here:%s!",
           tk_get_name(tk->tk));
       return -1;
   }
@@ -1203,14 +1204,18 @@ parse_constexpr( struct parser* p , struct ajj_value* output ) {
       break;
     case TK_TRUE:
       if( neg ) {
-        *output = AJJ_FALSE;
+        parser_rpt_err(p,"constexpr: True cannot work with unary "
+            "operator \"-\"!");
+        return -1;
       } else {
         *output = AJJ_TRUE;
       }
       break;
     case TK_FALSE:
       if( neg ) {
-        *output = AJJ_TRUE;
+        parser_rpt_err(p,"constexpr: False cannot work with unary "
+            "operator \"-\"!");
+        return -1;
       } else {
         *output = AJJ_FALSE;
       }
@@ -1309,7 +1314,8 @@ int parse_branch ( struct parser* p, struct emitter* em ) {
       case TK_ELIF:
         { /* elif scope */
           if( has_else ) {
-            parser_rpt_err(p,"Expect endfor since else tag is seen before!");
+            parser_rpt_err(p,"Expect endfor since else tag "
+                "is seen before!");
             return -1;
           }
           tk_move(tk);
@@ -1333,7 +1339,8 @@ int parse_branch ( struct parser* p, struct emitter* em ) {
           break;
         }
       default:
-        parser_rpt_err(p,"Unexpected token in branch scope:%s",
+        parser_rpt_err(p,"Unexpected token or lexer "
+            "error in branch scope:%s",
             tk_get_name(tk->tk));
         return -1;
     }
@@ -2312,7 +2319,8 @@ parse_include( struct parser* p , struct emitter* em ) {
     CONSUME(TK_RSTMT);
     opt = INCLUDE_JSON;
   } else {
-    parser_rpt_err(p,"Unexpected token here in include scope:%s!",
+    parser_rpt_err(p,"Unexpected token or lexer "
+        "error here in include scope:%s!",
         tk_get_name(tk->tk));
     return -1;
   }
@@ -2523,7 +2531,7 @@ done:
   return 0;
 
 fail:
-  parser_rpt_err(p,"Unexpected token in scope:%s!",
+  parser_rpt_err(p,"Unexpected token or lexer error in scope:%s!",
       tk_get_name(tk->tk));
   return -1;
 }
