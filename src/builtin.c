@@ -1979,7 +1979,7 @@ enum {
   JSON_NUMBER
 };
 
-#define TRY_PARSE(X,TAG) \
+#define JSON_TRY_PARSE(X,TAG) \
   do { \
     if(X) { \
       goto fail; \
@@ -2060,16 +2060,16 @@ int json_parse_value( struct ajj* a ,
       case '[':
         JSON_CHECK_NEST();
         i += off; jl->pos = i;
-        TRY_PARSE(json_parse_array(a,scp,jl,rec+1,out),JSON_ARRAY);
+        JSON_TRY_PARSE(json_parse_array(a,scp,jl,rec+1,out),JSON_ARRAY);
       case '{':
         JSON_CHECK_NEST();
         i += off; jl->pos = i;
-        TRY_PARSE(json_parse_object(a,scp,jl,rec+1,out),JSON_OBJECT);
+        JSON_TRY_PARSE(json_parse_object(a,scp,jl,rec+1,out),JSON_OBJECT);
       case '\"':
         /* parsing the string literal */
         JSON_CHECK_NEST();
         i += off; jl->pos = i;
-        TRY_PARSE(json_parse_string(a,scp,jl,out),JSON_STRING);
+        JSON_TRY_PARSE(json_parse_string(a,scp,jl,out),JSON_STRING);
       case 't':
         ret = json_ustr_equal(src+i+1,"rue");
         if(ret) {
@@ -2132,7 +2132,7 @@ fail:
   return JSON_ERROR;
 }
 
-#undef TRY_PARSE
+#undef JSON_TRY_PARSE
 #undef JSON_CHECK_NEST
 
 /* Try parse an object */
@@ -2297,33 +2297,15 @@ json_parse_string( struct ajj* a, struct gc_scope* scp,
              * Currently just push the origin string into buffer */
             strbuf_push_rune(&sbuf,'\\');
             break;
-          case 'n':
-            c = '\n';
-            break;
-          case 't':
-            c = '\t';
-            break;
-          case 'r':
-            c = '\r';
-            break;
-          case '"':
-            c = '"';
-            break;
-          case '\\':
-            c = '\\';
-            break;
-          case 'f':
-            c = '\f';
-            break;
-          case 'v':
-            c = '\v';
-            break;
-          case 'b':
-            c = '\b';
-            break;
-          case '/':
-            c = '/';
-            break;
+          case 'n': c = '\n'; break;
+          case 't': c = '\t'; break;
+          case 'r': c = '\r'; break;
+          case '"': c = '"'; break;
+          case '\\': c = '\\'; break;
+          case 'f': c = '\f'; break;
+          case 'v': c = '\v'; break;
+          case 'b': c = '\b'; break;
+          case '/': c = '/'; break;
           default:
             if(c < 128)
               json_report_error(a,jl,"Unrecognized escape character:%c\n",(char)c);

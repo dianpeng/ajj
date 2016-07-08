@@ -108,6 +108,7 @@ void bc_test_main() {
     assert(bc_instr(instr) == VM_CALL);
     assert(bc_1st_arg(instr)==1);
     assert(bc_2nd_arg(&prg,&i)==2);
+    program_destroy(&prg);
 }
 #undef EMIT0
 #undef EMIT1
@@ -225,6 +226,7 @@ void test_string() {
   {
     struct string Dup1 = string_dupu("True",4);
     assert( string_eq(&Dup1,&TRUE_STRING) );
+    string_destroy(&Dup1);
   }
   {
     struct string str = CONST_STRING("strstr");
@@ -337,6 +339,7 @@ void test_strbuf() {
       assert(strbuf_index(&sbuf,i+1)=='c');
       assert(strbuf_index(&sbuf,i+2)=='c');
     }
+    strbuf_destroy(&sbuf);
   }
 }
 
@@ -981,6 +984,7 @@ static void lex_test_ws() {
     assert(string_cmpc(&lexeme,"This Text  Another Text")==0);
     tk_move(&tk);
     assert(tk.tk == TK_EOF);
+    tk_destroy(&tk);
   }
 
   { /* text on different line */
@@ -993,6 +997,7 @@ static void lex_test_ws() {
     assert(string_cmpc(&lexeme,"This Text  Another Text")==0);
     tk_move(&tk);
     assert(tk.tk == TK_EOF);
+    tk_destroy(&tk);
   }
 
   { /* text on different line */
@@ -1005,6 +1010,7 @@ static void lex_test_ws() {
     assert(string_cmpc(&lexeme,"This Text  Another Text")==0);
     tk_move(&tk);
     assert(tk.tk == TK_EOF);
+    tk_destroy(&tk);
   }
 
   { /* text on different line */
@@ -1017,6 +1023,7 @@ static void lex_test_ws() {
     assert(string_cmpc(&lexeme,"This Text  Another Text")==0);
     tk_move(&tk);
     assert(tk.tk == TK_EOF);
+    tk_destroy(&tk);
   }
 }
 
@@ -1055,6 +1062,8 @@ void parser_test( const char* src , int pos , int dump ) {
   PARSER_TEST_CHECK(obj);
   prg = ajj_object_jinja_main(obj);
   PARSER_TEST_CHECK(prg);
+
+  ajj_destroy(a);
 }
 
 /* ALL these tests requires human interaction to look into the code
@@ -1331,6 +1340,7 @@ void parser_macro() {
     assert(prg);
     prg = ajj_object_get_jinja_macro(obj,&input);
     assert(prg);
+    ajj_destroy(a);
   }
 
 
@@ -1349,7 +1359,7 @@ void parser_macro() {
     assert(prg);
     prg = ajj_object_get_jinja_macro(obj,&input);
     assert(prg);
-
+    ajj_destroy(a);
   }
 
   { /* MACRO */
@@ -1367,7 +1377,7 @@ void parser_macro() {
     assert(prg);
     prg = ajj_object_get_jinja_macro(obj,&input);
     assert(prg);
-
+    ajj_destroy(a);
   }
 }
 
@@ -1388,6 +1398,7 @@ void parser_block() {
     prg =ajj_object_jinja_main(obj);
     assert(prg);
     prg =ajj_object_get_jinja_block(obj,&head);
+    ajj_destroy(a);
 
   }
 
@@ -1406,7 +1417,7 @@ void parser_block() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
-
+    ajj_destroy(a);
   }
 }
 
@@ -1420,7 +1431,7 @@ void parser_do() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
-
+    ajj_destroy(a);
   }
 }
 
@@ -1481,6 +1492,7 @@ void parser_call() {
     prg = ajj_object_jinja_main(obj);
     assert(prg);
     prg = ajj_object_get_jinja_macro(obj,&call_name);
+    ajj_destroy(a);
 
   }
 
@@ -1495,6 +1507,7 @@ void parser_call() {
     assert(obj);
     prg = ajj_object_jinja_main(obj);
     assert(prg);
+    ajj_destroy(a);
   }
 }
 
@@ -2570,6 +2583,8 @@ void vm_json() {
     }
     closedir(d);
   }
+
+  ajj_destroy(a);
 }
 
 /* Test include with context as its MODEL */
@@ -2803,6 +2818,7 @@ int main() {
 void unit_test_main() {
 #endif
   bc_test_main();
+
   util_test_main();
   lex_test_main();
   parser_test_main();
