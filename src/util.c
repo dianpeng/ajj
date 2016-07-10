@@ -871,12 +871,14 @@ struct map_pair map_iter_deref( struct map* d, int itr ) {
  * =====================*/
 
 static
-void slab_reserve( struct slab* sl ) {
+size_t slab_reserve( struct slab* sl ) {
   const size_t cap = sl->cur_cap * 2;
-  void* mem = malloc(sizeof(struct chunk) + sl->cur_cap*sl->obj_sz*2);
+  const size_t bcap = sizeof(struct chunk) + sl->cur_cap*sl->obj_sz*2;
+  void* mem = malloc(bcap);
   void* h;
   size_t i;
   ((struct chunk*)mem)->next = sl->ck;
+  ((struct chunk*)mem)->cap = bcap;
   sl->ck = mem;
   h = mem = (char*)(mem) + sizeof(struct chunk);
 
@@ -888,22 +890,42 @@ void slab_reserve( struct slab* sl ) {
   ((struct freelist*)(mem))->next = NULL;
   sl->fl = h;
   sl->cur_cap = cap;
+  return cap; /* return the number of OBJ */
 }
 
-void slab_init( struct slab* sl , size_t cap , size_t obj_sz ) {
+static
+int slab_in_range( struct slab* sl , void* ptr ) {
+  struct chunk* c = sl->ck;
+  assert(c);
+  do {
+    char* p = (char*)ptr;
+    if( p >= (char*)(c) && p <= ((char*)(c) + c->cap) )
+      return 1;
+  } while((c=c->next));
+  return 0;
+}
+
+void slab_init( struct slab* sl , size_t cap ,
+    size_t obj_sz , size_t lmt ) {
   cap = cap < 32 ? 16 : cap/2;
   sl->obj_sz = obj_sz < sizeof(void*) ?
     sizeof(void*) : obj_sz;
   sl->fl = NULL;
   sl->ck = NULL;
   sl->cur_cap = cap;
-  slab_reserve( sl );
+  sl->all_cap = slab_reserve( sl );
+  sl->lmt = lmt;
 }
 
 void* slab_malloc( struct slab* sl ) {
   void* ret;
   if( sl->fl == NULL ) {
-    slab_reserve(sl);
+    if(sl->all_cap < sl->lmt) {
+      sl->all_cap += slab_reserve(sl);
+    } else {
+      /* do a real malloc */
+      return malloc(sl->obj_sz);
+    }
   }
   ret = sl->fl;
   sl->fl = sl->fl->next;
@@ -911,10 +933,13 @@ void* slab_malloc( struct slab* sl ) {
 }
 
 void slab_free( struct slab* sl , void* ptr ) {
-  ((struct freelist*)ptr)->next = sl->fl;
-  sl->fl = ptr;
+  if(slab_in_range(sl,ptr)) {
+    ((struct freelist*)ptr)->next = sl->fl;
+    sl->fl = ptr;
+  } else {
+    free(ptr);
+  }
 }
-
 
 void slab_destroy( struct slab* sl ) {
   struct chunk* c = sl->ck;

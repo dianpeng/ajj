@@ -24,14 +24,18 @@ struct ajj* ajj_create( struct ajj_vfs* vfs , void* vfs_udata ) {
   struct ajj* r = malloc(sizeof(*r));
   r->err[0] = 0;
 
-  slab_init(&(r->upval_slab),
-      UPVALUE_SLAB_SIZE, sizeof(struct upvalue));
-  slab_init(&(r->obj_slab),
-      OBJECT_SLAB_SIZE, sizeof(struct ajj_object));
-  slab_init(&(r->ft_slab),
-      FUNCTION_SLAB_TABLE_SIZE,sizeof(struct func_table));
-  slab_init(&(r->gc_slab),
-      GC_SLAB_SIZE,sizeof(struct gc_scope));
+  slab_init(&(r->upval_slab),UPVALUE_SLAB_SIZE,
+      sizeof(struct upvalue),UPVALUE_SLAB_LIMIT);
+
+  slab_init(&(r->obj_slab),OBJECT_SLAB_SIZE,
+      sizeof(struct ajj_object),UPVALUE_SLAB_LIMIT);
+
+  slab_init(&(r->ft_slab),FUNCTION_TABLE_SLAB_SIZE,
+      sizeof(struct func_table),FUNCTION_TABLE_SLAB_LIMIT);
+
+  slab_init(&(r->gc_slab),GC_SLAB_SIZE,
+      sizeof(struct gc_scope),GC_SLAB_LIMIT);
+
   map_create(&(r->tmpl_tbl),sizeof(struct jj_file),32);
   gc_root_init(&(r->gc_root),1);
   r->rt = NULL;

@@ -259,6 +259,7 @@ struct map_pair map_iter_deref( struct map* d, int itr );
  * ======================================*/
 struct chunk {
   struct chunk* next;
+  size_t cap; /* capacity for this chunk */
 };
 
 struct freelist {
@@ -270,9 +271,12 @@ struct slab {
   struct freelist* fl;
   size_t cur_cap;
   size_t obj_sz;
+  size_t all_cap; /* total capacity */
+  size_t lmt; /* limit of the slab */
 };
 
-void slab_init( struct slab* , size_t cap , size_t obj_sz );
+void slab_init( struct slab* , size_t cap ,
+    size_t obj_sz , size_t lmt );
 void slab_destroy(struct slab* );
 void* slab_malloc( struct slab* );
 void slab_free( struct slab* , void* );

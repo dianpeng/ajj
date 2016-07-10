@@ -8,10 +8,18 @@
 #include "upvalue.h"
 
 #define ERROR_BUFFER_SIZE 1024*4 /* 4kb for error buffer, already very large */
+
 #define UPVALUE_SLAB_SIZE 32
-#define FUNCTION_SLAB_TABLE_SIZE 32
-#define OBJECT_SLAB_SIZE 128
-#define GC_SLAB_SIZE 32
+#define UPVALUE_SLAB_LIMIT 64
+
+#define FUNCTION_TABLE_SLAB_SIZE 16
+#define FUNCTION_TABLE_SLAB_LIMIT 16
+
+#define OBJECT_SLAB_SIZE 64
+#define OBJECT_SLAB_LIMIT 64
+
+#define GC_SLAB_SIZE 8
+#define GC_SLAB_LIMIT 8
 
 struct runtime;
 
