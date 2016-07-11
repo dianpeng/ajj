@@ -174,7 +174,7 @@ void strbuf_init_cap( struct strbuf* buf , size_t cap );
 
 void strbuf_reserve( struct strbuf* buf , size_t cap );
 
-void strbuf_push_rune( struct strbuf* buf , Rune );
+int strbuf_push_rune( struct strbuf* buf , Rune );
 
 void strbuf_append( struct strbuf* buf , const char* str , size_t len );
 
@@ -195,6 +195,7 @@ void* strbuf_detach( struct strbuf* buf , size_t* len , size_t* cap );
 void strbuf_move( struct strbuf* buf , struct string* output );
 
 struct string strbuf_tostring( struct strbuf* buf );
+struct string strbuf_fitstring(struct strbuf* buf );
 
 int strbuf_printf( struct strbuf* buf , const char* format , ... );
 int strbuf_vprintf(struct strbuf* buf , const char* format , va_list );

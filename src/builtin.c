@@ -2690,6 +2690,9 @@ int type_of( struct ajj* a ,
   }
 }
 
+/* ===================================
+ * Filters
+ * =================================*/
 
 static
 int filter_abs( struct ajj* a,
@@ -2726,9 +2729,183 @@ int filter_attr( struct ajj* a,
   }
 }
 
-/* TODO:: implement capitalize in UTF encoding word */
+static
+int filter_slice( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_len,
+    struct ajj_value* ret ) {
+  UNUSE_ARG(udata);
+  if(arg_len != 3) {
+    EXEC_FAIL1(a,"%s","Function::slice can accept 3 arguments!");
+  } else {
+    int i;
+    int start , end;
+    int start_idx , end_idx;
+    int ccnt;
+    struct string* str;
 
-/* TODO:: implement center in UTF encoding word */
+    /* Handle the arguments */
+    if(arg[0].type != AJJ_VALUE_STRING) {
+      EXEC_FAIL1(a,"%s","Function::slice first argument must be string!");
+    }
+    if(arg[1].type != AJJ_VALUE_NUMBER) {
+      EXEC_FAIL1(a,"%s","Function::slice second argument must be number!");
+    }
+    if(arg[2].type != AJJ_VALUE_NUMBER) {
+      EXEC_FAIL1(a,"%s","Function::slice third argument must be number!");
+    }
+    if(vm_to_integer(arg+1,&start) || vm_to_integer(arg+2,&end)) {
+      EXEC_FAIL1(a,"%s","Function::slice 2nd and 3rd arguments must be "
+          "convertable to integer!");
+    }
+    if(start > end) {
+      EXEC_FAIL1(a,"%s","Function::slice 2nd must "
+          "be less than 3rd argument!");
+    }
+    str = ajj_value_to_string(arg);
+
+    /* Decode the whole string */
+    ccnt= 0 ; start_idx = end_idx = -1;
+    for( i = 0 ; i < str->len ; ) {
+      Rune r;
+      int ret = chartorune(&r,str->str + i);
+      if(ret == Runeerror) {
+        EXEC_FAIL1(a,"%s","Function::slice cannot decode UTF string!");
+      }
+      ++ccnt;
+      if(ccnt == start) {
+        start_idx = i;
+      }
+      if(ccnt == end) {
+        end_idx = i;
+        break;
+      }
+      i += ret;
+    }
+    assert(start_idx >=0);
+    assert(end_idx >=0);
+
+    /* Now slice one string out to the return */
+    *ret = ajj_value_assign(
+        ajj_object_create_string(a,
+          ajj_cur_gc_scope(a),
+          str->str+start_idx,end_idx-start_idx,0));
+    return AJJ_EXEC_OK;
+  }
+}
+
+static
+int filter_bslice( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_len,
+    struct ajj_value* ret ) {
+  UNUSE_ARG(udata);
+  if(arg_len != 3) {
+    EXEC_FAIL1(a,"%s","Function::slice can accept 3 arguments!");
+  } else {
+    int start , end;
+    struct string* str;
+
+    /* Handle the arguments */
+    if(arg[0].type != AJJ_VALUE_STRING) {
+      EXEC_FAIL1(a,"%s","Function::slice first argument must be string!");
+    }
+    if(arg[1].type != AJJ_VALUE_NUMBER) {
+      EXEC_FAIL1(a,"%s","Function::slice second argument must be number!");
+    }
+    if(arg[2].type != AJJ_VALUE_NUMBER) {
+      EXEC_FAIL1(a,"%s","Function::slice third argument must be number!");
+    }
+    if(vm_to_integer(arg+1,&start) || vm_to_integer(arg+2,&end)) {
+      EXEC_FAIL1(a,"%s","Function::slice 2nd and 3rd arguments must be "
+          "convertable to integer!");
+    }
+    if(start > end) {
+      EXEC_FAIL1(a,"%s","Function::slice 2nd must "
+          "be less than 3rd argument!");
+    }
+    str = ajj_value_to_string(arg);
+
+    *ret = ajj_value_assign(
+        ajj_object_create_string(a,
+          ajj_cur_gc_scope(a),
+          str->str+start,end-start,0));
+    return AJJ_EXEC_OK;
+  }
+}
+
+static
+int filter_do_string_manipulate(
+    struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_len,
+    struct ajj_value* ret,
+    Rune (*conv)(Rune),
+    const char* funcname ) {
+  UNUSE_ARG(udata);
+  if(arg_len !=1) {
+    EXEC_FAIL1(a,"Function::%s requires 1 argument!",funcname);
+  } else {
+    struct strbuf sbuf;
+    struct string* str;
+    int i;
+
+    /* Handle the arguments for this function */
+    if(arg->type != AJJ_VALUE_STRING) {
+      EXEC_FAIL1(a,"Function:%s 1st argument must be string!",funcname);
+    }
+    str = ajj_value_to_string(arg);
+
+    strbuf_init(&sbuf);
+    /* Decode the UTF string and then upper case each Rune */
+    for( i = 0 ; i <  str->len ; ) {
+      Rune r;
+      Rune cr;
+      int ret = chartorune(&r,str->str+i);
+      if(ret == Runeerror) {
+        strbuf_destroy(&sbuf);
+        EXEC_FAIL1(a,"Function:%s has UTF encoding error!",funcname);
+      }
+      /* Perform the conversion */
+      cr = (*conv)(r);
+      /* Push rune into the strbuf */
+      i += strbuf_push_rune(&sbuf,cr);
+    }
+
+    /* ignore whether this string is correct UTF or not */
+    {
+      struct string nstr = strbuf_fitstring(&sbuf);
+      *ret = ajj_value_assign(
+          ajj_object_create_string(a,
+            ajj_cur_gc_scope(a),nstr.str,nstr.len,1));
+    }
+    strbuf_destroy(&sbuf);
+    return AJJ_EXEC_OK;
+  }
+}
+
+static
+int filter_upper( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_len,
+    struct ajj_value* ret ) {
+  return filter_do_string_manipulate(a,
+      udata,arg,arg_len,ret,toupperrune,"upper");
+}
+
+static 
+int filter_lower( struct ajj* a,
+    void* udata,
+    struct ajj_value* arg,
+    size_t arg_len,
+    struct ajj_value* ret ) {
+  return filter_do_string_manipulate(a,
+      udata,arg,arg_len,ret,tolowerrune,"lower");
+}
 
 static
 int filter_default( struct ajj* a,
@@ -2748,6 +2925,8 @@ int filter_default( struct ajj* a,
     return AJJ_EXEC_OK;
   }
 }
+
+/* type conversion */
 
 void ajj_builtin_load( struct ajj* a ) {
   /* list */
@@ -2830,6 +3009,26 @@ void ajj_builtin_load( struct ajj* a ) {
   ajj_add_filter(a,&(a->builtins),
       "default",
       filter_default,
+      NULL);
+
+  ajj_add_filter(a,&(a->builtins),
+      "slice",
+      filter_slice,
+      NULL);
+
+  ajj_add_filter(a,&(a->builtins),
+      "bslice",
+      filter_bslice,
+      NULL);
+
+  ajj_add_filter(a,&(a->builtins),
+      "upper",
+      filter_upper,
+      NULL);
+
+  ajj_add_filter(a,&(a->builtins),
+      "lower",
+      filter_lower,
       NULL);
 
   /* builtin test */

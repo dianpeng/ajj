@@ -365,7 +365,7 @@ void strbuf_init_cap( struct strbuf* buf , size_t cap ) {
   strbuf_reserve(buf,cap);
 }
 
-void strbuf_push_rune( struct strbuf* buf , Rune c ) {
+int strbuf_push_rune( struct strbuf* buf , Rune c ) {
   int l;
   if( buf->cap == 0 || buf->cap < buf->len +1+ UTFmax ) {
     buf->str = mem_grow(buf->str,sizeof(char),UTFmax,&(buf->cap));
@@ -373,6 +373,7 @@ void strbuf_push_rune( struct strbuf* buf , Rune c ) {
   l = runetochar(buf->str+buf->len,&c);
   buf->len += l;
   buf->str[buf->len] = 0;
+  return l;
 }
 
 void strbuf_append( struct strbuf* buf , const char* str , size_t len ) {
@@ -476,6 +477,18 @@ void strbuf_move( struct strbuf* buf , struct string* output ) {
 struct string strbuf_tostring( struct strbuf* buf ) {
   struct string ret;
   ret.str = buf->str;
+  ret.len = buf->len;
+  return ret;
+}
+
+struct string strbuf_fitstring( struct strbuf* buf ) {
+  struct string ret;
+  char* ptr;
+  /* do not use strdup since it is not a C string */
+  ptr = malloc(buf->len+1);
+  memcpy(ptr,buf->str,buf->len);
+  ptr[buf->len] = 0;
+  ret.str = ptr;
   ret.len = buf->len;
   return ret;
 }

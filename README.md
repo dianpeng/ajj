@@ -8,7 +8,7 @@ A Jinja2 Template Engine Port to C
 4. Automatic garbage collection via scope based strategy.
 5. Dynamic global variable value binding through Json file or template itself.
 6. Fully UTF encoding support.
-7. Small code base with less 12000 lines of C code. Design for embedding.
+7. Small code base with less 14000 lines of C code(including all dependency). Design for embedding.
 
 # Not Supported Jinja2 Features
 1.Loop recursive keyword is not supported.
