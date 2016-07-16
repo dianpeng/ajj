@@ -16,7 +16,8 @@ unix_vfs_load( struct ajj* a , const char* path ,
 
   (void)udata;
   if(stat(path,&st)) {
-    ajj_error(a,"Cannot state file:%s with errno:%s",path,strerror(errno));
+    ajj_error(a,"Cannot state file:%s with errno:%s",
+        path,strerror(errno));
     return NULL;
   }
   if(ts) {
@@ -26,7 +27,8 @@ unix_vfs_load( struct ajj* a , const char* path ,
   /* open file */
   fd = open(path,O_RDONLY);
   if(fd<0) {
-    ajj_error(a,"Cannot open file:%s with errno:%s",path,strerror(errno));
+    ajj_error(a,"Cannot open file:%s with errno:%s",
+        path,strerror(errno));
     return NULL;
   }
 
@@ -38,7 +40,8 @@ unix_vfs_load( struct ajj* a , const char* path ,
     buf[ret] = 0;
     goto done;
   } else {
-    ajj_error(a,"Cannot read file:%s with errno:%s",path,strerror(errno));
+    ajj_error(a,"Cannot read file:%s with errno:%s",
+        path,strerror(errno));
     goto fail;
   }
 
@@ -60,7 +63,8 @@ unix_vfs_timestamp( struct ajj* a , const char* path ,
   struct stat st;
   (void)udata;
   if(stat(path,&st)) {
-    ajj_error(a,"Cannot state file:%s with errno:%s",path,strerror(errno));
+    ajj_error(a,"Cannot state file:%s with errno:%s",
+        path,strerror(errno));
     return 1;
   }
   *ts = st.st_mtime;

@@ -244,34 +244,18 @@ int tk_lex_rmlead( struct tokenizer* tk , int pos ) {
 
 static
 int tk_keyword_check( struct tokenizer* tk , const char* str , int i ) {
-
-#define CHECK_CHAR(I) \
-  do { \
-    const unsigned char t = str[I]; \
-    Rune c; int o; \
-    if(!t) return I; \
-    o = chartorune(&c,tk->src+i); \
-    if( c != t ) return I; \
-    i+= o; \
-  } while(0)
-
-  CHECK_CHAR(0);
-  CHECK_CHAR(1);
-  CHECK_CHAR(2);
-  CHECK_CHAR(3);
-  CHECK_CHAR(4);
-  CHECK_CHAR(5);
-  CHECK_CHAR(6);
-  CHECK_CHAR(7);
-  CHECK_CHAR(8);
-  CHECK_CHAR(9);
-  CHECK_CHAR(10);
-
+  int k;
+  for( k = 0 ; k < 10 ; ++k ) {
+    const unsigned char t = str[k];
+    Rune c; int o;
+    if(!t) return k;
+    o = chartorune(&c,tk->src+i);
+    if( c != t ) return k;
+    i += o;
+  }
   assert(0);
   return -1;
 }
-
-#undef CHECK_CHAR
 
 static
 token_id tk_lex_keyword( struct tokenizer* tk , int offset ) {
