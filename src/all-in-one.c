@@ -12,7 +12,7 @@
 #include "builtin.c"
 
 #ifdef __linux__
-#include "unix-vfs.cc"
+#include "unix-vfs.c"
 #else
 #error "Doesn't support this platform ???"
 #endif /* __linux__ */
