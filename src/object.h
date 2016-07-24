@@ -191,6 +191,7 @@ struct ajj_object*
 ajj_object_detach( struct ajj_object* obj );
 
 /* Initialize an created ajj_object to a certain type */
+
 struct ajj_object*
 ajj_object_string( struct ajj_object* obj,
     const char* str , size_t len , int own );

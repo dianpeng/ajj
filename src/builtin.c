@@ -2561,42 +2561,114 @@ int shell( struct ajj* a,
   }
 }
 
+
 static
-int rm_trail( struct ajj* a,
-    void* udata,
+int lstrip( struct ajj* a ,
+    void* udata ,
     struct ajj_value* arg,
     size_t arg_len,
     struct ajj_value* ret ) {
   UNUSE_ARG(udata);
   if( arg_len != 1 ) {
-    EXEC_FAIL1(a,"%s","Function::shell can only accept one argument,"
-        "and it must be a string!");
-    return AJJ_EXEC_FAIL;
+    EXEC_FAIL1(a,"%s","Function::lstrip can only accept one argument!");
   } else {
     if(arg->type != AJJ_VALUE_STRING) {
-      EXEC_FAIL1(a,"Function::shell can only accept one string "
-          "argument,but get type:%s!",ajj_value_get_type_name(arg));
+      EXEC_FAIL1(a,"%s","Funcion::lstrip can only accept one string argument!");
     } else {
       struct strbuf sbuf;
       const struct string* tar = ajj_value_to_string(arg);
-      int i;
+      size_t i;
+
       strbuf_init_cap(&sbuf,tar->len);
-      for ( i = (int)(tar->len-1) ; i >= 0 ; --i ) {
-        if( tar->str[i] == ' ' ||
-            tar->str[i] == '\t'||
-            tar->str[i] == '\r'||
-            tar->str[i] == '\n' )
-          continue;
-        else {
-          if(tar->str[i] == '\n') --i;
-          break;
+      for( i = 0 ; i < tar->len ; ) {
+        Rune r;
+        int len;
+
+        len = chartorune(&r,tar->str + i);
+        if(r == Runeerror) {
+          EXEC_FAIL1(a,"%s","Function::lstrip argument is not properly UTF "
+              "encoded!");
         }
+        switch(r) {
+          case ' ':
+          case '\t':
+          case '\r':
+          case '\v':
+          case '\n':
+            break;
+          default:
+            strbuf_push_rune(&sbuf,r);
+            break;
+        }
+        i += len;
       }
-      strbuf_append(&sbuf,tar->str,i+1);
       *ret = ajj_value_assign(
           ajj_object_create_string(a,
             ajj_cur_gc_scope(a),
             sbuf.str,sbuf.len,1));
+      return AJJ_EXEC_OK;
+    }
+  }
+}
+
+static
+int rstrip( struct ajj* a ,
+    void* udata ,
+    struct ajj_value* arg,
+    size_t arg_len,
+    struct ajj_value* ret ) {
+  UNUSE_ARG(udata);
+  if( arg_len != 1 ) {
+    EXEC_FAIL1(a,"%s","Function::rstrip can only accept one argument!");
+  } else {
+    if(arg->type != AJJ_VALUE_STRING) {
+      EXEC_FAIL1(a,"%s","Funcion::rstrip can only accept one string argument!");
+    } else {
+      const struct string* tar = ajj_value_to_string(arg);
+      size_t i;
+      int start = -1;
+
+      /* This loop tries to find out the start of the trailing empty spaces */
+      for( i = 0 ; i < tar->len ; ) {
+        Rune r;
+        int len;
+
+        len = chartorune(&r,tar->str + i);
+        if(r == Runeerror) {
+          EXEC_FAIL1(a,"%s","Function::rstrip argument is not properly UTF "
+              "encoded!");
+        }
+        switch(r) {
+          case ' ':
+          case '\t':
+          case '\r':
+          case '\v':
+          case '\n':
+            if(start <0) start = i;
+            break;
+          default:
+            start = -1;
+            break;
+        }
+        i += len;
+      }
+
+      /* Now check if we really have trailing empty spaces */
+      if(start >=0) {
+        /* Here we do a ugly hack for avoiding one string copy */
+        int c = tar->str[start];
+        ((char*)(tar->str))[start] = 0;
+        *ret = ajj_value_assign(
+            ajj_object_create_string(a,
+              ajj_cur_gc_scope(a),
+              tar->str,(size_t)(start),0));
+        ((char*)(tar->str))[start] = c;
+      } else {
+        *ret = ajj_value_assign(
+            ajj_object_create_string(a,
+              ajj_cur_gc_scope(a),
+              tar->str,tar->len,0));
+      }
       return AJJ_EXEC_OK;
     }
   }
@@ -2972,8 +3044,13 @@ void ajj_builtin_load( struct ajj* a ) {
       NULL);
 
   ajj_add_function(a,&(a->builtins),
-      "rm_trail",
-      rm_trail,
+      "lstrip",
+      lstrip,
+      NULL);
+
+  ajj_add_function(a,&(a->builtins),
+      "rstrip",
+      rstrip,
       NULL);
 
   ajj_add_function(a,&(a->builtins),

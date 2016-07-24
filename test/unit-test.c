@@ -2785,7 +2785,7 @@ void vm_basic() {
       "{% block Test3 %} vargs={{vargs}} {% endblock %}");
   vm_test("{% include 'include.html' %}"
       "Hello World From Child!\n");
-  vm_test("{% include rm_trail(shell('pwd')) + '/include.html' %}"
+  vm_test("{% include rstrip(shell('pwd')) + '/include.html' %}"
       "{% import 'include.html' as Lib %}"
       "{% set arr = [1,2,3,4,5,6,7,8,9] %}"
       "Array = {{arr}}\n"

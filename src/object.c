@@ -115,7 +115,7 @@ func_table_add_jj_main( struct func_table* tb,
 struct ajj_object*
 ajj_object_string( struct ajj_object* obj,
     const char* str , size_t len , int own ) {
-  obj->val.str.str = own ? str : strdup(str);
+  obj->val.str.str = own ? str : strldup(str,len);
   obj->val.str.len = len;
   obj->tp = AJJ_VALUE_STRING;
   return obj;

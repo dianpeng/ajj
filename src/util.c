@@ -548,6 +548,13 @@ void* mem_grow( void* ptr , size_t obj_sz,
   return realloc(ptr,obj_sz*cap);
 }
 
+char* strldup( const char* str , size_t len ) {
+  char* buf = malloc(len+1);
+  memcpy(buf,str,len);
+  buf[len] = 0;
+  return buf;
+}
+
 struct string
 string_concate( const struct string* l , const struct string* r ) {
   struct strbuf sbuf;

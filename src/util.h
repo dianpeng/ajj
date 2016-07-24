@@ -90,6 +90,11 @@
  * After calling this function, the input mem will be freeed */
 
 void* mem_grow( void* , size_t obj_sz , size_t append, size_t* old_cap );
+
+/* A helper function to make strdup much safer since it doesn't rely on
+ * the null terminator but the length , however it will return a string that
+ * has a null terminators */
+char* strldup( const char* str , size_t len );
 /* =======================================================
  * String
  * It is a one time composes object,
