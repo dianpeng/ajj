@@ -1,5 +1,7 @@
 A Jinja2 Template Engine Port to C
 ===========================
+# Current Status
+AJJ is still in early alpha status. You are more than welcomed to use it and submit any issues or fixes!
 
 # Features.
 1. Support nearly all Jinja2 syntax.
@@ -230,5 +232,5 @@ To compensate these situations, parser will actually generate byte code that tel
 
 This GC algorithm also make user who tries to write a extension have to cooperate with AJJ runtime. Any user defined objects will have a internal callback function which will be called when the corresponding gc-scope for this user defined object changes. Why user needs to care about this ? It is because if user defined objects internally have pointer pointed to any piece of memory in AJJ runtime, this pointer's pointed object's gc-scope may needs to be modified as well. Therefore, user needs to ensure each objects referenced internally in this object also has correct gc-scope. This will be covered more in the tutorial.
 
-# Version
-Alpha 0.0.1
+# License
+MIT
