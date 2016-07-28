@@ -39,7 +39,7 @@ typedef int (*ajj_function)( struct ajj* ,
  * Arg5: return value pointer
  */
 typedef int (*ajj_method)( struct ajj* , /* execution context */
-    struct ajj_value* obj,
+    struct ajj_value* ,
     struct ajj_value*,
     size_t ,
     struct ajj_value* );
@@ -59,16 +59,15 @@ typedef int (*ajj_class_ctor)( struct ajj* ,
     void* ,
     struct ajj_value*,
     size_t ,
-    void** ret ,
-    int* type );
+    void** ,
+    int* );
 
 /* Signature represents a registered object's destructor
  * function call.
  * Arg1: ajj engine pointer
  * Arg2: the opaque pointer user registered for this class
  * Arg3: the object's pointer */
-typedef void (*ajj_class_dtor)( struct ajj* ,
-    void* udata , void* object );
+typedef void (*ajj_class_dtor)( struct ajj* , void* , void* );
 
 /* Slot represents all the builtin functions for each objects. This
  * function is recognized by virtual machine directly and serves as
@@ -126,12 +125,11 @@ struct ajj_slot {
           const struct ajj_value* );
 
   /* This function is used to set a attribute for the target object */
-  void (*attr_set)( struct ajj* , struct ajj_value* ,
-      const struct ajj_value* k , const struct ajj_value* v);
+  void (*attr_set)( struct ajj* , struct ajj_value* , const struct ajj_value* ,
+      const struct ajj_value* );
 
   /* This function is used to push an attributes into the specific object */
-  void (*attr_push)( struct ajj* , struct ajj_value* ,
-      const struct ajj_value* v );
+  void (*attr_push)( struct ajj* , struct ajj_value* , const struct ajj_value* );
 
   /* This function is used to help the GC algorithm works. It will be triggered
    * when a user indicate a move operations. And internally, for any intenrally
@@ -139,7 +137,7 @@ struct ajj_slot {
    * those value to ensure the reference is correct to VM , otherwise those value
    * can be garbage collected. If any object doesn't reference any ajj value from
    * AJJ world, then no need to provide the implementation */
-  void (*move) ( struct ajj* , struct ajj_value* obj );
+  void (*move) ( struct ajj* , struct ajj_value* );
 
   /* This function is used to provide a string representation when the print
    * instruction is issued towards this object. A print instruction is issued
@@ -253,7 +251,7 @@ enum {
 
 /* Get the ajj_value type's human readable string for this */
 const char*
-ajj_value_get_type_name( const struct ajj_value* v );
+ajj_value_get_type_name( const struct ajj_value* );
 
 /* Static variable for AJJ_TRUE/AJJ_FALSE/AJJ_NONE */
 extern struct ajj_value AJJ_TRUE;
@@ -261,16 +259,17 @@ extern struct ajj_value AJJ_FALSE;
 extern struct ajj_value AJJ_NONE;
 
 /* Convert a double to ajj_value */
-struct ajj_value ajj_value_number( double val );
+struct ajj_value ajj_value_number( double );
+
 /* Convert a boolean to ajj_value */
-struct ajj_value ajj_value_boolean( int boolean );
+struct ajj_value ajj_value_boolean( int );
+
 /* Construct a string to ajj_value */
-struct ajj_value ajj_value_new_string( struct ajj* a,
-    const char* str, size_t len );
+struct ajj_value ajj_value_new_string( struct ajj* , const char* , size_t );
+
 /* Construct a constant string to ajj_value. The constant
  * string means the string is not garbage collected by VM */
-struct ajj_value ajj_value_new_const_string( struct ajj* a,
-    const char* str ,size_t len );
+struct ajj_value ajj_value_new_const_string( struct ajj* , const char* ,size_t );
 
 /* Convert a ajj_value to its corresponding boolean value.
  * The ajj_value must be boolean type */
@@ -282,8 +281,7 @@ struct ajj_value ajj_value_new_const_string( struct ajj* a,
 
 /* Convert a ajj_value to its string value. The ajj_value
  * must be string type */
-const char* ajj_value_to_str( const struct ajj_value* val ,
-    size_t* len );
+const char* ajj_value_to_str( const struct ajj_value* , size_t* );
 
 /* Construct an object based on its class name.
  * Arg1: ajj engine pointer
@@ -292,10 +290,7 @@ const char* ajj_value_to_str( const struct ajj_value* val ,
  * Arg4: size of arguments
  */
 struct ajj_value
-ajj_value_new_object( struct ajj* a,
-    const char* name,
-    struct ajj_value* arg,
-    size_t arg_len );
+ajj_value_new_object( struct ajj* , const char* , struct ajj_value* , size_t );
 
 /* Call an object's specific method.
  * Arg1: ajj engine pointer
@@ -304,48 +299,41 @@ ajj_value_new_object( struct ajj* a,
  * Arg4: list of arguments
  * Arg5: size of arguments
  * Arg6: return value pointer */
-int ajj_value_call_object_method( struct ajj* a,
-    struct ajj_value* obj,
-    const char* name,
-    struct ajj_value* arg,
-    size_t arg_len,
-    struct ajj_value* ret );
+int ajj_value_call_object_method( struct ajj* , struct ajj_value* , const char* ,
+    struct ajj_value* , size_t , struct ajj_value* );
 
 /* New a list object */
-struct ajj_value ajj_value_new_list( struct ajj* a );
+struct ajj_value ajj_value_new_list( struct ajj* );
 
 /* Push a value into the list object */
-void ajj_value_list_push( struct ajj* a, struct ajj_value* ,
-    struct ajj_value* val );
+void ajj_value_list_push( struct ajj* , struct ajj_value* , struct ajj_value* );
 
 /* Get the size of the list object */
-size_t ajj_value_list_size( struct ajj* a, struct ajj_value* );
+size_t ajj_value_list_size( struct ajj* , struct ajj_value* );
 
 /* Index a value from the list object */
 struct ajj_value
-ajj_value_list_index( struct ajj* a, struct ajj_value* ,int index );
+ajj_value_list_index( struct ajj* , struct ajj_value* ,int );
 
 /* Clear the list */
-void ajj_value_list_clear( struct ajj* a, struct ajj_value* );
+void ajj_value_list_clear( struct ajj* , struct ajj_value* );
 
 /* New a dict object */
-struct ajj_value ajj_value_new_dict( struct ajj* a );
+struct ajj_value ajj_value_new_dict( struct ajj* );
 
 /* Insert a key value pair into the dictionary */
-void ajj_value_dict_insert( struct ajj* a, struct ajj_value* ,
-    struct ajj_value* key, struct ajj_value* val );
+void ajj_value_dict_insert( struct ajj* , struct ajj_value* ,
+    struct ajj_value* , struct ajj_value* );
 
 /* Find a key inside of the dictionary */
 struct ajj_value
-ajj_value_dict_find( struct ajj* a, struct ajj_value* ,
-    struct ajj_value* key );
+ajj_value_dict_find( struct ajj* , struct ajj_value* , struct ajj_value* );
 
 /* Remove a entry in the dictionary */
-int ajj_value_dict_remove( struct ajj* a, struct ajj_value* ,
-    struct ajj_value* key );
+int ajj_value_dict_remove( struct ajj* ,struct ajj_value* ,struct ajj_value* );
 
 /* Clear the dictionary */
-void ajj_value_dict_clear( struct ajj* a, struct ajj_value* );
+void ajj_value_dict_clear( struct ajj* , struct ajj_value* );
 
 /* ===========================================================
  * The following function is proxy function to call
@@ -354,87 +342,61 @@ void ajj_value_dict_clear( struct ajj* a, struct ajj_value* );
  * it return AJJ_EXEC_OK, otherwise AJJ_EXEC_FAIL is returend
  * =========================================================*/
 
-int ajj_value_attr_get( struct ajj* a,
-    const struct ajj_value* obj,
-    const struct ajj_value* key,
-    struct ajj_value* ret );
+int ajj_value_attr_get( struct ajj* , const struct ajj_value* ,
+    const struct ajj_value* , struct ajj_value* );
 
-int ajj_value_attr_set( struct ajj* a,
-    struct ajj_value* obj,
-    const struct ajj_value* key,
-    const struct ajj_value* val);
+int ajj_value_attr_set( struct ajj* , struct ajj_value* ,
+    const struct ajj_value* , const struct ajj_value* );
 
-int ajj_value_attr_push( struct ajj* a,
-    struct ajj_value* obj,
-    const struct ajj_value* val);
+int ajj_value_attr_push( struct ajj* , struct ajj_value* ,
+    const struct ajj_value* );
 
-const char* ajj_display( struct ajj* a,
-    const struct ajj_value* v ,
-    size_t* length ,
-    int* own );
+const char* ajj_display( struct ajj* , const struct ajj_value* ,
+    size_t* , int* );
 
-struct ajj_value ajj_value_move( struct ajj* a,
-    const struct ajj_value* self,
-    struct ajj_value* tar );
+struct ajj_value ajj_value_move( struct ajj* , const struct ajj_value* ,
+    struct ajj_value* );
 
-int ajj_value_iter_start( struct ajj* a,
-    const struct ajj_value* obj,
-    int* itr );
+int ajj_value_iter_start( struct ajj* , const struct ajj_value* , int* );
 
-int ajj_value_iter_move( struct ajj* a,
-    const struct ajj_value* obj,
-    int itr, int* itr_ret );
+int ajj_value_iter_move( struct ajj* , const struct ajj_value* ,
+    int , int* );
 
-int ajj_value_iter_has ( struct ajj* a,
-    const struct ajj_value* obj,
-    int itr, int* result );
+int ajj_value_iter_has ( struct ajj* , const struct ajj_value* ,
+    int , int* );
 
-int ajj_value_iter_get_key( struct ajj* a,
-    const struct ajj_value* obj,
-    int itr,
-    struct ajj_value* key );
+int ajj_value_iter_get_key( struct ajj* , const struct ajj_value* ,
+    int , struct ajj_value* );
 
-int ajj_value_iter_get_val( struct ajj* a,
-    const struct ajj_value* obj,
-    int itr,
-    struct ajj_value* val );
+int ajj_value_iter_get_val( struct ajj* , const struct ajj_value* ,
+    int , struct ajj_value* );
 
-int ajj_value_in ( struct ajj* a,
-    const struct ajj_value* obj,
-    const struct ajj_value* target,
-    int* result);
+int ajj_value_in ( struct ajj* , const struct ajj_value* ,
+    const struct ajj_value* , int* );
 
-int ajj_value_eq( struct ajj* a,
-    const struct ajj_value* L , const struct ajj_value* R,
-    int* result );
+int ajj_value_eq( struct ajj* , const struct ajj_value* ,
+    const struct ajj_value* , int* );
 
-int ajj_value_ne( struct ajj* a,
-    const struct ajj_value* L , const struct ajj_value* R,
-    int* result);
+int ajj_value_ne( struct ajj* , const struct ajj_value* ,
+    const struct ajj_value* , int* );
 
-int ajj_value_lt( struct ajj* a,
-    const struct ajj_value* L , const struct ajj_value* R,
-    int* result);
+int ajj_value_lt( struct ajj* , const struct ajj_value* ,
+    const struct ajj_value* , int* );
 
-int ajj_value_le( struct ajj* a,
-    const struct ajj_value* L , const struct ajj_value* R,
-    int* result);
+int ajj_value_le( struct ajj* , const struct ajj_value* ,
+    const struct ajj_value* , int* );
 
-int ajj_value_ge( struct ajj* a,
-    const struct ajj_value* L , const struct ajj_value* R,
-    int* result);
+int ajj_value_ge( struct ajj* , const struct ajj_value* ,
+    const struct ajj_value* , int* );
 
-int ajj_value_gt( struct ajj* a,
-    const struct ajj_value* L , const struct ajj_value* R,
-    int* result);
+int ajj_value_gt( struct ajj* , const struct ajj_value* ,
+    const struct ajj_value* , int* );
 
-int ajj_value_len( struct ajj* a,
-    const struct ajj_value* obj ,
-    size_t* result );
+int ajj_value_len( struct ajj* , const struct ajj_value* ,
+    size_t* );
 
-int ajj_value_empty( struct ajj* a,
-    const struct ajj_value* obj ,
-    int* result );
+int ajj_value_empty( struct ajj* , const struct ajj_value* ,
+    int* );
 
 /* ===============================================================
  * AJJ file system abstraction layer
@@ -489,21 +451,21 @@ void*ajj_get_udata( struct ajj* );
 
 /* Dump an error information into the ajj engine and be consumed by the
  * user */
-void ajj_error ( struct ajj* , const char* format , ... );
+void ajj_error ( struct ajj* , const char* , ... );
 
 /* Get last error descriptive string */
-const char* ajj_last_error( struct ajj* a );
+const char* ajj_last_error( struct ajj* );
 
 /* Add a value into the ajj environment. The environment is *SHARED* by
  * all the template rendered inside of the same ajj engine */
-void ajj_env_add_value( struct ajj* a , const char* , int type , ... );
+void ajj_env_add_value( struct ajj* , const char* , int , ... );
 
 /* Add a class into ajj environment */
-void ajj_env_add_class( struct ajj* a , const struct ajj_class* );
+void ajj_env_add_class( struct ajj* , const struct ajj_class* );
 
 /* Add a function into ajj environment */
-void ajj_env_add_function( struct ajj* a, const char* ,
-    ajj_function entry, void* );
+void ajj_env_add_function( struct ajj* , const char* , ajj_function entry,
+    void* );
 
 /* Add a filter function */
 #define ajj_env_add_filter ajj_env_add_function
@@ -511,16 +473,16 @@ void ajj_env_add_function( struct ajj* a, const char* ,
 /* Add a test function into ajj environment. Test function has exactly
  * same prototype as normal function. But a test function *MUST* return
  * true/false */
-void ajj_env_add_test( struct ajj* a, const char* ,
-    ajj_function entry, void* );
+void ajj_env_add_test( struct ajj* , const char* , ajj_function entry,
+    void* );
 
 /* Check whether a name is existed inside of ajj environment */
-int ajj_env_has( struct ajj* a, const char* );
+int ajj_env_has( struct ajj* , const char* );
 
 /* Delete a name from ajj environment. This is *NOT* for deleting
  * an class or function during the template is executing. If calling
  * this function during template rendering, the behavior is undefined */
-int ajj_env_del( struct ajj* a , const char* );
+int ajj_env_del( struct ajj* , const char* );
 
 /* ==============================================================
  * Operation on upvalue table for specific template. The following
@@ -528,15 +490,13 @@ int ajj_env_del( struct ajj* a , const char* );
  * ============================================================*/
 
 /* Add a value into the upvalue table for a specific template */
-void ajj_upvalue_add_value( struct ajj* a,
-    const char* , int type , ... );
+void ajj_upvalue_add_value( struct ajj* , const char* , int , ... );
 
 /* Add a class into the upvalue table */
-void ajj_upvalue_add_class( struct ajj* a,
-    const struct ajj_class* );
+void ajj_upvalue_add_class( struct ajj* , const struct ajj_class* );
 
 /* Add a function into the upvalue table */
-void ajj_upvalue_add_function( struct ajj* a, const char*,
+void ajj_upvalue_add_function( struct ajj* , const char*,
     ajj_function entry, void* );
 
 /* Add a filter function into the upvalue table */
@@ -546,13 +506,13 @@ void ajj_upvalue_add_function( struct ajj* a, const char*,
  * not safe at all. If user delete a builtin upvalue or a upvalue that
  * is setup by the script while script is using it, the behavior is not
  * defined :) */
-void ajj_upvalue_del( struct ajj* a, const char* );
+void ajj_upvalue_del( struct ajj* , const char* );
 
 /* Check whether a name inside of upvalue table is existed or not */
-int ajj_upvalue_has( struct ajj* a , const char* );
+int ajj_upvalue_has( struct ajj* , const char* );
 
 /* Clear the *all* the environment variables */
-void ajj_env_clear( struct ajj* a );
+void ajj_env_clear( struct ajj* );
 
 /* =============================================================
  * Runtime specified user object
@@ -568,10 +528,10 @@ void* ajj_runtime_get_udata( struct ajj* );
  * ===========================================================*/
 
 /* Create an IO from an existed FILE* structure */
-struct ajj_io* ajj_io_create_file( struct ajj* a , FILE* );
+struct ajj_io* ajj_io_create_file( struct ajj* , FILE* );
 
 /* Create an IO from memory with size */
-struct ajj_io* ajj_io_create_mem ( struct ajj* a , size_t size );
+struct ajj_io* ajj_io_create_mem ( struct ajj* , size_t );
 
 /* Destroy an IO object , this won't result in the FILE* handler been
  * closed, user needs to call fclose on the handler if the ajj_io object
@@ -579,24 +539,24 @@ struct ajj_io* ajj_io_create_mem ( struct ajj* a , size_t size );
 void ajj_io_destroy( struct ajj* , struct ajj_io* );
 
 /* Printf to an IO object */
-int ajj_io_printf( struct ajj_io* , const char* fmt , ... );
+int ajj_io_printf( struct ajj_io* , const char* , ... );
 
 /* va_list based printf to an IO object */
-int ajj_io_vprintf( struct ajj_io* , const char* fmt , va_list );
+int ajj_io_vprintf( struct ajj_io* , const char* , va_list );
 
 /* write to IO object with memory */
-int ajj_io_write( struct ajj_io* , const void* mem , size_t len );
+int ajj_io_write( struct ajj_io* , const void* , size_t );
 
 /* flush IO object */
 void ajj_io_flush( struct ajj_io* );
 
 /* Get intenral content. Only works with memory based IO */
-void* ajj_io_get_content( struct ajj_io* , size_t* size );
+void* ajj_io_get_content( struct ajj_io* , size_t* );
 
 /* Get the internal content in a caller owned pointer. The pointer
  * returned must be freed after using it. Only works with memory based
  * IO */
-void* ajj_io_detach( struct ajj_io* , size_t* size );
+void* ajj_io_detach( struct ajj_io* , size_t* );
 
 /* ===============================================================
  * Rendering API
@@ -604,17 +564,11 @@ void* ajj_io_detach( struct ajj_io* , size_t* size );
 
 /* Render a file into an IO object with given file name. The file must
  * be UTF encoded */
-int ajj_render_file( struct ajj* ,
-    struct ajj_io*,
-    const char* file ,
-    void* udata );
+int ajj_render_file( struct ajj* , struct ajj_io*, const char* , void* );
 
 /* Render a in memory data into an IO object. The content must be UTF
  * encoded */
-int ajj_render_data( struct ajj* ,
-    struct ajj_io*,
-    const char* src,
-    const char* key,
-    void* udata );
+int ajj_render_data( struct ajj* , struct ajj_io*, const char* , const char* ,
+    void* );
 
 #endif /* _AJJ_H_ */

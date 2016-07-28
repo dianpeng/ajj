@@ -165,19 +165,15 @@ struct emitter {
   size_t cd_cap; /* capacity for current code */
 };
 
-void emitter_ensure( struct emitter* em );
-void emitter_init( struct emitter* em , struct program* prg );
-void emitter_emit0( struct emitter* em , int spos , int bc );
-void emitter_emit1( struct emitter* em , int spos , int bc , int a1 );
-void emitter_emit2( struct emitter* em , int spos ,
-    int bc , int a1 , int a2 );
-int emitter_put( struct emitter* em , int arg_sz );
-void emitter_emit0_at( struct emitter* em ,
-    int pos , int spos , int bc );
-void emitter_emit1_at( struct emitter* em , int pos ,
-    int spos , int bc , int a1 );
-void emitter_emit2_at( struct emitter* em , int pos ,
-    int spos , int bc , int a1 , int a2 );
+void emitter_ensure( struct emitter* );
+void emitter_init( struct emitter* , struct program* );
+void emitter_emit0( struct emitter* , int , int );
+void emitter_emit1( struct emitter* , int , int , int );
+void emitter_emit2( struct emitter* , int , int , int , int );
+int emitter_put( struct emitter* , int );
+void emitter_emit0_at( struct emitter* , int , int , int );
+void emitter_emit1_at( struct emitter* , int , int , int , int );
+void emitter_emit2_at( struct emitter* , int , int , int , int , int );
 #define emitter_label(E) (int)((E)->prg->len)
 #define bc_next(P,POS) \
   (((P)->len == *(POS)) ? \
@@ -188,9 +184,7 @@ void emitter_emit2_at( struct emitter* em , int pos ,
 #define bc_2nd_arg(P,POS) ((P)->codes[(*(POS))++])
 
 /* dump program into human readable format */
-void dump_program( struct ajj* a,
-    const char* src ,
-    const struct program* ,
-    struct ajj_io* output );
+void dump_program( struct ajj* , const char* , const struct program* ,
+    struct ajj_io* );
 
 #endif /* _BC_H_ */

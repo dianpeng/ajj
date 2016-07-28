@@ -12,6 +12,6 @@ struct ajj_object;
 struct ajj;
 
 struct ajj_object*
-parse( struct ajj* , const char* key, const char* src, int own , time_t ts );
+parse( struct ajj* , const char* , const char* , int , time_t );
 
 #endif /* _PARSE_H_ */

@@ -123,39 +123,37 @@ struct tokenizer {
 
 const char* tk_get_name( int );
 
-token_id tk_lex( struct tokenizer* tk );
-token_id tk_move( struct tokenizer* tk );
+token_id tk_lex( struct tokenizer* );
+token_id tk_move( struct tokenizer* );
 
 /* Use to rewrite a keyword to a identifier when doing parsing. This is only
  * used when the parsing phase knows he expect a VARIABLE but not a keyword,
  * then user could call this function to rewrite the last keyword , if it has,
  * to a variable and return it back. */
-int tk_expect_id( struct tokenizer* tk );
+int tk_expect_id( struct tokenizer* );
 
 /* Use to get a human readable code snippet for diagnose information.
  * The snippet is the source line that contains the position "pos".
  * But at most 128 characters is fetched as upper bound for information.
  * The return string is owned by the caller, please free it properly.
  * The buffer is always assume has length CODE_SNIPPET_SIZE */
-void tk_get_code_snippet( const char* src, size_t pos ,
-    char* output , size_t length );
+void tk_get_code_snippet( const char* , size_t , char* , size_t );
 #define tk_get_current_code_snippet(tk,output,l) \
   tk_get_code_snippet((tk)->src,(tk)->pos,output,l)
 
-void tk_get_coordinate( const char* src , size_t until,
-    size_t* ln, size_t* pos );
+void tk_get_coordinate( const char* , size_t , size_t* , size_t* );
 
-token_id tk_init( struct tokenizer* tk , const char* src );
+token_id tk_init( struct tokenizer* , const char* );
 #define tk_destroy(T) strbuf_destroy(&(T)->lexeme)
-int tk_expect( struct tokenizer* tk , token_id t );
+int tk_expect( struct tokenizer* , token_id );
 #define tk_id_ichar(c) ((c) == '_' || isalpha(c))
 #define tk_not_id_char(C) (!tk_id_ichar(C))
 #define tk_id_rchar(C) ((C) =='_' || isalpha(C) || isdigit(C))
 #define tk_not_id_rchar(C) (!tk_id_rchar(C))
 #define tk_body_escape(C) ((C) =='{')
 
-int tk_string_escape_char( Rune c );
-int tk_string_reescape_char( Rune c );
+int tk_string_escape_char( Rune );
+int tk_string_reescape_char( Rune );
 
 #define tk_is_ispace(X) \
   ((X) == ' ' || (X) == '\t' || \

@@ -5,6 +5,6 @@
 struct ajj_object;
 struct ajj;
 
-int optimize( struct ajj* a , struct ajj_object* jinja );
+int optimize( struct ajj* , struct ajj_object* );
 
 #endif /* _OPT_H_ */

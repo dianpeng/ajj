@@ -107,13 +107,12 @@ struct runtime {
 
 #define runtime_root_gc(rt) ((rt)->root_gc)
 
-void program_init( struct program* prg );
-void program_destroy( struct program* prg );
-int program_add_par( struct program* prg , struct string* name ,
-    int own, const struct ajj_value* val );
-int program_const_str( struct program* prg , struct string* str ,
-    int own );
-int program_const_num( struct program* prg , double num );
+void program_init( struct program* );
+void program_destroy( struct program* );
+int program_add_par( struct program* , struct string* , int ,
+    const struct ajj_value* );
+int program_const_str( struct program* , struct string* , int );
+int program_const_num( struct program* , double );
 /* helper function for converting the ajj_value to specific type */
 int vm_to_number( const struct ajj_value* , double* );
 int vm_to_integer( const struct ajj_value* , int* );
@@ -121,26 +120,18 @@ int vm_to_integer( const struct ajj_value* , int* );
 int vm_to_boolean( const struct ajj_value* );
 #define vm_is_true(V) (vm_to_boolean(V) == 1)
 #define vm_is_false(V) (vm_to_boolean(V)==0)
-int vm_to_string( const struct ajj_value* val ,
-        struct string* str , int* own );
+int vm_to_string( const struct ajj_value* , struct string* , int* );
 
 /* VM BUILTIN function */
-int vm_caller( struct ajj* ,
-    void*,
-    struct ajj_value*,size_t,
+int vm_caller( struct ajj* , void*, struct ajj_value*,size_t,
     struct ajj_value*);
 
-int vm_super( struct ajj* ,
-    void*,
-    struct ajj_value* ,
-    size_t,
+int vm_super( struct ajj* , void*, struct ajj_value* , size_t,
     struct ajj_value*);
 
 /* =============================================
  * Interfaces
  * ===========================================*/
-
-int vm_run_jinja( struct ajj* a, struct ajj_object* jj,
-    struct ajj_io* output , void* udata );
+int vm_run_jinja( struct ajj* , struct ajj_object* ,struct ajj_io* , void*);
 
 #endif /* _VM_H_ */

@@ -78,10 +78,10 @@ struct gc_scope {
 
 /* Merge the object from temporary GC scope to destination GC scope
  * and this require us to rewrite the scp field in each object as well */
-void gc_scope_merge( struct gc_scope* dst , struct gc_scope* src );
+void gc_scope_merge( struct gc_scope* , struct gc_scope* );
 
 struct gc_scope*
-gc_scope_create( struct ajj* a, struct gc_scope* scp );
+gc_scope_create( struct ajj* , struct gc_scope* );
 
 
 void gc_scope_exit( struct ajj* , struct gc_scope* );
