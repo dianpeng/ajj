@@ -11,8 +11,8 @@
 #include "util.c"
 #include "builtin.c"
 
-#ifdef __linux__
+#if defined __APPLE__ || defined __linux__
 #include "unix-vfs.c"
 #else
 #error "Doesn't support this platform ???"
-#endif /* __linux__ */
+#endif /* __linux__  || __OSX__ */

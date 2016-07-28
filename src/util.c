@@ -331,7 +331,7 @@ int string_cmpcl(const struct string* l , const char* str , size_t len ) {
 
 const char*
 string_str(const struct string* l , const struct string* r) {
-  return memmem(l->str,l->len,r->str,r->len);
+  return memmem_priv(l->str,l->len,r->str,r->len);
 }
 
 void string_destroy( struct string* str ) {

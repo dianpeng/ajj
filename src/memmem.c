@@ -32,7 +32,7 @@
 
 static
 void *
-memmem(const void *l, size_t l_len, const void *s, size_t s_len)
+memmem_priv(const void *l, size_t l_len, const void *s, size_t s_len)
 {
 	char *cur, *last;
 	const char *cl = (const char *)l;

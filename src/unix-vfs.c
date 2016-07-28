@@ -1,7 +1,7 @@
 /* INCLUDE ME WHEN YOU ARE IN LINUX SYSTEM */
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/unistd.h>
+#include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <string.h>
