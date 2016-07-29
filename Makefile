@@ -31,7 +31,7 @@ test: unit-test opt-test jinja-test
 test-detail: unit-test opt-test jinja-test
 	cd test; ./run_test.sh output; cd -
 
-coverage: test/unit-test.c test/jinja-test.c test/opt-test.c
+coverage: test/unit-test.c test/jinja-test.c test/opt-test.c create_test_bin
 	cd test/bin; $(CC) $(COVFLAGS) \
 		../unit-test.c \
 		../jinja-test.c \
