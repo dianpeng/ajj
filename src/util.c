@@ -916,25 +916,32 @@ size_t slab_reserve( struct slab* sl ) {
 static
 int slab_in_range( struct slab* sl , void* ptr ) {
   struct chunk* c = sl->ck;
-  assert(c);
-  do {
+  while(c) {
     char* p = (char*)ptr;
     if( p >= (char*)(c) && p <= ((char*)(c) + c->cap) )
       return 1;
-  } while((c=c->next));
+    c = c->next;
+  }
   return 0;
 }
 
 void slab_init( struct slab* sl , size_t cap ,
     size_t obj_sz , size_t lmt ) {
-  cap = cap < 32 ? 16 : cap/2;
   sl->obj_sz = obj_sz < sizeof(void*) ?
     sizeof(void*) : obj_sz;
-  sl->fl = NULL;
-  sl->ck = NULL;
-  sl->cur_cap = cap;
-  sl->all_cap = slab_reserve( sl );
-  sl->lmt = lmt;
+
+  if(lmt == 0) {
+    sl->lmt = sl->all_cap = sl->cur_cap = 0;
+    sl->fl = NULL;
+    sl->ck = NULL;
+  } else {
+    cap = cap < 32 ? 16 : cap/2;
+    sl->fl = NULL;
+    sl->ck = NULL;
+    sl->cur_cap = cap;
+    sl->all_cap = slab_reserve( sl );
+    sl->lmt = lmt;
+  }
 }
 
 void* slab_malloc( struct slab* sl ) {

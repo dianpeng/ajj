@@ -1,7 +1,7 @@
 CC?=gcc
 PWD := $(shell pwd)
 OPT := -g -O3
-FLAGS := $(OPT) -Wpedantic -Wall -I$(PWD)/src $(OPT)
+FLAGS := $(OPT) -Werror -Wpedantic -Wall -I$(PWD)/src $(OPT)
 TFLAGS:= -DNDEBUG $(OPT) -I$(PWD)/src
 COVFLAGS:= -DNDEBUG -DDO_COVERAGE -DDISABLE_OPTIMIZATION -I$(PWD)/src -g -fprofile-arcs -ftest-coverage
 COVLINK := -lm
