@@ -2,3 +2,10 @@
 {% include 'jinja-test-case/first.jinja' %}
 {% include 'jinja-test-case/second.jinja' %}
 INCLUDE TEST1
+{# Nested inlcudes into the for loop #}
+{% for x in xrange(10) %}
+Include:{{x}} times
+
+  {% include 'jinja-test-case/first.jinja' %}
+
+{% endfor %}

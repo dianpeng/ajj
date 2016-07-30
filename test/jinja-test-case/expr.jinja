@@ -175,3 +175,129 @@
   {% set val %}A{% endset %}
   {% do assert_expr( val == 'A' ) %}
 {% endwith %}
+{# Test *all* builtins #}
+{% with json = to_jsonc('{ "A":"B" , "C": [ 1,2,3,true,false,null ] }') %}{
+  {% do assert_expr( json.A == 'B' ) %}
+  {% do assert_expr( json.C[0] == 1 ) %}
+  {% do assert_expr( json.C[1] == 2 ) %}
+  {% do assert_expr( json.C[2] == 3 ) %}
+  {% do assert_expr( json.C[3] == True ) %}
+  {% do assert_expr( json.C[4] == False) %}
+  {% do assert_expr( json.C[5] == None ) %}
+{% endwith %}
+{% with json = to_json('hello_world.json') %}
+  {% do assert_expr( json.Hello_World == 'Hello From Json File!') %}
+  {% do assert_expr( json.Arg1 == [1,2,3,4,5,6] ) %}
+  {% do assert_expr( json.Arg2.A == 1 ) %}
+  {% do assert_expr( json.Arg2.B == 'string' ) %}
+  {% do assert_expr( json.Arg2.C == True ) %}
+  {% do assert_expr( json.Arg2.D == False ) %}
+  {% do assert_expr( json.Arg2.E == [1,2,3,4] ) %}
+  {% do assert_expr( json.Arg3 == 3.0 ) %}
+  {% do assert_expr( json.Arg4 == 7.0 ) %}
+{% endwith %}
+{# Test Shell functions #}
+PWD={{ shell('pwd') }}
+{% with val = lstrip('     LSTRIP') %}
+  {% do assert_expr( val == 'LSTRIP' ) %}
+{% endwith %}
+{% with val = rstrip('RSTRIP     ') %}
+  {% do assert_expr( val == 'RSTRIP' ) %}
+{% endwith %}
+{% do assert_expr( typeof('string') == 'string' ) %}
+{% do assert_expr( typeof(3) == 'number' ) %}
+{% do assert_expr( typeof(True) == 'boolean' ) %}
+{% do assert_expr( typeof(False)== 'boolean') %}
+{% do assert_expr( typeof(None) == 'none' ) %}
+{% do assert_expr( typeof([]) == 'list' ) %}
+{% do assert_expr( typeof({}) == 'dict' ) %}
+{% do assert_expr( typeof(xrange(10)) == 'xrange' ) %}
+{% do assert_expr( floor(1.3) == 1.0 ) %}
+{% do assert_expr( floor(1.99) == 1.0 ) %}
+{% do assert_expr( ceil(1.3) == 2.0 ) %}
+{% do assert_expr( ceil(1.99) == 2.0 ) %}
+{% do assert_expr( abs(-1.3) == 1.3 ) %}
+{% do assert_expr( abs(1.3) == 1.3 ) %}
+{% do assert_expr( (-1.3 | abs) == 1.3 ) %}
+{% do assert_expr( attr({'A':'B'},'A') == 'B' ) %}
+{% do assert_expr( ({'A':'B'} | attr('A')) == 'B' ) %}
+{% do assert_expr( None | default(true) ) %}
+{% do assert_expr( True | default('Never show up') ) %}
+{% do assert_expr( ('String' | slice(0,3)) == 'Str' ) %}
+{% do assert_expr( ('String' | bslice(0,3)) == 'Str') %}
+{% do assert_expr( ('string' | upper ) == 'STRING' ) %}
+{% do assert_expr( ('STRING' | lower ) == 'string' ) %}
+{% do assert_expr( True is True ) %}
+{% do assert_expr( True is true ) %}
+{% do assert_expr( False is False ) %}
+{% do assert_expr( False is false ) %}
+{% do assert_expr( None is None ) %}
+{% do assert_expr( None is none ) %}
+{% do assert_expr( None is undefined ) %}
+{% with A = None %}
+  {% do assert_expr( None is undefined ) %}
+{% endwith %}
+{% do assert_expr( [] is defined ) %}
+{% do assert_expr( {} is defined ) %}
+{% do assert_expr( True is defined ) %}
+{% do assert_expr( False is defined ) %}
+{% do assert_expr( None is not defined ) %}
+{% do assert_expr( xrange(5) is defined ) %}
+{% do assert_expr( 3 | divisableby(3) ) %}
+{% do assert_expr( 6 | divisableby(3) ) %}
+{% do assert_expr( not (3 | divisableby(2)) ) %}
+{% do assert_expr( 2 | even ) %}
+{% do assert_expr( 3 | odd ) %}
+{% do assert_expr( (3 | even) == False ) %}
+{% do assert_expr( (2 | odd ) == False ) %}
+{% do assert_expr( (3 | iterable) == False ) %}
+{% do assert_expr( ([]| iterable) ) %}
+{% do assert_expr( ({}| iterable) ) %}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

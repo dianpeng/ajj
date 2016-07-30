@@ -2835,7 +2835,14 @@ int filter_slice( struct ajj* a,
       EXEC_FAIL1(a,"%s","Function::slice 2nd must "
           "be less than 3rd argument!");
     }
+
     str = ajj_value_to_string(arg);
+
+    if( (start < 0 || start >=  str->len) ||
+        (end < 0 || end >= str->len) ) {
+      EXEC_FAIL1(a,"Function::slice start and end index must be larger than "
+          "0 and less than size of the string , which is %d",(int)str->len);
+    }
 
     /* Decode the whole string */
     ccnt= 0 ; start_idx = end_idx = -1;
@@ -2845,7 +2852,6 @@ int filter_slice( struct ajj* a,
       if(ret == Runeerror) {
         EXEC_FAIL1(a,"%s","Function::slice cannot decode UTF string!");
       }
-      ++ccnt;
       if(ccnt == start) {
         start_idx = i;
       }
@@ -2853,15 +2859,14 @@ int filter_slice( struct ajj* a,
         end_idx = i;
         break;
       }
+      ++ccnt;
       i += ret;
     }
     assert(start_idx >=0);
     assert(end_idx >=0);
 
     /* Now slice one string out to the return */
-    *ret = ajj_value_assign(
-        ajj_object_create_string(a,
-          ajj_cur_gc_scope(a),
+    *ret = ajj_value_assign( ajj_object_create_string(a,ajj_cur_gc_scope(a),
           str->str+start_idx,end_idx-start_idx,0));
     return AJJ_EXEC_OK;
   }
@@ -2875,34 +2880,39 @@ int filter_bslice( struct ajj* a,
     struct ajj_value* ret ) {
   UNUSE_ARG(udata);
   if(arg_len != 3) {
-    EXEC_FAIL1(a,"%s","Function::slice can accept 3 arguments!");
+    EXEC_FAIL1(a,"%s","Function::bslice can accept 3 arguments!");
   } else {
     int start , end;
     struct string* str;
 
     /* Handle the arguments */
     if(arg[0].type != AJJ_VALUE_STRING) {
-      EXEC_FAIL1(a,"%s","Function::slice first argument must be string!");
+      EXEC_FAIL1(a,"%s","Function::bslice first argument must be string!");
     }
     if(arg[1].type != AJJ_VALUE_NUMBER) {
-      EXEC_FAIL1(a,"%s","Function::slice second argument must be number!");
+      EXEC_FAIL1(a,"%s","Function::bslice second argument must be number!");
     }
     if(arg[2].type != AJJ_VALUE_NUMBER) {
-      EXEC_FAIL1(a,"%s","Function::slice third argument must be number!");
+      EXEC_FAIL1(a,"%s","Function::bslice third argument must be number!");
     }
     if(vm_to_integer(arg+1,&start) || vm_to_integer(arg+2,&end)) {
-      EXEC_FAIL1(a,"%s","Function::slice 2nd and 3rd arguments must be "
+      EXEC_FAIL1(a,"%s","Function::bslice 2nd and 3rd arguments must be "
           "convertable to integer!");
     }
     if(start > end) {
-      EXEC_FAIL1(a,"%s","Function::slice 2nd must "
+      EXEC_FAIL1(a,"%s","Function::bslice 2nd must "
           "be less than 3rd argument!");
     }
+
     str = ajj_value_to_string(arg);
 
-    *ret = ajj_value_assign(
-        ajj_object_create_string(a,
-          ajj_cur_gc_scope(a),
+    if( (start < 0 || start >=  str->len) ||
+        (end < 0 || end >= str->len) ) {
+      EXEC_FAIL1(a,"Function::bslice start and end index must be larger than "
+          "0 and less than size of the string , which is %d",(int)str->len);
+    }
+
+    *ret = ajj_value_assign( ajj_object_create_string(a,ajj_cur_gc_scope(a),
           str->str+start,end-start,0));
     return AJJ_EXEC_OK;
   }

@@ -945,19 +945,35 @@ void tk_get_code_snippet( const char* src , size_t pos ,
   /* Fitting a CODE_SNIPPET_SIZE chunk of source code characters into
    * the buffer to make caller happy. This function is mostly used for
    * providing diagnostic information. */
-  int start ; /* Start of the code snippet, we cannot decide the end here,
-               * so we just loop forward */
+  size_t start ; /* Start of the code snippet, we cannot decide the end here,
+                  * so we just loop forward */
   size_t i;
-  int c;
+  const char* end;
+
   if( length == 0 )
     length = CODE_SNIPPET_SIZE;
   else
     length = CODE_SNIPPET_SIZE >= length ? length : CODE_SNIPPET_SIZE;
-  start = pos > length/2 ? pos-length/2: 0;
-  for( i = start ; i < pos + length/2 -1 && (c=src[i]) ; ++i ) {
-    if( c == '\n' ) c = ' '; /* rewrite the line break to space */
-    if( c == '\r' ) continue;
-    *output++ = c;
+  start = pos > length/2 ? pos-length/2 : 0;
+  end = output + length;
+
+  /* Here we have do a fully decode of the source file since the source
+   * is UTF encoded scripts */
+  for( i = 0 ; i < pos + length/2-1 && src[i] ; ) {
+    Rune r;
+    int len = chartorune(&r,i+src);
+    assert(r != Runeerror); /* We should never see a runeerror */
+    if( i >= start ) {
+      if( r  == '\n' ) r = ' ';
+      if( r != '\r' ) {
+        int left = (end-output);
+        if(left < len) break; /* Break promptly */
+        else {
+          output += runetochar(output,&r);
+        }
+      }
+    }
+    i += len;
   }
   *output = 0;
 }
